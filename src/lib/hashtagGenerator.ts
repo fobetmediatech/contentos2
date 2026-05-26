@@ -46,17 +46,21 @@ function ruleFallback(city: string, niche: string, count: number): string[] {
   const cityLower = city.toLowerCase().replace(/\s+/g, '')
   const nicheLower = niche.toLowerCase().replace(/\s+/g, '')
 
+  // These are CONTENT hashtags — what individual creators use when posting their own
+  // niche content. Avoid "Blogger", "Vlogger", "Creator" suffix tags: those are used by
+  // restaurants/businesses seeking creator attention, so scraping them yields restaurant
+  // accounts, not content creators.
   const candidates = [
-    `${c}${n}`,
-    `${n}Blogger${c}`,
-    `${cityLower}${nicheLower}`,
-    `${c}Foodie`,
-    `${nicheLower}${cityLower}`,
-    `${c}${n}Lover`,
-    `${c}Eats`,
-    `${nicheLower}Blog`,
-    `${c}Creator`,
-    `${cityLower}content`,
+    `${c}${n}`,              // IndoreFood
+    `${cityLower}${nicheLower}`,   // indorefood
+    `${c}Eats`,              // IndoreEats
+    `${c}Foodie`,            // IndoreFoodie
+    `${c}StreetFood`,        // IndoreStreetFood
+    `${nicheLower}${cityLower}`,   // foodindore
+    `${c}FoodLovers`,        // IndoreFoodLovers
+    `${c}Cafe`,              // IndoreCafe
+    `${c}Diaries`,           // IndoreDiaries
+    `${c}Bites`,             // IndoreBites
   ]
 
   // Deduplicate case-insensitively, take first `count`
@@ -82,9 +86,16 @@ async function callGeminiForHashtags(
   count: number,
   signal?: AbortSignal,
 ): Promise<string[]> {
-  const prompt = `Generate ${count} Instagram hashtags for discovering ${niche} content creators based in ${city}.
-Return ONLY a JSON array of strings. No # prefix. No explanation. No markdown. Just the JSON array.
-Example: ["${city.replace(/\s+/g,'')}${niche.replace(/\s+/g,'')}","${niche.replace(/\s+/g,'')}Blogger${city.replace(/\s+/g,'')}"]`
+  const citySlug = city.replace(/\s+/g, '')
+  const prompt = `Generate ${count} Instagram hashtags that ${niche} content creators in ${city} actually use when posting their own content.
+
+CRITICAL: These must be CONTENT hashtags — tags individual creators add to their own food/travel/fitness posts.
+DO NOT generate "discovery" or "category" hashtags like "${citySlug}FoodVlogger", "FoodBloggers${citySlug}", "${citySlug}FoodCreator" — those are used by restaurants and businesses seeking vlogger attention, not by creators posting their content. Scraping those tags returns restaurant accounts, not creators.
+
+Good examples for food in Indore: "IndoreFood", "IndoreFoodie", "IndoreEats", "IndoreStreetFood", "IndoreCafe", "IndoreFoodLovers"
+Good examples for fitness in Mumbai: "MumbaiFitness", "MumbaiGym", "FitMumbai", "MumbaiWorkout", "MumbaiHealth"
+
+Return ONLY a JSON array of strings. No # prefix. No explanation. No markdown.`
 
   const url = `${GEMINI_BASE}/models/${MODEL}:generateContent?key=${geminiKey}`
 

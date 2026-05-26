@@ -174,10 +174,11 @@ export function buildDiscoveryPrompt(
   const candidateSummary = candidates
     .map((p) => {
       const er = p.engagementRate?.toFixed(2) ?? 'N/A'
+      const accountType = p.isBusinessAccount ? 'business' : 'creator'
       const establishedLabel = p.followersCount > 500_000
         ? ' [ESTABLISHED: 500K+ followers — assign to Top category]'
         : ''
-      return `@${p.username} | followers: ${p.followersCount.toLocaleString()} | ER: ${er}% | posts: ${p.postsCount} | verified: ${p.verified} | bio: "${p.biography.slice(0, 150)}"${establishedLabel}`
+      return `@${p.username} | type: ${accountType} | followers: ${p.followersCount.toLocaleString()} | ER: ${er}% | posts: ${p.postsCount} | verified: ${p.verified} | bio: "${p.biography.slice(0, 150)}"${establishedLabel}`
     })
     .join('\n')
 
@@ -185,12 +186,18 @@ export function buildDiscoveryPrompt(
 
 TASK: Find the top 10 ${niche}-related Instagram accounts based in ${city} from the list below.
 
-ACCOUNT TYPES TO INCLUDE (both are valid — do not favour one over the other):
-1. Content creators / influencers — people who post ${niche} content (reviews, vlogs, tutorials, lifestyle)
-2. Relevant businesses — restaurants, cafés, brands, or establishments that operate in the ${niche} space and maintain an active Instagram presence
+ACCOUNT TYPES TO INCLUDE:
+1. Content creators / influencers (type: creator) — individuals who post ${niche} content (reviews, vlogs, tutorials, lifestyle)
+2. Relevant businesses (type: business) — restaurants, cafés, brands, or establishments operating in the ${niche} space
+
+BALANCE RULE — this is mandatory:
+- Across all 10 results, aim for at least 5 content creators (type: creator) and at most 5 businesses (type: business).
+- If the niche or context mentions "vlogger", "blogger", or "creator", lean heavier on creators: aim for 6-7 creators out of 10.
+- Do NOT fill slots with businesses just because there are fewer creator candidates — reduce the total count instead.
+- A business profile can only take a slot if no more creator profiles remain in the candidate list.
 
 SELECTION CRITERIA:
-- Select any account whose bio or username strongly suggests it is relevant to ${niche} — whether a person or a business.
+- Select any account whose bio or username strongly suggests it is relevant to ${niche}.
 - "${topCategory.label}" (Top 5): ${topCategory.taxonomy}
 - "${trendingCategory.label}" (Trending 5): ${trendingCategory.taxonomy}
 - If fewer than 5 good accounts exist in a category, reduce that category's count rather than padding with off-niche accounts.
