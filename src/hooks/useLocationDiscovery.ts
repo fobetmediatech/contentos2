@@ -55,9 +55,9 @@ export function useLocationDiscovery() {
         // Step 2: Scrape hashtag posts → handles (inside runLocationDiscovery)
         setStep(2)
 
-        // Step 3 + 4: Profile scrape → location filter (inside runLocationDiscovery)
+        // Step 3 + 4: Profile scrape → creator enrichment → location filter (inside runLocationDiscovery)
         // We advance step markers manually as the pipeline progresses.
-        const { candidateProfiles, filterResult, scrapedHashtags } = await runLocationDiscovery(
+        const { candidateProfiles, filterResult, scrapedHashtags, creatorCount, businessCount } = await runLocationDiscovery(
           hashtags,
           params.city,
           apifyKey,
@@ -78,7 +78,7 @@ export function useLocationDiscovery() {
         // Build hallucination filter set from scraped profile usernames
         const knownHandles = new Set(candidateProfiles.map((p) => p.username.toLowerCase()))
 
-        // Step 5: AI analysis
+        // Step 5: AI analysis — pass pool composition so Gemini has grounded context
         setStep(5)
         let output = await analyzeDiscovery(
           geminiKey,
@@ -86,6 +86,8 @@ export function useLocationDiscovery() {
           params.niche,
           filterResult.filtered,
           controller.signal,
+          creatorCount,
+          businessCount,
         )
 
         // Zero-result guard: if Gemini returned nothing, retry without city/niche context
@@ -97,6 +99,8 @@ export function useLocationDiscovery() {
             params.niche,
             candidateProfiles,  // use ALL candidates, not just filtered
             controller.signal,
+            creatorCount,
+            businessCount,
           )
         }
 

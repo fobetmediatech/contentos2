@@ -244,6 +244,10 @@ function parseDiscoveryOutput(raw: string): DiscoveryOutput {
 /**
  * Run location discovery analysis using Gemini.
  * Takes normalized candidate profiles + city/niche context, returns DiscoveryOutput.
+ *
+ * @param creatorCount  Number of creator-scored profiles in candidateProfiles (optional).
+ *                      When provided, injected into the prompt as a pool composition hint.
+ * @param businessCount Number of business profiles in candidateProfiles (optional).
  */
 export async function analyzeDiscovery(
   geminiKey: string,
@@ -251,8 +255,10 @@ export async function analyzeDiscovery(
   niche: string,
   candidateProfiles: NormalizedProfile[],
   signal?: AbortSignal,
+  creatorCount?: number,
+  businessCount?: number,
 ): Promise<DiscoveryOutput> {
-  const prompt = buildDiscoveryPrompt(city, niche, candidateProfiles)
+  const prompt = buildDiscoveryPrompt(city, niche, candidateProfiles, creatorCount, businessCount)
 
   // Use callGemini with a discovery-specific responseSchema
   const url = `${GEMINI_BASE}/models/${MODEL}:generateContent?key=${geminiKey}`

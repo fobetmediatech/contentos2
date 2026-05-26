@@ -159,14 +159,18 @@ export interface DiscoveryOutput {
  * Selects the 10 most relevant creators from candidates, split Top 5 / Trending 5.
  * Schema is niche-agnostic: specialties + contentFocus replace food-specific fields.
  *
- * @param city        Target city (e.g. "Mumbai")
- * @param niche       Content niche (e.g. "food", "fitness", "travel")
- * @param candidates  Profiles that survived the location filter
+ * @param city         Target city (e.g. "Mumbai")
+ * @param niche        Content niche (e.g. "food", "fitness", "travel")
+ * @param candidates   Profiles that survived the location filter
+ * @param creatorCount Number of creator-scored profiles in the candidate list (optional — for pool composition hint)
+ * @param businessCount Number of business profiles in the candidate list (optional)
  */
 export function buildDiscoveryPrompt(
   city: string,
   niche: string,
   candidates: NormalizedProfile[],
+  creatorCount?: number,
+  businessCount?: number,
 ): string {
   const topCategory = DISCOVERY_CATEGORIES.top
   const trendingCategory = DISCOVERY_CATEGORIES.trending
@@ -182,10 +186,17 @@ export function buildDiscoveryPrompt(
     })
     .join('\n')
 
+  // Pool composition line: only injected when both counts are provided.
+  // Gives Gemini grounded info about what's in the list — makes the BALANCE RULE
+  // data-driven rather than aspirational.
+  const poolCompositionLine = (creatorCount !== undefined && businessCount !== undefined)
+    ? `\nCANDIDATE POOL COMPOSITION: ${creatorCount} creator accounts (type: creator) + ${businessCount} business accounts (type: business) in this list.\n`
+    : ''
+
   return `You are a social media analyst specializing in creator discovery for brand partnerships.
 
 TASK: Find the top 10 ${niche}-related Instagram accounts based in ${city} from the list below.
-
+${poolCompositionLine}
 ACCOUNT TYPES TO INCLUDE:
 1. Content creators / influencers (type: creator) — individuals who post ${niche} content (reviews, vlogs, tutorials, lifestyle)
 2. Relevant businesses (type: business) — restaurants, cafés, brands, or establishments operating in the ${niche} space
