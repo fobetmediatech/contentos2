@@ -21,111 +21,15 @@
 import pLimit from 'p-limit'
 import { ACTORS, buildProfileScraperInput, buildHashtagScraperInput } from './actors'
 import { normalizeProfiles, type ApifyProfileRaw, type NormalizedProfile } from './transformers'
-import { markKeyCooldown } from './keyRotator'
+import { startRun, pollRun, fetchDataset, chunk } from './apifyCore'
 
-const BASE_URL = 'https://api.apify.com/v2'
-const POLL_INTERVAL_MS = 2000   // 2 seconds between polls
-const MAX_POLL_MS = 110_000     // 110s hard limit (leaves 10s buffer for 120s total timeout)
+// Re-export shared error class so existing callers don't need to change their imports
+export { ApifyError, type ApifyErrorCode } from './apifyCore'
+
 const MAX_CONCURRENT = 3        // p-limit cap for concurrent actor runs
 
 // Concurrency limiter — prevents firing too many actor runs simultaneously
 const limit = pLimit(MAX_CONCURRENT)
-
-// ----- Types -----
-
-interface ApifyRunResponse {
-  data: {
-    id: string
-    status: 'READY' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'TIMED-OUT' | 'ABORTED'
-    defaultDatasetId: string
-  }
-}
-
-interface ApifyDatasetResponse<T> {
-  items: T[]
-}
-
-// ----- Core API calls -----
-
-async function startRun(
-  actorId: string,
-  input: Record<string, unknown>,
-  apiKey: string,
-  signal?: AbortSignal,
-): Promise<{ runId: string; datasetId: string }> {
-  const url = `${BASE_URL}/acts/${actorId}/runs`
-  console.debug('[apify] POST', url, input)
-
-  const res = await fetch(url, {
-    method: 'POST',
-    credentials: 'omit',   // required for Brave/strict browsers — no cookies sent cross-origin
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(input),
-    signal,
-  })
-
-  if (!res.ok) {
-    const body = await res.text()
-    if (res.status === 429) {
-      markKeyCooldown(apiKey)
-      throw new ApifyError('RATE_LIMITED', `Apify key rate limited. Marked for cooldown.`, res.status)
-    }
-    throw new ApifyError('RUN_START_FAILED', `Failed to start actor run: ${res.status} ${body}`, res.status)
-  }
-
-  const json = (await res.json()) as ApifyRunResponse
-  return { runId: json.data.id, datasetId: json.data.defaultDatasetId }
-}
-
-async function pollRun(
-  runId: string,
-  apiKey: string,
-  signal?: AbortSignal,
-): Promise<string> {
-  const deadline = Date.now() + MAX_POLL_MS
-  let datasetId = ''
-
-  while (Date.now() < deadline) {
-    if (signal?.aborted) throw new ApifyError('ABORTED', 'Request aborted', 0)
-
-    const res = await fetch(`${BASE_URL}/actor-runs/${runId}`, {
-      credentials: 'omit',
-      headers: { Authorization: `Bearer ${apiKey}` },
-      signal,
-    })
-
-    if (!res.ok) throw new ApifyError('POLL_FAILED', `Poll failed: ${res.status}`, res.status)
-
-    const json = (await res.json()) as ApifyRunResponse
-    const { status } = json.data
-    datasetId = json.data.defaultDatasetId
-
-    if (status === 'SUCCEEDED') return datasetId
-    if (status === 'FAILED') throw new ApifyError('RUN_FAILED', 'Actor run failed', 0)
-    if (status === 'TIMED-OUT') throw new ApifyError('RUN_TIMEOUT', 'Actor run timed out on Apify side', 0)
-    if (status === 'ABORTED') throw new ApifyError('RUN_ABORTED', 'Actor run was aborted', 0)
-
-    // Still READY or RUNNING — wait and poll again
-    await sleep(POLL_INTERVAL_MS)
-  }
-
-  throw new ApifyError('POLL_TIMEOUT', `Run ${runId} did not complete within ${MAX_POLL_MS / 1000}s`, 0)
-}
-
-async function fetchDataset<T>(datasetId: string, apiKey: string, signal?: AbortSignal): Promise<T[]> {
-  const res = await fetch(`${BASE_URL}/datasets/${datasetId}/items?clean=true`, {
-    credentials: 'omit',
-    headers: { Authorization: `Bearer ${apiKey}` },
-    signal,
-  })
-  if (!res.ok) throw new ApifyError('DATASET_FETCH_FAILED', `Dataset fetch failed: ${res.status}`, res.status)
-  const json = (await res.json()) as ApifyDatasetResponse<T>
-  // Apify returns items directly as array for clean=true, or as { items: [] }
-  return Array.isArray(json) ? json : (json.items ?? [])
-}
 
 // ----- Types -----
 
@@ -327,41 +231,3 @@ export async function discoverCompetitors(
   return { inputProfiles, candidateProfiles }
 }
 
-// ----- Error class -----
-
-export type ApifyErrorCode =
-  | 'RATE_LIMITED'
-  | 'RUN_START_FAILED'
-  | 'POLL_FAILED'
-  | 'RUN_FAILED'
-  | 'RUN_TIMEOUT'
-  | 'RUN_ABORTED'
-  | 'POLL_TIMEOUT'
-  | 'DATASET_FETCH_FAILED'
-  | 'ABORTED'
-
-export class ApifyError extends Error {
-  code: ApifyErrorCode
-  status: number
-
-  constructor(code: ApifyErrorCode, message: string, status: number) {
-    super(message)
-    this.name = 'ApifyError'
-    this.code = code
-    this.status = status
-  }
-}
-
-// ----- Utilities -----
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-function chunk<T>(arr: T[], size: number): T[][] {
-  const chunks: T[][] = []
-  for (let i = 0; i < arr.length; i += size) {
-    chunks.push(arr.slice(i, i + size))
-  }
-  return chunks
-}

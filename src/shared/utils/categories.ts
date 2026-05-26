@@ -42,3 +42,34 @@ export const COMPETITOR_CATEGORIES: Record<string, CategoryDef> = {
 }
 
 export type CategoryId = keyof typeof COMPETITOR_CATEGORIES
+
+// ----- Discovery categories -----
+
+/**
+ * DISCOVERY_CATEGORIES — taxonomy for location-based creator discovery.
+ *
+ * Mirrors COMPETITOR_CATEGORIES structure but with discovery-context rationale.
+ * These labels are injected into buildDiscoveryPrompt() and DiscoveryCard.tsx.
+ */
+export const DISCOVERY_CATEGORIES: Record<string, CategoryDef> = {
+  top: {
+    id: 'top',
+    label: 'Top',
+    sectionLabel: 'Established Authority',
+    taxonomy:
+      'Established authority in this city+niche: large follower base (typically 100K+), consistent posting, and strong community trust. These are the dominant voices in the local scene.',
+    badgeBg: 'bg-blue-100',
+    badgeText: 'text-blue-700',
+  },
+  trending: {
+    id: 'trending',
+    label: 'Trending',
+    sectionLabel: 'Growing Voices',
+    taxonomy:
+      'Growth-phase creators: ER significantly exceeds their follower-tier average, signalling active momentum in the local scene. Typically under 500K followers. Accounts with 500K+ must go to Top.',
+    badgeBg: 'bg-amber-100',
+    badgeText: 'text-amber-700',
+  },
+}
+
+export type DiscoveryCategoryId = keyof typeof DISCOVERY_CATEGORIES

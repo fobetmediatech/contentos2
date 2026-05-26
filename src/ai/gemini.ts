@@ -9,7 +9,7 @@
  *   empty candidates[]      → SAFETY block, surface as content policy error
  */
 
-import { buildCompetitorPrompt, type AnalysisOutput } from './prompts'
+import { buildCompetitorPrompt, buildDiscoveryPrompt, type AnalysisOutput, type DiscoveryOutput } from './prompts'
 import type { NormalizedProfile } from '../lib/transformers'
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta'
@@ -219,6 +219,111 @@ export async function analyzeCompetitors(
   const prompt = buildCompetitorPrompt(inputProfiles, candidateProfiles, nicheContext)
   const raw = await callGemini(geminiKey, prompt, signal)
   return parseAnalysisOutput(raw)
+}
+
+// ----- Discovery analysis -----
+
+/** Parse Gemini JSON for the discovery output shape */
+function parseDiscoveryOutput(raw: string): DiscoveryOutput {
+  const cleaned = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim()
+  try {
+    const parsed = JSON.parse(cleaned) as DiscoveryOutput
+    if (!parsed.results || !Array.isArray(parsed.results)) {
+      throw new Error('Missing results array')
+    }
+    return parsed
+  } catch (err) {
+    throw new GeminiError(
+      'PARSE_ERROR',
+      `Could not parse Gemini discovery response: ${(err as Error).message}`,
+      false,
+    )
+  }
+}
+
+/**
+ * Run location discovery analysis using Gemini.
+ * Takes normalized candidate profiles + city/niche context, returns DiscoveryOutput.
+ */
+export async function analyzeDiscovery(
+  geminiKey: string,
+  city: string,
+  niche: string,
+  candidateProfiles: NormalizedProfile[],
+  signal?: AbortSignal,
+): Promise<DiscoveryOutput> {
+  const prompt = buildDiscoveryPrompt(city, niche, candidateProfiles)
+
+  // Use callGemini with a discovery-specific responseSchema
+  const url = `${GEMINI_BASE}/models/${MODEL}:generateContent?key=${geminiKey}`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.3,
+        maxOutputTokens: 16384,
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'object',
+          properties: {
+            niche: { type: 'string' },
+            results: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  username: { type: 'string' },
+                  category: { type: 'string', enum: ['top', 'trending'] },
+                  rank: { type: 'integer' },
+                  rationale: { type: 'string' },
+                  specialties: { type: 'array', items: { type: 'string' } },
+                  contentFocus: { type: 'string' },
+                  partnershipReady: { type: 'boolean' },
+                  locationConfidence: { type: 'string', enum: ['confirmed', 'likely', 'unknown'] },
+                },
+                required: ['username', 'category', 'rank', 'rationale', 'specialties', 'contentFocus', 'partnershipReady', 'locationConfidence'],
+              },
+            },
+          },
+          required: ['niche', 'results'],
+        },
+      },
+    }),
+    signal,
+  })
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: { code: res.status, message: res.statusText, status: 'UNKNOWN' } })) as { error?: { code: number; message: string; status: string } }
+    const status = body.error?.status ?? ''
+    if (res.status === 429 || status === 'RESOURCE_EXHAUSTED') {
+      throw new GeminiError('RATE_LIMITED', 'Gemini API rate limit exceeded.', false)
+    }
+    if (res.status === 400 || status === 'INVALID_ARGUMENT') {
+      throw new GeminiError('INVALID_PROMPT', `Bad prompt: ${body.error?.message}`, false)
+    }
+    throw new GeminiError('UNKNOWN', `Gemini error: ${res.status} ${body.error?.message}`, true)
+  }
+
+  const json = (await res.json()) as { candidates?: Array<{ content: { parts: Array<{ text: string; thought?: boolean }> }; finishReason: string }> }
+  if (!json.candidates || json.candidates.length === 0) {
+    throw new GeminiError('SAFETY_BLOCK', 'Gemini blocked the response.', false)
+  }
+
+  const candidate = json.candidates[0]
+  const text = (candidate.content?.parts ?? [])
+    .filter((p) => !p.thought)
+    .map((p) => p.text ?? '')
+    .join('')
+
+  if (candidate.finishReason === 'MAX_TOKENS') {
+    throw new GeminiError('PARSE_ERROR', 'Gemini response was cut off (MAX_TOKENS).', false)
+  }
+
+  if (!text) throw new GeminiError('SAFETY_BLOCK', 'Gemini returned empty response.', false)
+
+  return parseDiscoveryOutput(text)
 }
 
 // ----- Utilities -----

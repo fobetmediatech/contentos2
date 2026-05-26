@@ -1,17 +1,30 @@
 import { Check, Loader2 } from 'lucide-react'
 import { STEP_LABELS, type AnalysisStep } from '../store/analysisStore'
 
+// ProgressSteps supports both the competitor analysis flow (AnalysisStep = 1|2|3|4|5
+// with STEP_LABELS from analysisStore) and the discovery flow (steps passed as a
+// string[] prop). When `steps` is provided, it takes precedence over STEP_LABELS.
+
 interface ProgressStepsProps {
-  currentStep: AnalysisStep
+  /** Current step index (1-based). Widened from AnalysisStep to number for discovery flow. */
+  currentStep: number
+  /** Optional custom step labels. When provided, overrides STEP_LABELS from analysisStore. */
+  steps?: string[]
 }
 
-const STEPS: AnalysisStep[] = [1, 2, 3, 4, 5]
+export function ProgressSteps({ currentStep, steps }: ProgressStepsProps) {
+  // Use custom steps if provided, otherwise fall back to competitor analysis labels
+  const stepLabels: Record<number, string> = steps
+    ? Object.fromEntries(steps.map((label, i) => [i + 1, label]))
+    : (STEP_LABELS as Record<number, string>)
 
-export function ProgressSteps({ currentStep }: ProgressStepsProps) {
+  const stepCount = steps ? steps.length : 5
+  const stepIndices = Array.from({ length: stepCount }, (_, i) => i + 1)
+
   return (
     <div className="w-full max-w-2xl mx-auto">
       <div className="flex flex-col gap-3">
-        {STEPS.map((step) => {
+        {stepIndices.map((step) => {
           const isDone = step < currentStep
           const isActive = step === currentStep
 
@@ -51,7 +64,7 @@ export function ProgressSteps({ currentStep }: ProgressStepsProps) {
                   isActive ? 'text-indigo-900 font-medium' : isDone ? 'text-slate-600' : 'text-slate-400'
                 }`}
               >
-                {STEP_LABELS[step]}
+                {stepLabels[step] ?? `Step ${step}`}
               </span>
             </div>
           )
@@ -60,3 +73,7 @@ export function ProgressSteps({ currentStep }: ProgressStepsProps) {
     </div>
   )
 }
+
+// Backward-compatible re-export for the competitor analysis ProgressPage
+// which passes currentStep as AnalysisStep — no change needed there.
+export type { AnalysisStep }

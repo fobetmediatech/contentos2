@@ -3,9 +3,15 @@
  *
  * COMPETITOR_CATEGORIES is injected at runtime (UC3).
  * Changing categories.ts changes AI taxonomy language + UI labels in one edit.
+ *
+ * Discovery prompts use a niche-agnostic schema with:
+ *   specialties: string[]  — what specific sub-topics this creator covers
+ *   contentFocus: string   — their primary content format
+ *   partnershipReady: boolean — bio has contact/collab/DM signals
+ *   locationConfidence: 'confirmed' | 'likely' | 'unknown' — how sure we are they're in the city
  */
 
-import { COMPETITOR_CATEGORIES } from '../shared/utils/categories'
+import { COMPETITOR_CATEGORIES, DISCOVERY_CATEGORIES } from '../shared/utils/categories'
 import type { NormalizedProfile } from '../lib/transformers'
 
 export interface CompetitorAnalysisResult {
@@ -120,4 +126,96 @@ OUTPUT FORMAT (respond with valid JSON only, no markdown):
 }
 
 Rank within each category starts at 1 (1 = best fit). Return exactly the JSON object, nothing else.`
+}
+
+// ----- Discovery types -----
+
+export interface DiscoveryResult {
+  username: string
+  category: 'top' | 'trending'
+  rank: number
+  rationale: string
+  /** Niche-agnostic specialties — inferred from bio/username (e.g. ["Street Food", "Café Culture"]) */
+  specialties: string[]
+  /** Primary content format inferred from bio/username */
+  contentFocus: string
+  /** true if bio contains collab/DM/business/PR/email signals */
+  partnershipReady: boolean
+  /** Confidence that the creator is actually in the target city */
+  locationConfidence: 'confirmed' | 'likely' | 'unknown'
+}
+
+export interface DiscoveryOutput {
+  results: DiscoveryResult[]
+  /** 2–4 word niche label detected by Gemini */
+  niche: string
+}
+
+// ----- Discovery prompt -----
+
+/**
+ * Build the location discovery prompt for Gemini.
+ *
+ * Selects the 10 most relevant creators from candidates, split Top 5 / Trending 5.
+ * Schema is niche-agnostic: specialties + contentFocus replace food-specific fields.
+ *
+ * @param city        Target city (e.g. "Mumbai")
+ * @param niche       Content niche (e.g. "food", "fitness", "travel")
+ * @param candidates  Profiles that survived the location filter
+ */
+export function buildDiscoveryPrompt(
+  city: string,
+  niche: string,
+  candidates: NormalizedProfile[],
+): string {
+  const topCategory = DISCOVERY_CATEGORIES.top
+  const trendingCategory = DISCOVERY_CATEGORIES.trending
+
+  const candidateSummary = candidates
+    .map((p) => {
+      const er = p.engagementRate?.toFixed(2) ?? 'N/A'
+      const establishedLabel = p.followersCount > 500_000
+        ? ' [ESTABLISHED: 500K+ followers — assign to Top category]'
+        : ''
+      return `@${p.username} | followers: ${p.followersCount.toLocaleString()} | ER: ${er}% | posts: ${p.postsCount} | verified: ${p.verified} | bio: "${p.biography.slice(0, 150)}"${establishedLabel}`
+    })
+    .join('\n')
+
+  return `You are a social media analyst specializing in creator discovery for brand partnerships.
+
+TASK: Find the top 10 ${niche} content creators based in ${city} from the list below.
+
+SELECTION CRITERIA:
+- Only select creators whose bio or username strongly suggests they post about ${niche} content.
+- "${topCategory.label}" (Top 5): ${topCategory.taxonomy}
+- "${trendingCategory.label}" (Trending 5): ${trendingCategory.taxonomy}
+- If fewer than 5 good creators exist in a category, reduce that category's count rather than padding with off-niche accounts.
+
+CANDIDATE PROFILES:
+${candidateSummary}
+
+For EACH selected creator, determine:
+- specialties: 1–3 specific sub-topics within ${niche} this creator covers (infer from bio, username, verified status). Use natural phrases like "Street Food", "Recipe Tutorials", "Gym Workouts", "Budget Travel" — adapted to the ${niche} niche.
+- contentFocus: their single primary format — "Tutorials", "Reviews", "Vlogs", "Lifestyle", or "Mixed"
+- partnershipReady: true if bio contains ANY of: "collab", "DM for", "business", "inquiries", "PR", "contact", "@gmail", "@yahoo", "link in bio" alongside a business signal
+- locationConfidence: "confirmed" if ${city} (or an alias) appears in bio; "likely" if context strongly implies ${city} without the name; "unknown" if only hashtag signal exists
+
+OUTPUT FORMAT (valid JSON only, no markdown):
+{
+  "niche": "<2–4 word label for this niche, e.g. '${niche} creators'>",
+  "results": [
+    {
+      "username": "<handle without @>",
+      "category": "${topCategory.id}",
+      "rank": 1,
+      "rationale": "<1 sentence, max 120 chars, why this creator is a top ${niche} voice in ${city}>",
+      "specialties": ["<sub-topic 1>", "<sub-topic 2>"],
+      "contentFocus": "<format>",
+      "partnershipReady": true,
+      "locationConfidence": "confirmed"
+    }
+  ]
+}
+
+Return ONLY the JSON object. Rank starts at 1 within each category (1 = best fit).`
 }

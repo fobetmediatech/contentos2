@@ -1,0 +1,98 @@
+/**
+ * Discovery state store — tracks the current location discovery run.
+ *
+ * Mirrors the analysisStore pattern but with discovery-specific steps and output shape.
+ */
+
+import { create } from 'zustand'
+import type { NormalizedProfile } from '../lib/transformers'
+import type { DiscoveryResult, DiscoveryOutput } from '../ai/prompts'
+
+// ----- Steps -----
+
+export type DiscoveryStep = 1 | 2 | 3 | 4 | 5
+
+export const DISCOVERY_STEP_LABELS: Record<DiscoveryStep, string> = {
+  1: 'Generating location hashtags',
+  2: 'Scraping location-tagged posts',
+  3: 'Fetching creator profiles',
+  4: 'Filtering by location signals',
+  5: 'Generating AI insights',
+}
+
+// ----- Params -----
+
+export interface DiscoveryParams {
+  city: string
+  niche: string
+  depth: 'standard' | 'deep'
+  clientName: string
+}
+
+// ----- State -----
+
+export type DiscoveryStatus = 'idle' | 'running' | 'done' | 'error'
+
+export interface DiscoveryState {
+  status: DiscoveryStatus
+  currentStep: DiscoveryStep
+  params: DiscoveryParams | null
+  /** All profiles that were scraped (before AI selection) */
+  candidateProfiles: NormalizedProfile[]
+  /** The 10 results Gemini selected */
+  results: DiscoveryResult[]
+  /** Detected niche label from Gemini */
+  niche: string
+  /** Whether location filter was relaxed (too few bio matches) */
+  locationFilterRelaxed: boolean
+  /** Hashtags that were actually scraped */
+  sourceHashtags: string[]
+  error: string | null
+
+  // Actions
+  startDiscovery: (params: DiscoveryParams) => void
+  setStep: (step: DiscoveryStep) => void
+  setResults: (
+    output: DiscoveryOutput,
+    candidateProfiles: NormalizedProfile[],
+    locationFilterRelaxed: boolean,
+    sourceHashtags: string[],
+  ) => void
+  setError: (message: string) => void
+  reset: () => void
+}
+
+const initialState = {
+  status: 'idle' as DiscoveryStatus,
+  currentStep: 1 as DiscoveryStep,
+  params: null,
+  candidateProfiles: [],
+  results: [],
+  niche: '',
+  locationFilterRelaxed: false,
+  sourceHashtags: [],
+  error: null,
+}
+
+export const useDiscoveryStore = create<DiscoveryState>()((set) => ({
+  ...initialState,
+
+  startDiscovery: (params) =>
+    set({ ...initialState, status: 'running', params, currentStep: 1 }),
+
+  setStep: (step) => set({ currentStep: step }),
+
+  setResults: (output, candidateProfiles, locationFilterRelaxed, sourceHashtags) =>
+    set({
+      status: 'done',
+      results: output.results,
+      niche: output.niche,
+      candidateProfiles,
+      locationFilterRelaxed,
+      sourceHashtags,
+    }),
+
+  setError: (message) => set({ status: 'error', error: message }),
+
+  reset: () => set(initialState),
+}))
