@@ -2,15 +2,19 @@
  * Location discovery pipeline — city + niche → candidate creator profiles.
  *
  * Pipeline:
- *   Step 1: Scrape posts from location-aware hashtags → extract creator handles
- *   Step 2: Scrape full profiles for all unique candidate handles (cap: 60)
+ *   Step 1: Scrape posts from ALL location-aware hashtags in ONE actor run → creator handles
+ *   Step 2: Scrape full profiles for all unique candidate handles (cap: 40)
  *   Step 3: Location filter → narrow to profiles with city signal in bio
  *
  * Uses shared Apify primitives from apifyCore.ts.
- * Runs hashtag scrapes in parallel with pLimit(3) to stay within timing budget:
- *   Standard (5 hashtags): ~2 batches × ~25s = ~50s + ~25s profiles = ~75s
- *   Deep    (8 hashtags):  ~3 batches × ~25s = ~75s + ~35s profiles = ~110s
- * Both fit within the 150s AbortController timeout.
+ *
+ * Timing budget (each Apify run ≈ 25-35s including startup + poll):
+ *   Standard (5 hashtags): 1 hashtag run ~30s + ~15s profiles (4 batches, 1 wave) = ~45s
+ *   Deep    (8 hashtags):  1 hashtag run ~35s + ~20s profiles (4 batches, 2 waves) = ~55s
+ *
+ * Key design choice: ALL hashtags go into ONE actor run (not one run per hashtag).
+ * Apify's hashtag scraper natively accepts an array — batching avoids paying the
+ * per-run startup/cold-start overhead (5-15s) for each hashtag separately.
  */
 
 import pLimit from 'p-limit'
@@ -20,7 +24,7 @@ import { startRun, pollRun, fetchDataset, chunk } from './apifyCore'
 import { filterByLocation, type FilterResult } from './locationFilter'
 
 const MAX_CONCURRENT = 3
-const PROFILE_CAP = 60       // max handles to profile-scrape (controls Apify cost)
+const PROFILE_CAP = 40       // max handles to profile-scrape (controls Apify cost + run time)
 const POSTS_PER_HASHTAG: Record<'standard' | 'deep', number> = {
   standard: 20,
   deep: 25,
@@ -32,27 +36,6 @@ const limit = pLimit(MAX_CONCURRENT)
 
 interface HashtagPostRaw {
   ownerUsername?: string
-}
-
-// ----- Internal helpers -----
-
-/**
- * Scrape posts from a single hashtag and return the list of post author usernames.
- */
-async function scrapeHashtag(
-  hashtag: string,
-  postsLimit: number,
-  apiKey: string,
-  signal?: AbortSignal,
-): Promise<string[]> {
-  const input = buildHashtagScraperInput([hashtag], postsLimit)
-  const { runId, datasetId } = await startRun(ACTORS.HASHTAG_SCRAPER, input, apiKey, signal)
-  const resolvedDatasetId = await pollRun(runId, apiKey, signal)
-  const posts = await fetchDataset<HashtagPostRaw>(resolvedDatasetId || datasetId, apiKey, signal)
-
-  return posts
-    .map((p) => p.ownerUsername?.trim().toLowerCase())
-    .filter((u): u is string => Boolean(u))
 }
 
 /**
@@ -83,8 +66,8 @@ export interface DiscoveryPipelineResult {
 /**
  * Run the full location discovery data pipeline.
  *
- * Step 1: Scrape all hashtags in parallel (pLimit=3) → unique creator handles
- * Step 2: Profile-scrape the candidates (capped at PROFILE_CAP=60)
+ * Step 1: Scrape all hashtags in ONE actor run → unique creator handles
+ * Step 2: Profile-scrape the candidates in parallel batches (cap: PROFILE_CAP=40)
  * Step 3: Apply location filter → FilterResult (may be relaxed)
  *
  * @param hashtags   Location-aware hashtags from hashtagGenerator.ts
@@ -102,17 +85,19 @@ export async function runLocationDiscovery(
 ): Promise<DiscoveryPipelineResult> {
   const postsLimit = POSTS_PER_HASHTAG[depth]
 
-  console.log(`[discovery] Scraping ${hashtags.length} hashtags (${postsLimit} posts each)`)
+  console.log(`[discovery] Scraping ${hashtags.length} hashtags in one run (${postsLimit} posts each)`)
 
-  // Step 1: Scrape all hashtags in parallel, deduplicate handles across all results
-  const hashtagResults = await Promise.all(
-    hashtags.map((tag) =>
-      limit(() => scrapeHashtag(tag, postsLimit, apiKey, signal))
-    )
-  )
+  // Step 1: ALL hashtags in ONE actor run → pay startup cost once, not N times.
+  // Apify's hashtag scraper accepts an array natively; there is no benefit to
+  // firing one run per hashtag — it just multiplies cold-start overhead.
+  const hashtagInput = buildHashtagScraperInput(hashtags, postsLimit)
+  const { runId: hRunId, datasetId: hDatasetId } = await startRun(ACTORS.HASHTAG_SCRAPER, hashtagInput, apiKey, signal)
+  const hResolved = await pollRun(hRunId, apiKey, signal)
+  const posts = await fetchDataset<HashtagPostRaw>(hResolved || hDatasetId, apiKey, signal)
 
-  // Deduplicate across all hashtags → candidate handle pool
-  const allHandles = hashtagResults.flat()
+  const allHandles = posts
+    .map((p) => p.ownerUsername?.trim().toLowerCase())
+    .filter((u): u is string => Boolean(u))
   const uniqueHandles = [...new Set(allHandles)]
   console.log(`[discovery] ${uniqueHandles.length} unique handles from ${hashtags.length} hashtags`)
 
