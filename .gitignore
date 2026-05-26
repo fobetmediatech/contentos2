@@ -1,2 +1,18 @@
+# Dependencies
+node_modules/
+
+# Build output (Vercel builds this itself — don't commit)
+dist/
+
+# Local env files (never commit actual keys)
+.env
+.env.local
+.env.*.local
+
+# Editor / OS
+.DS_Store
+*.local
+
+# gstack
 .claude/skills/gstack/
 .gstack/
