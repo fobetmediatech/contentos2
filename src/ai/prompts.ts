@@ -183,32 +183,38 @@ export function buildDiscoveryPrompt(
 
   return `You are a social media analyst specializing in creator discovery for brand partnerships.
 
-TASK: Find the top 10 ${niche} content creators based in ${city} from the list below.
+TASK: Find the top 10 ${niche}-related Instagram accounts based in ${city} from the list below.
+
+ACCOUNT TYPES TO INCLUDE (both are valid — do not favour one over the other):
+1. Content creators / influencers — people who post ${niche} content (reviews, vlogs, tutorials, lifestyle)
+2. Relevant businesses — restaurants, cafés, brands, or establishments that operate in the ${niche} space and maintain an active Instagram presence
 
 SELECTION CRITERIA:
-- Only select creators whose bio or username strongly suggests they post about ${niche} content.
+- Select any account whose bio or username strongly suggests it is relevant to ${niche} — whether a person or a business.
 - "${topCategory.label}" (Top 5): ${topCategory.taxonomy}
 - "${trendingCategory.label}" (Trending 5): ${trendingCategory.taxonomy}
-- If fewer than 5 good creators exist in a category, reduce that category's count rather than padding with off-niche accounts.
+- If fewer than 5 good accounts exist in a category, reduce that category's count rather than padding with off-niche accounts.
 
 CANDIDATE PROFILES:
 ${candidateSummary}
 
-For EACH selected creator, determine:
-- specialties: 1–3 specific sub-topics within ${niche} this creator covers (infer from bio, username, verified status). Use natural phrases like "Street Food", "Recipe Tutorials", "Gym Workouts", "Budget Travel" — adapted to the ${niche} niche.
-- contentFocus: their single primary format — "Tutorials", "Reviews", "Vlogs", "Lifestyle", or "Mixed"
-- partnershipReady: true if bio contains ANY of: "collab", "DM for", "business", "inquiries", "PR", "contact", "@gmail", "@yahoo", "link in bio" alongside a business signal
+For EACH selected account, determine:
+- specialties: 1–3 specific sub-topics this account covers within ${niche}. Use natural phrases adapted to the account type:
+    • Creators: "Street Food Reviews", "Recipe Tutorials", "Café Hopping", "Budget Eats"
+    • Businesses: "Fine Dining", "Cloud Kitchen", "Craft Cocktails", "Vegan Menu"
+- contentFocus: their single primary format — "Tutorials", "Reviews", "Vlogs", "Lifestyle", "Restaurant", "Brand", or "Mixed"
+- partnershipReady: true if bio contains ANY of: "collab", "DM for", "business", "inquiries", "PR", "contact", "@gmail", "@yahoo", "link in bio", "reservations", "catering", or any booking/contact signal
 - locationConfidence: "confirmed" if ${city} (or an alias) appears in bio; "likely" if context strongly implies ${city} without the name; "unknown" if only hashtag signal exists
 
 OUTPUT FORMAT (valid JSON only, no markdown):
 {
-  "niche": "<2–4 word label for this niche, e.g. '${niche} creators'>",
+  "niche": "<2–4 word label for this niche, e.g. '${niche} scene' or '${niche} creators'>",
   "results": [
     {
       "username": "<handle without @>",
       "category": "${topCategory.id}",
       "rank": 1,
-      "rationale": "<1 sentence, max 120 chars, why this creator is a top ${niche} voice in ${city}>",
+      "rationale": "<1 sentence, max 120 chars, why this account is a top ${niche} presence in ${city}>",
       "specialties": ["<sub-topic 1>", "<sub-topic 2>"],
       "contentFocus": "<format>",
       "partnershipReady": true,
