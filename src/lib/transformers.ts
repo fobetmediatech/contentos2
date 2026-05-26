@@ -124,7 +124,7 @@ export function normalizeProfile(raw: ApifyProfileRaw): NormalizedProfile {
   )
 
   const relatedHandles = (raw.relatedProfiles ?? [])
-    .filter((r) => !r.is_private)
+    .filter((r) => !r.is_private && typeof r.username === 'string' && r.username.length > 0)
     .map((r) => r.username)
 
   // Count hashtag frequency across all posts, then return top 10 by frequency.
@@ -133,6 +133,7 @@ export function normalizeProfile(raw: ApifyProfileRaw): NormalizedProfile {
   const hashtagFreq: Record<string, number> = {}
   for (const post of raw.latestPosts ?? []) {
     for (const tag of (post.hashtags ?? [])) {
+      if (typeof tag !== 'string') continue
       const t = tag.toLowerCase().replace(/^#/, '')
       if (t && !HASHTAG_STOPWORDS.has(t)) {
         hashtagFreq[t] = (hashtagFreq[t] ?? 0) + 1
@@ -145,7 +146,7 @@ export function normalizeProfile(raw: ApifyProfileRaw): NormalizedProfile {
     .map(([tag]) => tag)
 
   return {
-    username: raw.username,
+    username: raw.username ?? '',
     fullName: raw.fullName ?? '',
     biography: raw.biography ?? '',
     followersCount: raw.followersCount ?? 0,
