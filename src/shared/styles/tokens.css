@@ -1,0 +1,48 @@
+/* Design tokens — single source of truth for all colors, typography, spacing */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  /* Surfaces */
+  --color-bg: #f8fafc;           /* slate-50 */
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f1f5f9; /* slate-100 */
+  --color-border: #e2e8f0;        /* slate-200 */
+
+  /* Text */
+  --color-text-primary: #0f172a;   /* slate-900 */
+  --color-text-secondary: #475569; /* slate-600 */
+  --color-text-muted: #94a3b8;     /* slate-400 */
+
+  /* Accent — indigo-600 */
+  --color-accent: #4f46e5;
+  --color-accent-hover: #4338ca;
+  --color-accent-light: #eef2ff;   /* indigo-50 */
+
+  /* Badge: Top 5 — blue */
+  --color-badge-top-bg: #dbeafe;   /* blue-100 */
+  --color-badge-top-text: #1d4ed8; /* blue-700 */
+
+  /* Badge: Trending 5 — amber */
+  --color-badge-trending-bg: #fef3c7;   /* amber-100 */
+  --color-badge-trending-text: #b45309; /* amber-700 */
+
+  /* ER coloring */
+  --color-er-above: #16a34a; /* green-600 — ER above cohort avg */
+  --color-er-below: #d97706; /* amber-600 — ER below cohort avg */
+
+  /* Status */
+  --color-warning-bg: #fffbeb;  /* amber-50 */
+  --color-warning-border: #fcd34d; /* amber-300 */
+  --color-warning-text: #92400e;   /* amber-800 */
+  --color-error: #dc2626;          /* red-600 */
+  --color-success: #16a34a;        /* green-600 */
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-card: 0 0 0 1px var(--color-border);
+
+  /* Spacing rhythm */
+  --radius: 0.5rem;
+  --radius-lg: 0.75rem;
+}
