@@ -184,6 +184,15 @@ export function formatDiscoveryForClipboard(data: DiscoveryExportData): string {
  *          specialties, content_focus, partnership_ready, location_confidence,
  *          rationale, city, niche, source_hashtags
  */
+function csvCell(value: string | number | boolean): string {
+  const s = String(value)
+  // Prefix formula-starting characters to prevent spreadsheet injection
+  const safe = s.startsWith('=') || s.startsWith('+') || s.startsWith('-') || s.startsWith('@')
+    ? `'${s}`
+    : s
+  return `"${safe.replace(/"/g, '""')}"`
+}
+
 export function generateDiscoveryCSV(data: DiscoveryCSVData): string {
   const { results, profiles, city, niche, sourceHashtags } = data
   const profileMap = new Map(profiles.map((p) => [p.username, p]))
@@ -203,21 +212,20 @@ export function generateDiscoveryCSV(data: DiscoveryCSVData): string {
       const profile = profileMap.get(r.username)
       return [
         r.rank,
-        r.category,
-        r.username,
-        profile?.fullName ?? '',
+        csvCell(r.category),
+        csvCell(r.username),
+        csvCell(profile?.fullName ?? ''),
         profile?.followersCount ?? '',
         profile?.engagementRate?.toFixed(2) ?? '',
         profile?.verified ? 'yes' : 'no',
-        // Pipe-separated specialties (avoids nested CSV quoting issues)
-        `"${r.specialties.join(' | ')}"`,
-        r.contentFocus,
+        csvCell(r.specialties.join(' | ')),
+        csvCell(r.contentFocus),
         r.partnershipReady ? 'yes' : 'no',
-        r.locationConfidence,
-        `"${r.rationale.replace(/"/g, '""')}"`,
-        city,
-        niche,
-        sourceHashtags.join(';'),
+        csvCell(r.locationConfidence),
+        csvCell(r.rationale),
+        csvCell(city),
+        csvCell(niche),
+        csvCell(sourceHashtags.join(';')),
       ].join(',')
     })
 

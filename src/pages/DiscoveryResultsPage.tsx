@@ -8,7 +8,7 @@
  *   - Discovery-specific CSV + clipboard export
  */
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Copy, Download, RotateCcw, Check, MapPin, Info } from 'lucide-react'
 import { useDiscoveryStore } from '../store/discoveryStore'
@@ -34,11 +34,9 @@ export function DiscoveryResultsPage() {
   } = useDiscoveryStore()
   const [copied, setCopied] = useState(false)
 
-  // Redirect to discover input if no results
-  if (results.length === 0) {
-    navigate('/discover')
-    return null
-  }
+  useEffect(() => {
+    if (results.length === 0) navigate('/discover')
+  }, [results.length, navigate])
 
   const topResults = results.filter((r) => r.category === 'top').sort((a, b) => a.rank - b.rank)
   const trendingResults = results.filter((r) => r.category === 'trending').sort((a, b) => a.rank - b.rank)

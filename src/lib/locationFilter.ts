@@ -4,10 +4,15 @@
  * After profile scraping, filters candidates to those with a detectable
  * city signal in their biography or business address.
  *
- * Filter logic (any match = pass):
- *   1. biography contains city name (case-insensitive)
- *   2. biography contains any known city alias
- *   3. businessAddress contains city name (if available)
+ * Filter logic — differentiated by account type:
+ *   Creator accounts (isBusinessAccount: false):
+ *     1. Bio contains target city → pass (confirmed)
+ *     2. Bio contains a known OTHER city → fail (wrong city)
+ *     3. No city signal in bio → pass (assumed local; found under city hashtags)
+ *   Business accounts:
+ *     1. Bio contains target city → pass
+ *     2. businessAddress contains target city → pass
+ *     3. Otherwise → fail (businesses always name their city if local)
  *
  * Relaxation rule (per design doc):
  *   If fewer than MIN_RESULTS candidates pass, the filter is relaxed and ALL
@@ -54,6 +59,21 @@ function getCityTerms(city: string): string[] {
 }
 
 /**
+ * Build all city terms for every city EXCEPT the target.
+ * Used to detect creator bios that name a different city (wrong-city rejection).
+ */
+function getAllOtherCityTerms(city: string): string[] {
+  const targetNormalized = city.trim().toLowerCase()
+  const result: string[] = []
+  for (const [canonical, aliases] of Object.entries(CITY_ALIASES)) {
+    if (canonical !== targetNormalized && !aliases.includes(targetNormalized)) {
+      result.push(canonical, ...aliases)
+    }
+  }
+  return result
+}
+
+/**
  * Check if a text field contains any of the city terms.
  */
 function textContainsCitySignal(text: string, cityTerms: string[]): boolean {
@@ -91,16 +111,21 @@ export function filterByLocation(
   city: string,
 ): FilterResult {
   const cityTerms = getCityTerms(city)
+  const otherCityTerms = getAllOtherCityTerms(city)
 
   const passed = profiles.filter((p) => {
     const profile = p as ProfileWithAddress
 
-    // Check biography (primary signal — almost always populated)
+    // --- Creator accounts: pass unless bio names a different city ---
+    if (!profile.isBusinessAccount) {
+      if (textContainsCitySignal(profile.biography, cityTerms)) return true
+      if (textContainsCitySignal(profile.biography, otherCityTerms)) return false
+      return true  // no city signal → assumed local (found under city-specific hashtags)
+    }
+
+    // --- Business accounts: require explicit city confirmation ---
     if (textContainsCitySignal(profile.biography, cityTerms)) return true
-
-    // Check businessAddress if available (secondary signal)
     if (profile.businessAddress && textContainsCitySignal(profile.businessAddress, cityTerms)) return true
-
     return false
   })
 

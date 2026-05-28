@@ -167,5 +167,5 @@ export function normalizeProfile(raw: ApifyProfileRaw): NormalizedProfile {
  * Normalize an array of raw profiles.
  */
 export function normalizeProfiles(raws: ApifyProfileRaw[]): NormalizedProfile[] {
-  return raws.map(normalizeProfile)
+  return raws.map(normalizeProfile).filter((p) => p.username.length > 0)
 }

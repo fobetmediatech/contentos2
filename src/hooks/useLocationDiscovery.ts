@@ -20,6 +20,7 @@ import { useKeysStore } from '../store/keysStore'
 import { generateHashtags } from '../lib/hashtagGenerator'
 import { runLocationDiscovery } from '../lib/discoveryClient'
 import { analyzeDiscovery } from '../ai/gemini'
+import type { DiscoveryResult } from '../ai/prompts'
 import { markKeyCooldown } from '../lib/keyRotator'
 import { ApifyError } from '../lib/apifyCore'
 import { GeminiError } from '../ai/gemini'
@@ -42,12 +43,16 @@ export function useLocationDiscovery() {
       try {
         startDiscovery(params)
 
+        // Sanitize user-supplied strings before embedding in AI prompts
+        const safeCity = params.city.replace(/[\n\r]/g, ' ').trim()
+        const safeNiche = params.niche.replace(/[\n\r]/g, ' ').trim()
+
         // Step 1: Generate location-aware hashtags
         setStep(1)
         const { hashtags } = await generateHashtags(
           geminiKey,
-          params.city,
-          params.niche,
+          safeCity,
+          safeNiche,
           params.depth,
           controller.signal,
         )
@@ -59,7 +64,7 @@ export function useLocationDiscovery() {
         // We advance step markers manually as the pipeline progresses.
         const { candidateProfiles, filterResult, scrapedHashtags, creatorCount, businessCount } = await runLocationDiscovery(
           hashtags,
-          params.city,
+          safeCity,
           apifyKey,
           params.depth,
           controller.signal,
@@ -71,7 +76,7 @@ export function useLocationDiscovery() {
         // Bail early if no candidates at all
         if (filterResult.filtered.length === 0) {
           throw new Error(
-            `We found no creators in ${params.city} for "${params.niche}". Try a broader city or niche.`,
+            `We found no creators in ${safeCity} for "${safeNiche}". Try a broader city or niche.`,
           )
         }
 
@@ -82,8 +87,8 @@ export function useLocationDiscovery() {
         setStep(5)
         let output = await analyzeDiscovery(
           geminiKey,
-          params.city,
-          params.niche,
+          safeCity,
+          safeNiche,
           filterResult.filtered,
           controller.signal,
           creatorCount,
@@ -95,8 +100,8 @@ export function useLocationDiscovery() {
           console.warn('[discovery] zero results from AI — retrying without city/niche context')
           output = await analyzeDiscovery(
             geminiKey,
-            params.city,
-            params.niche,
+            safeCity,
+            safeNiche,
             candidateProfiles,  // use ALL candidates, not just filtered
             controller.signal,
             creatorCount,
@@ -109,6 +114,16 @@ export function useLocationDiscovery() {
           ...output,
           results: output.results.filter((r) => knownHandles.has(r.username.toLowerCase())),
         }
+
+        // locationConfidence post-filter: drop 'unknown' results only if ≥5 high-confidence remain.
+        // On the retry path this threshold fires less often (smaller, last-resort pool) — intentional.
+        const applyConfidenceFilter = (results: DiscoveryResult[]) => {
+          const highConf = results.filter((r) => r.locationConfidence !== 'unknown')
+          // Only trim 'unknown' results when 10+ high-confidence results exist —
+          // matches the 10-result target so we never drop below it.
+          return highConf.length >= 10 ? highConf : results
+        }
+        output = { ...output, results: applyConfidenceFilter(output.results) }
 
         setResults(output, candidateProfiles, filterResult.relaxed, scrapedHashtags)
         return output

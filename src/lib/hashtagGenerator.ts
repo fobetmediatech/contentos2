@@ -26,7 +26,7 @@ const HASHTAG_COUNT: Record<'standard' | 'deep', number> = {
 
 const SAFE_PATTERN = /[^\w\s,\-]/g  // allow word chars, spaces, commas, hyphens
 
-function sanitize(input: string, maxLen: number): string {
+export function sanitize(input: string, maxLen: number): string {
   return input
     .replace(/[\n\r]/g, ' ')    // strip newlines
     .replace(SAFE_PATTERN, '')  // remove disallowed chars
@@ -40,27 +40,29 @@ function sanitize(input: string, maxLen: number): string {
  * Generate hashtags from a simple template when Gemini is unavailable.
  * Works for any city + niche combination without an API call.
  */
-function ruleFallback(city: string, niche: string, count: number): string[] {
+export function ruleFallback(city: string, niche: string, count: number): string[] {
   const c = city.replace(/\s+/g, '')   // "New Delhi" → "NewDelhi"
   const n = niche.replace(/\s+/g, '')  // "street food" → "streetfood"
   const cityLower = city.toLowerCase().replace(/\s+/g, '')
   const nicheLower = niche.toLowerCase().replace(/\s+/g, '')
 
-  // These are CONTENT hashtags — what individual creators use when posting their own
-  // niche content. Avoid "Blogger", "Vlogger", "Creator" suffix tags: those are used by
-  // restaurants/businesses seeking creator attention, so scraping them yields restaurant
-  // accounts, not content creators.
+  // Mix two tag types for best creator coverage:
+  //   1. Content tags (what creators post under): IndoreFood, IndoreFoodie, IndoreEats
+  //   2. Creator self-ID tags (what creators use to label themselves): IndoreFoodVlogger, IndoreFoodBlogger
+  // Self-ID tags surface creator handles directly — vloggers tag every post with them,
+  // so scraping them yields creator ownerUsername values, not business accounts.
   const candidates = [
-    `${c}${n}`,              // IndoreFood
-    `${cityLower}${nicheLower}`,   // indorefood
-    `${c}Eats`,              // IndoreEats
-    `${c}Foodie`,            // IndoreFoodie
-    `${c}StreetFood`,        // IndoreStreetFood
-    `${nicheLower}${cityLower}`,   // foodindore
-    `${c}FoodLovers`,        // IndoreFoodLovers
-    `${c}Cafe`,              // IndoreCafe
-    `${c}Diaries`,           // IndoreDiaries
-    `${c}Bites`,             // IndoreBites
+    `${c}${n}`,                   // IndoreFood
+    `${c}${n}Vlogger`,            // IndoreFoodVlogger (creator self-ID)
+    `${c}${n}Blogger`,            // IndoreFoodBlogger (creator self-ID)
+    `${cityLower}${nicheLower}`,  // indorefood
+    `${c}Foodie`,                 // IndoreFoodie
+    `${c}StreetFood`,             // IndoreStreetFood
+    `${c}Eats`,                   // IndoreEats
+    `${nicheLower}${cityLower}`,  // foodindore
+    `${c}FoodLovers`,             // IndoreFoodLovers
+    `${c}Diaries`,                // IndoreDiaries
+    `${c}Bites`,                  // IndoreBites
   ]
 
   // Deduplicate case-insensitively, take first `count`
@@ -87,13 +89,17 @@ async function callGeminiForHashtags(
   signal?: AbortSignal,
 ): Promise<string[]> {
   const citySlug = city.replace(/\s+/g, '')
-  const prompt = `Generate ${count} Instagram hashtags that ${niche} content creators in ${city} actually use when posting their own content.
+  const prompt = `Generate ${count} Instagram hashtags for finding ${niche} content creators based in ${city}. Mix two types:
 
-CRITICAL: These must be CONTENT hashtags — tags individual creators add to their own food/travel/fitness posts.
-DO NOT generate "discovery" or "category" hashtags like "${citySlug}FoodVlogger", "FoodBloggers${citySlug}", "${citySlug}FoodCreator" — those are used by restaurants and businesses seeking vlogger attention, not by creators posting their content. Scraping those tags returns restaurant accounts, not creators.
+1. CONTENT hashtags — tags creators add to their own posts: ${citySlug}Food, ${citySlug}Foodie, ${citySlug}Eats, ${citySlug}StreetFood
+2. CREATOR SELF-ID hashtags — tags creators use to label themselves as a vlogger/blogger in this city: ${citySlug}FoodVlogger, ${citySlug}FoodBlogger, ${citySlug}Foodie
 
-Good examples for food in Indore: "IndoreFood", "IndoreFoodie", "IndoreEats", "IndoreStreetFood", "IndoreCafe", "IndoreFoodLovers"
-Good examples for fitness in Mumbai: "MumbaiFitness", "MumbaiGym", "FitMumbai", "MumbaiWorkout", "MumbaiHealth"
+Include at least 2 creator self-ID hashtags — these directly surface creator account handles because vloggers and bloggers tag every post with them to build their audience.
+
+DO NOT generate collab-seeking hashtags used by businesses (e.g. "FoodVloggerWanted", "InfluencerNeeded", "PRCollab") — those are posted by brands, not creators.
+
+Good examples for food in Indore: "IndoreFood", "IndoreFoodVlogger", "IndoreFoodBlogger", "IndoreFoodie", "IndoreEats", "IndoreStreetFood"
+Good examples for fitness in Mumbai: "MumbaiFitness", "MumbaiFitnessVlogger", "MumbaiFitnessBlogger", "MumbaiGym", "FitMumbai"
 
 Return ONLY a JSON array of strings. No # prefix. No explanation. No markdown.`
 

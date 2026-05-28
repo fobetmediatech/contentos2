@@ -32,7 +32,7 @@ export function DiscoverPage() {
       { city: safeCity, niche: safeNiche, depth, clientName: clientName.trim() },
       {
         onSuccess: () => navigate('/discover/results'),
-        onError: () => navigate('/discover/progress'),
+        onError: () => navigate('/discover'),
       },
     )
     navigate('/discover/progress')

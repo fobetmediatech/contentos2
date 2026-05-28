@@ -58,7 +58,7 @@ export function buildCompetitorPrompt(
       const establishedLabel = p.followersCount > 500_000
         ? ' [ESTABLISHED: 500K+ followers — assign to Top category]'
         : ''
-      return `@${p.username} | followers: ${p.followersCount.toLocaleString()} | ER: ${er}% | posts: ${p.postsCount} | verified: ${p.verified} | bio: "${p.biography.slice(0, 120)}"${establishedLabel}`
+      return `@${p.username} | followers: ${p.followersCount.toLocaleString()} | ER: ${er}% | posts: ${p.postsCount} | verified: ${p.verified} | bio: "${p.biography.replace(/[\n\r]/g, ' ').slice(0, 120)}"${establishedLabel}`
     })
     .join('\n')
 
@@ -182,7 +182,7 @@ export function buildDiscoveryPrompt(
       const establishedLabel = p.followersCount > 500_000
         ? ' [ESTABLISHED: 500K+ followers — assign to Top category]'
         : ''
-      return `@${p.username} | type: ${accountType} | followers: ${p.followersCount.toLocaleString()} | ER: ${er}% | posts: ${p.postsCount} | verified: ${p.verified} | bio: "${p.biography.slice(0, 150)}"${establishedLabel}`
+      return `@${p.username} | type: ${accountType} | followers: ${p.followersCount.toLocaleString()} | ER: ${er}% | posts: ${p.postsCount} | verified: ${p.verified} | bio: "${p.biography.replace(/[\n\r]/g, ' ').slice(0, 150)}"${establishedLabel}`
     })
     .join('\n')
 
@@ -204,8 +204,8 @@ ACCOUNT TYPES TO INCLUDE:
 BALANCE RULE — this is mandatory:
 - Across all 10 results, aim for at least 5 content creators (type: creator) and at most 5 businesses (type: business).
 - If the niche or context mentions "vlogger", "blogger", or "creator", lean heavier on creators: aim for 6-7 creators out of 10.
-- Do NOT fill slots with businesses just because there are fewer creator candidates — reduce the total count instead.
-- A business profile can only take a slot if no more creator profiles remain in the candidate list.
+- If fewer creator profiles exist than needed to fill 10 slots, fill the remaining slots with the most niche-relevant businesses from the candidate list.
+- MINIMUM RESULT COUNT: Always return exactly 10 results. If fewer than 10 candidate profiles appear in this list, return all of them. Never reduce the count.
 
 SELECTION CRITERIA:
 - Select any account whose bio or username strongly suggests it is relevant to ${niche}.

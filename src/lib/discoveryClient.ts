@@ -11,10 +11,10 @@
  * Uses shared Apify primitives from apifyCore.ts.
  *
  * Timing budget (each Apify run ≈ 25-35s including startup + poll):
- *   Standard (5 hashtags): 1 hashtag run ~30s + ~15s profiles (4 batches, 1 wave)
- *                          + optional ~10s expansion (2 batches) = ~45-55s
- *   Deep    (8 hashtags):  1 hashtag run ~35s + ~20s profiles (4 batches, 2 waves)
- *                          + optional ~10s expansion = ~55-65s
+ *   Standard (5 hashtags): 1 hashtag run ~30s + ~20s profiles (6 batches, 1 wave)
+ *                          + optional ~10s expansion (4 batches) = ~55-65s
+ *   Deep    (8 hashtags):  1 hashtag run ~35s + ~25s profiles (6 batches, 2 waves)
+ *                          + optional ~10s expansion = ~65-75s
  *
  * Creator enrichment design:
  *   Instagram's "related profiles" for creator accounts are other creators in the same
@@ -45,7 +45,7 @@ import { filterByLocation, type FilterResult } from './locationFilter'
 
 const MAX_CONCURRENT = 3
 /** Max handles to profile-scrape from hashtag results (controls Apify cost + run time) */
-const PROFILE_CAP = 40
+const PROFILE_CAP = 60
 const POSTS_PER_HASHTAG: Record<'standard' | 'deep', number> = {
   standard: 20,
   deep: 25,
@@ -58,7 +58,18 @@ const limit = pLimit(MAX_CONCURRENT)
 /** If fewer than this many creator accounts exist in the initial pool, trigger expansion */
 const MIN_CREATOR_THRESHOLD = 8
 /** Max additional handles to scrape in one expansion round */
-const EXPANSION_CAP = 20
+const EXPANSION_CAP = 40
+
+// ----- Quality gate -----
+
+const MIN_FOLLOWERS_CREATOR = 500
+const MIN_FOLLOWERS_BUSINESS = 1000
+const MIN_POSTS = 5
+
+export function meetsQualityThreshold(profile: NormalizedProfile): boolean {
+  const minFollowers = profile.isBusinessAccount ? MIN_FOLLOWERS_BUSINESS : MIN_FOLLOWERS_CREATOR
+  return profile.followersCount >= minFollowers && profile.postsCount >= MIN_POSTS
+}
 /** Max creator profiles in the final candidate set passed to Gemini */
 const MAX_CREATORS = 15
 /** Max business profiles in the final candidate set passed to Gemini */
@@ -92,7 +103,7 @@ const CREATOR_BIO_PATTERN = /collab|vlogger|vlog|blogger|blog|content creator|cr
  * Returns true if ANY signal fires (not a hard gate — avoids excluding
  * micro-influencers with low follower ratios or non-English bios).
  */
-function isCreatorLikely(profile: NormalizedProfile): boolean {
+export function isCreatorLikely(profile: NormalizedProfile): boolean {
   // Signal 1: Apify's isBusinessAccount field (primary, most reliable)
   if (!profile.isBusinessAccount) return true
 
@@ -142,7 +153,7 @@ async function scrapeProfiles(
  *
  * Security: all handles are validated with HANDLE_PATTERN before being returned.
  */
-function collectExpansionHandles(
+export function collectExpansionHandles(
   creatorProfiles: NormalizedProfile[],
   businessProfiles: NormalizedProfile[],
   alreadyScraped: Set<string>,
@@ -192,9 +203,13 @@ async function enrichCreatorPool(
   apiKey: string,
   signal?: AbortSignal,
 ): Promise<{ enrichedCandidates: NormalizedProfile[]; creatorCount: number; businessCount: number }> {
-  // Split initial pool by creator likelihood
-  const creatorProfiles = initialProfiles.filter(isCreatorLikely)
-  const businessProfiles = initialProfiles.filter((p) => !isCreatorLikely(p))
+  // Split initial pool by creator likelihood — single pass to avoid evaluating twice
+  const creatorProfiles: NormalizedProfile[] = []
+  const businessProfiles: NormalizedProfile[] = []
+  for (const p of initialProfiles) {
+    if (isCreatorLikely(p)) creatorProfiles.push(p)
+    else businessProfiles.push(p)
+  }
 
   console.log(
     `[discovery] Pool split: ${creatorProfiles.length} creators, ${businessProfiles.length} businesses (threshold: ${MIN_CREATOR_THRESHOLD})`,
@@ -279,7 +294,7 @@ export interface DiscoveryPipelineResult {
  * Run the full location discovery data pipeline.
  *
  * Step 1: Scrape all hashtags in ONE actor run → unique creator handles
- * Step 2: Profile-scrape the candidates in parallel batches (cap: PROFILE_CAP=40)
+ * Step 2: Profile-scrape the candidates in parallel batches (cap: PROFILE_CAP=60)
  * Step 2b: Creator enrichment — if <MIN_CREATOR_THRESHOLD creators found, expand via relatedHandles
  * Step 3: Apply location filter → FilterResult (may be relaxed)
  *
@@ -334,9 +349,13 @@ export async function runLocationDiscovery(
   const initialProfiles = batchResults.flat()
   console.log(`[discovery] Scraped ${initialProfiles.length} profiles`)
 
+  // Quality gate: drop ghost/inactive accounts before enrichment
+  const qualifiedProfiles = initialProfiles.filter(meetsQualityThreshold)
+  console.log(`[discovery] Quality gate: ${qualifiedProfiles.length}/${initialProfiles.length} profiles meet threshold`)
+
   // Step 2b: Creator enrichment — ensure the candidate pool has enough creators
   const { enrichedCandidates, creatorCount, businessCount } = await enrichCreatorPool(
-    initialProfiles,
+    qualifiedProfiles,
     apiKey,
     signal,
   )
