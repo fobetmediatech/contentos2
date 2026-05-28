@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Copy, Download, RotateCcw, Check } from 'lucide-react'
 import { useAnalysisStore } from '../store/analysisStore'
@@ -13,11 +13,15 @@ export function ResultsPage() {
   useKeysStore()
   const [copied, setCopied] = useState(false)
 
-  // Redirect to home if no results
-  if (competitors.length === 0) {
-    navigate('/')
-    return null
-  }
+  // Redirect to home if no results — must be in useEffect, not render (React 18 rule)
+  useEffect(() => {
+    if (competitors.length === 0) {
+      navigate('/')
+    }
+  }, [competitors.length, navigate])
+
+  // Don't render content while redirect is pending
+  if (competitors.length === 0) return null
 
   const topCompetitors = competitors.filter((c) => c.category === 'top').sort((a, b) => a.rank - b.rank)
   const trendingCompetitors = competitors.filter((c) => c.category === 'trending').sort((a, b) => a.rank - b.rank)

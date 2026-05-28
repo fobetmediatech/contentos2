@@ -74,9 +74,15 @@ export function useCompetitorAnalysis() {
         }
 
         // Apply hallucination filter (post-retry, so both paths are filtered)
-        output = {
-          ...output,
-          competitors: output.competitors.filter((c) => knownHandles.has(c.username.toLowerCase())),
+        const filteredCompetitors = output.competitors.filter((c) => knownHandles.has(c.username.toLowerCase()))
+        output = { ...output, competitors: filteredCompetitors }
+
+        // If hallucination filter wiped everything, treat it as an error rather
+        // than navigating to a blank results page.
+        if (output.competitors.length === 0) {
+          throw new Error(
+            'No verified competitors found — Gemini returned accounts that weren\'t in the scraped set. Try again or use different reference handles.',
+          )
         }
 
         setResults(output, inputProfiles)
