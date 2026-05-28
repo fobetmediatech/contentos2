@@ -90,6 +90,7 @@ async function callGemini(
         responseSchema: {
           type: 'object',
           properties: {
+            derivedNiche: { type: 'string' },
             niche: { type: 'string' },
             summary: { type: 'string' },
             competitors: {

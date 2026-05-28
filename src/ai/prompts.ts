@@ -25,6 +25,8 @@ export interface AnalysisOutput {
   competitors: CompetitorAnalysisResult[]
   niche: string
   summary: string
+  /** Sub-niche derived from reference accounts — debug field, not surfaced in UI */
+  derivedNiche?: string
 }
 
 /**
@@ -84,11 +86,24 @@ export function buildCompetitorPrompt(
   const hasFilterSignal = trimmedNicheContext.length > 0 || uniqueHashtags.length > 0
   const countInstruction = hasFilterSignal ? 'up to' : 'exactly'
 
+  // Injected when filter signals exist — forces Gemini to derive the specific sub-niche
+  // from the reference accounts before evaluating candidates. Anchors chain-of-thought
+  // in the output via the "derivedNiche" JSON field so strict JSON-output pressure
+  // doesn't cause the model to skip the derivation step silently.
+  const nicheDeriveBlock = hasFilterSignal
+    ? `\nNICHE DERIVATION — complete this before evaluating candidates:
+1. From the reference accounts' bios and hashtags above, identify the SPECIFIC sub-niche they represent.
+   "Business" could mean entrepreneurship, finance/trading, corporate leadership, or SME content — the reference accounts tell you which.
+2. This derived sub-niche overrides the raw niche keyword. If reference accounts are entrepreneurship creators, finance/trading/investing accounts are NOT relevant for this search.
+3. Include an account if its primary focus is within the derived sub-niche. Accounts whose content meaningfully spans both the derived sub-niche AND an adjacent sub-niche (e.g. an entrepreneur who also covers investing, when the reference accounts themselves cover both) should be included.
+Populate the "derivedNiche" field in your JSON output with the sub-niche you identified.\n`
+    : ''
+
   return `You are an Instagram competitive intelligence analyst for a social media agency.
 
 REFERENCE ACCOUNTS (the client's handles or known competitors in their niche):
 ${inputSummary}
-${nicheContextSection}${nicheSignalsSection}
+${nicheContextSection}${nicheSignalsSection}${nicheDeriveBlock}
 YOUR TASK:
 Analyze the candidate accounts below and select ${countInstruction}:
 - 5 "${topCategory.label}" competitors: ${topCategory.taxonomy}
@@ -107,6 +122,7 @@ SELECTION CRITERIA:
 
 OUTPUT FORMAT (respond with valid JSON only, no markdown):
 {
+  "derivedNiche": "<specific sub-niche derived from the reference accounts, e.g. 'entrepreneurship & startup content' — NOT the raw keyword>",
   "niche": "<2–4 word description of the niche, e.g. 'personal productivity creators' or 'marketing education'>",
   "summary": "<2 sentences: what this niche looks like on Instagram and what competitive dynamics you observed>",
   "competitors": [
