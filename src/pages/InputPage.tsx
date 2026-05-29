@@ -19,7 +19,7 @@ export function InputPage() {
     .split(/[\n,\s]+/)
     .map((h) => h.replace(/^@/, '').trim())
     .filter(Boolean)
-  const canAnalyze = ready && handles.length >= 1 && handles.length <= 5 && nicheContext.trim().length > 0 && !isPending
+  const canAnalyze = ready && handles.length >= 1 && handles.length <= 5 && !isPending
 
   const handleSubmit = () => {
     if (!canAnalyze) return
@@ -80,20 +80,21 @@ export function InputPage() {
           </p>
         </div>
 
-        {/* Niche context (required) */}
+        {/* Niche context (optional — clarification card covers it) */}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1.5">
-            Niche context <span className="text-red-500">*</span>
+            Niche context{' '}
+            <span className="text-slate-400 font-normal text-xs">(optional — tool will ask after discovery)</span>
           </label>
           <input
             type="text"
             value={nicheContext}
             onChange={(e) => setNicheContext(e.target.value.slice(0, 200))}
-            placeholder="e.g. Indian productivity creators — time management, deep work"
+            placeholder="e.g. Indian business growth creators — entrepreneurship tips (NOT trading, NOT finance)"
             className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
           />
           <p className="mt-1 text-xs text-slate-400">
-            Describe the content niche in your own words — this is the strongest signal for finding the right competitors.
+            Optional pre-hint. If left blank, the tool will show you what it found and ask which direction to rank toward.
             {nicheContext.length > 160 && (
               <span className="ml-1 text-slate-500">{nicheContext.length}/200</span>
             )}

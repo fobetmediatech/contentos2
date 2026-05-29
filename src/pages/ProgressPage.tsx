@@ -2,11 +2,14 @@ import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AlertCircle } from 'lucide-react'
 import { useAnalysisStore } from '../store/analysisStore'
+import { useCompetitorAnalysis } from '../hooks/useCompetitorAnalysis'
 import { ProgressSteps } from '../components/ProgressSteps'
+import { ClarificationCard } from '../components/ClarificationCard'
 
 export function ProgressPage() {
   const navigate = useNavigate()
-  const { status, currentStep, error } = useAnalysisStore()
+  const { status, currentStep, error, pendingDiscovery } = useAnalysisStore()
+  const { answerClarification, isPending } = useCompetitorAnalysis()
 
   // Redirect to results when done
   useEffect(() => {
@@ -45,12 +48,28 @@ export function ProgressPage() {
   return (
     <div className="max-w-xl mx-auto mt-16">
       <div className="text-center mb-10">
-        <h1 className="text-xl font-bold text-slate-900">Analyzing competitors...</h1>
+        <h1 className="text-xl font-bold text-slate-900">
+          {status === 'clarifying' ? 'One quick check' : 'Analyzing competitors...'}
+        </h1>
         <p className="mt-2 text-sm text-slate-500">
-          This takes up to 2 minutes. Don't close this tab.
+          {status === 'clarifying'
+            ? 'Help me rank the right accounts for your client.'
+            : "This takes up to 2 minutes. Don't close this tab."}
         </p>
       </div>
-      <ProgressSteps currentStep={currentStep} />
+
+      {/* Discovery progress steps (steps 1–4 are completed in 'clarifying' status) */}
+      <ProgressSteps currentStep={status === 'clarifying' ? 5 : currentStep} />
+
+      {/* Mid-run clarification card — shown between discovery and ranking */}
+      {status === 'clarifying' && pendingDiscovery && (
+        <ClarificationCard
+          question={pendingDiscovery.clarificationQuestion}
+          candidateCount={pendingDiscovery.candidateProfiles.length}
+          onAnswer={answerClarification}
+          disabled={isPending}
+        />
+      )}
     </div>
   )
 }

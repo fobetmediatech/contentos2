@@ -1,6 +1,18 @@
 /**
  * Main analysis hook — orchestrates the full competitor discovery pipeline.
  *
+ * Two-phase mutation architecture (split to support mid-run clarification pause):
+ *
+ *   Phase 1 — discoverMutation:
+ *     Steps 1–4: Apify scraping (reference + rounds 2/3 + hashtag expansion)
+ *     + generateClarificationQuestion() → sets status: 'clarifying'
+ *
+ *   Phase 2 — analyzeMutation (fires when user answers the clarification card):
+ *     Step 5: Gemini ranking with clarification answer injected as USER REFINEMENT
+ *
+ * The Zustand store bridges the two phases via pendingDiscovery (profile data held
+ * during the clarification pause) and clarificationAnswer (the user's selection).
+ *
  * TanStack Query config for 120s long-running operations:
  *   staleTime: 10min  → don't refetch results on re-mount
  *   gcTime: 30min     → keep results in memory for 30 minutes
@@ -12,7 +24,7 @@ import { useMutation } from '@tanstack/react-query'
 import { useAnalysisStore, type AnalysisParams } from '../store/analysisStore'
 import { useKeysStore } from '../store/keysStore'
 import { discoverCompetitors } from '../lib/apifyClient'
-import { analyzeCompetitors } from '../ai/gemini'
+import { analyzeCompetitors, generateClarificationQuestion } from '../ai/gemini'
 import { markKeyCooldown } from '../lib/keyRotator'
 import { ApifyError } from '../lib/apifyClient'
 import { GeminiError } from '../ai/gemini'
@@ -20,10 +32,13 @@ import { GeminiError } from '../ai/gemini'
 const TIMEOUT_MS = 150_000
 
 export function useCompetitorAnalysis() {
-  const { startAnalysis, setStep, setResults, setError, reset } = useAnalysisStore()
+  const store = useAnalysisStore()
+  const { startAnalysis, setStep, setResults, setError, reset, setClarification, answerClarification: storeAnswerClarification } = store
   const { geminiKey, pickKey } = useKeysStore()
 
-  const mutation = useMutation({
+  // ── Phase 1: Discovery + clarification question generation ────────────────
+
+  const discoverMutation = useMutation({
     mutationFn: async (params: AnalysisParams) => {
       const apifyKey = pickKey()
       if (!apifyKey) throw new Error('No Apify keys available. All keys are in cooldown.')
@@ -35,7 +50,7 @@ export function useCompetitorAnalysis() {
       try {
         startAnalysis(params)
 
-        // Step 1: Scraping reference accounts
+        // Step 1: Scraping reference accounts (steps 2–4 inside discoverCompetitors)
         setStep(1)
         const { inputProfiles, candidateProfiles } = await discoverCompetitors(
           params.handles,
@@ -44,27 +59,72 @@ export function useCompetitorAnalysis() {
           params.depth,
         )
 
-        // Step 2–4: handled inside discoverCompetitors (2–3 rounds + ranking data)
         setStep(4)
 
-        // Hallucination filter: build a set of known candidate usernames.
-        // Gemini occasionally invents handles not in the candidate list — remove them.
+        // Generate the clarification question from the first 20 candidates.
+        // Never throws — returns a safe fallback question on any error.
+        const referenceProfile = inputProfiles[0]
+        const clarificationQuestion = referenceProfile
+          ? await generateClarificationQuestion(
+              geminiKey,
+              referenceProfile,
+              candidateProfiles,
+              params.nicheContext,
+              controller.signal,
+            )
+          : { question: 'Which direction best fits your client?', options: ['Exact niche match', 'Broader category'] }
+
+        // Transition to clarifying state — UI shows <ClarificationCard>
+        setClarification({ inputProfiles, candidateProfiles, clarificationQuestion })
+
+        return { inputProfiles, candidateProfiles }
+
+      } catch (err) {
+        console.error('[analysis:discover] failed:', err)
+        const message = buildErrorMessage(err, controller, apifyKey, pickKey)
+        setError(message)
+        throw new Error(message)
+      } finally {
+        clearTimeout(timeout)
+      }
+    },
+    retry: 0,
+    gcTime: 30 * 60 * 1000,
+  })
+
+  // ── Phase 2: Ranking with clarification answer injected ───────────────────
+
+  const analyzeMutation = useMutation({
+    mutationFn: async ({ answer, nicheContext }: { answer: string; nicheContext: string }) => {
+      if (!geminiKey?.trim()) throw new Error('Gemini API key is not configured.')
+
+      // Read pendingDiscovery synchronously from store at call time — avoids stale closure.
+      const discovery = useAnalysisStore.getState().pendingDiscovery
+      if (!discovery) throw new Error('No discovery data available — please restart the analysis.')
+
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS)
+
+      try {
+        setStep(5)
+        const { inputProfiles, candidateProfiles } = discovery
         const knownHandles = new Set(candidateProfiles.map((p) => p.username.toLowerCase()))
 
-        // Step 5: AI rationale
-        setStep(5)
+        // Step 5: AI rationale — pass both nicheContext and clarification answer
         let output = await analyzeCompetitors(
           geminiKey,
           inputProfiles,
           candidateProfiles,
           controller.signal,
-          params.nicheContext,
+          nicheContext || undefined,
+          answer || undefined,
         )
 
-        // Zero-result guard: if nicheContext was set and Gemini returned nothing,
-        // retry without it so the user sees at least some results with a warning.
-        if (output.competitors.length === 0 && params.nicheContext.trim()) {
-          console.warn('[analysis] zero competitors with nicheContext — retrying without it')
+        // Zero-result guard: if filter signals were set and Gemini returned nothing,
+        // retry without them so the user sees at least some results with a warning.
+        const hasFilterSignal = (nicheContext || '').trim().length > 0 || (answer || '').trim().length > 0
+        if (output.competitors.length === 0 && hasFilterSignal) {
+          console.warn('[analysis] zero competitors with filter signals — retrying without them')
           output = await analyzeCompetitors(
             geminiKey,
             inputProfiles,
@@ -74,51 +134,87 @@ export function useCompetitorAnalysis() {
         }
 
         // Apply hallucination filter (post-retry, so both paths are filtered)
-        output = {
-          ...output,
-          competitors: output.competitors.filter((c) => knownHandles.has(c.username.toLowerCase())),
+        const filteredCompetitors = output.competitors.filter((c) => knownHandles.has(c.username.toLowerCase()))
+        output = { ...output, competitors: filteredCompetitors }
+
+        if (output.competitors.length === 0) {
+          throw new Error(
+            'No verified competitors found — Gemini returned accounts that weren\'t in the scraped set. Try again or use different reference handles.',
+          )
         }
 
         setResults(output, inputProfiles)
         return output
 
       } catch (err) {
-        console.error('[analysis] failed:', err)
-        let message = 'An unexpected error occurred.'
-
-        if (controller.signal.aborted) {
-          message = 'Analysis timed out after 150 seconds. Try with fewer handles or check your Apify key.'
-        } else if (err instanceof ApifyError) {
-          if (err.code === 'RATE_LIMITED') {
-            markKeyCooldown(apifyKey)
-            message = `Apify key rate limited and placed in 15-minute cooldown. ${
-              pickKey() ? 'Retrying with next key — please try again.' : 'All keys are in cooldown.'
-            }`
-          } else {
-            message = `Scraping error (${err.code}): ${err.message}`
-          }
-        } else if (err instanceof GeminiError) {
-          message = `AI error (${err.code}): ${err.message}`
-        } else if (err instanceof TypeError && (err.message === 'Failed to fetch' || err.message.includes('fetch'))) {
-          message = `Network blocked — could not reach Apify API. If you're using Brave browser, click the Brave shield icon in the address bar and turn off "Block trackers & ads" for localhost, then try again.`
-        } else if (err instanceof Error) {
-          message = err.message
-        }
-
+        console.error('[analysis:analyze] failed:', err)
+        const message = buildErrorMessage(err, controller, null, () => null)
         setError(message)
         throw new Error(message)
       } finally {
         clearTimeout(timeout)
       }
     },
-    retry: 0,       // no automatic retries — 120s ops must be user-initiated
+    retry: 0,
     gcTime: 30 * 60 * 1000,
   })
 
+  // ── Public API ─────────────────────────────────────────────────────────────
+
+  /** Kick off Phase 1 (discovery + question generation). */
+  const analyze = (params: AnalysisParams) => {
+    discoverMutation.mutate(params)
+  }
+
+  /**
+   * Called when user selects an option in <ClarificationCard>.
+   * Stores the answer and immediately fires Phase 2 (ranking).
+   * Pass an empty string to proceed without refinement ("Looks right, proceed as-is").
+   */
+  const answerClarification = (answer: string) => {
+    storeAnswerClarification(answer)
+    const currentParams = useAnalysisStore.getState().params
+    if (!currentParams) return
+    analyzeMutation.mutate({ answer, nicheContext: currentParams.nicheContext })
+  }
+
   return {
-    analyze: mutation.mutate,
-    isPending: mutation.isPending,
-    isError: mutation.isError,
+    analyze,
+    answerClarification,
+    isPending: discoverMutation.isPending || analyzeMutation.isPending,
+    isError: discoverMutation.isError || analyzeMutation.isError,
     reset,
   }
+}
+
+// ── Error message builder ──────────────────────────────────────────────────
+
+function buildErrorMessage(
+  err: unknown,
+  controller: AbortController,
+  apifyKey: string | null,
+  pickKey: () => string | null,
+): string {
+  if (controller.signal.aborted) {
+    return 'Analysis timed out after 150 seconds. Try with fewer handles or check your Apify key.'
+  }
+  if (err instanceof ApifyError) {
+    if (err.code === 'RATE_LIMITED') {
+      if (apifyKey) markKeyCooldown(apifyKey)
+      return `Apify key rate limited and placed in 15-minute cooldown. ${
+        pickKey() ? 'Retrying with next key — please try again.' : 'All keys are in cooldown.'
+      }`
+    }
+    return `Scraping error (${err.code}): ${err.message}`
+  }
+  if (err instanceof GeminiError) {
+    return `AI error (${err.code}): ${err.message}`
+  }
+  if (err instanceof TypeError && (err.message === 'Failed to fetch' || err.message.includes('fetch'))) {
+    return `Network blocked — could not reach Apify API. If you're using Brave browser, click the Brave shield icon in the address bar and turn off "Block trackers & ads" for localhost, then try again.`
+  }
+  if (err instanceof Error) {
+    return err.message
+  }
+  return 'An unexpected error occurred.'
 }

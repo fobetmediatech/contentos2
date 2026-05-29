@@ -136,6 +136,15 @@ React UI is written only after both binary gates have passed. Build pages in thi
 
 ---
 
+## 🟡 P2 Deferred — Discovery Polish
+
+Captured during `/ship` review (2026-05-29). Not blocking current PR.
+
+- [ ] **D1.6 — Discovery progress steps 3+4 flash instantly** · Steps 3 ("Profile scrape") and 4 ("Location filter") fire back-to-back after `runLocationDiscovery()` returns, so users see them flash without a pause. Fix: advance step markers inside the pipeline callbacks (progress events) rather than after the promise resolves. Effort: S (~20 min).
+- [ ] **D1.7 — `useCompetitorAnalysis` double-instance in ProgressPage** · `ProgressPage` creates a second `useMutation` instance via `useCompetitorAnalysis()` (for `answerClarification` + `isPending`) separate from the instance created in `InputPage`. TQ mutations are instance-scoped — the two instances don't share state, so `isPending` in ProgressPage reflects the ProgressPage mutation instance (always false) rather than the InputPage one. Fix: lift the mutation to a shared React context or derive `isPending` from `analysisStore.status === 'running'`. Effort: M (~45 min).
+
+---
+
 ## 🔮 Backlog — Post-Niche-Signal Approach A
 
 These items are approved for a future iteration, after the niche-signal enrichment (Approach A) ships and baseline quality is confirmed.
