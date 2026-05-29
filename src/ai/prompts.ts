@@ -349,3 +349,62 @@ Rules:
 
 Return JSON: { "question": "...", "options": ["...", "...", "..."] }`
 }
+
+// ──────────────────────────────────────────────────────────
+// Conversational intent parsing
+// ──────────────────────────────────────────────────────────
+
+/**
+ * Build the intent-parsing prompt for the conversational agent.
+ *
+ * Gemini parses the user's natural-language request and extracts:
+ *   - niche: what kind of accounts they want to find (required)
+ *   - location: optional city for location-scoped discovery
+ *   - knownHandles: any @handles the user mentioned (seeds for analysis)
+ *   - depth: 'standard' or 'deep' (inferred from "thorough"/"deep"/"quick" keywords)
+ *   - clientName: client name mentioned for export labelling
+ *
+ * Returns needsClarification=true if the message is ambiguous or off-topic.
+ * Max ONE clarification turn per conversation.
+ *
+ * Output: strict JSON with no markdown.
+ */
+export function buildIntentPrompt(userMessage: string): string {
+  const safeMessage = userMessage.replace(/[\n\r]/g, ' ').trim().slice(0, 500)
+  return `You are an intent parser for a social media competitor analysis tool.
+
+The user types a natural-language request. Extract the intent as JSON.
+
+USER MESSAGE: "${safeMessage}"
+
+EXTRACT:
+- niche (required): what type of accounts they want to find, in 2-5 words (e.g. "food creators", "fitness influencers", "travel bloggers", "marketing educators")
+- location (optional): city or region they mentioned (e.g. "Mumbai", "New York", "India")
+- knownHandles (optional): any @handles or handle-like strings they mentioned (max 5, strip @ prefix)
+- depth: "deep" if they say "thorough", "complete", "deep scan", "detailed"; otherwise "standard"
+- clientName (optional): client or brand name they mentioned for the report (e.g. "for Acme Corp")
+- needsClarification: true ONLY if the message is completely ambiguous, off-topic, or you cannot determine a niche at all
+
+RULES:
+- If you can extract a niche with reasonable confidence, set needsClarification=false
+- Only set needsClarification=true as a last resort — prefer a best-guess niche
+- If needsClarification=true, provide a short clarifying question in the "question" field
+- niche should describe WHO to find, not WHAT TO DO (not "analyze competitors", not "find accounts")
+- Strip @ from any handles mentioned
+
+OUTPUT FORMAT (valid JSON only, no markdown):
+{
+  "needsClarification": false,
+  "niche": "food creators",
+  "location": "Mumbai",
+  "knownHandles": [],
+  "depth": "standard",
+  "clientName": null
+}
+
+OR if clarification needed:
+{
+  "needsClarification": true,
+  "question": "What type of accounts are you looking for? (e.g. food bloggers, fitness coaches, travel photographers)"
+}`
+}
