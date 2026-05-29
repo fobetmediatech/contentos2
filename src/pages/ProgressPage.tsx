@@ -18,9 +18,11 @@ export function ProgressPage() {
     }
   }, [status, navigate])
 
-  // Redirect to home if we land here with no active analysis
+  // T19: Redirect to chat if we land here outside the analysis pipeline.
+  // Must allow 'running', 'clarifying', 'done', and 'error' — all other statuses
+  // mean the pipeline hasn't started yet (idle, chatting, discovering, confirming).
   useEffect(() => {
-    if (status === 'idle') {
+    if (!['running', 'clarifying', 'done', 'error'].includes(status)) {
       navigate('/')
     }
   }, [status, navigate])

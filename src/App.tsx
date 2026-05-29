@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AppLayout } from './components/AppLayout'
+import { ChatPage } from './pages/ChatPage'
 import { InputPage } from './pages/InputPage'
 import { ProgressPage } from './pages/ProgressPage'
 import { ResultsPage } from './pages/ResultsPage'
@@ -23,9 +24,15 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
+          {/* Chat route — noPadding for full-bleed h-[100dvh] layout */}
+          <Route element={<AppLayout noPadding />}>
+            <Route index element={<ChatPage />} />
+          </Route>
+
+          {/* All other routes — standard layout with padding */}
           <Route element={<AppLayout />}>
             {/* Competitor analysis flow */}
-            <Route index element={<InputPage />} />
+            <Route path="analyze" element={<InputPage />} />
             <Route path="progress" element={<ProgressPage />} />
             <Route path="results" element={<ResultsPage />} />
 
