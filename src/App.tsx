@@ -2,7 +2,6 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AppLayout } from './components/AppLayout'
 import { ChatPage } from './pages/ChatPage'
-import { InputPage } from './pages/InputPage'
 import { ProgressPage } from './pages/ProgressPage'
 import { ResultsPage } from './pages/ResultsPage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -31,8 +30,8 @@ export default function App() {
 
           {/* All other routes — standard layout with padding */}
           <Route element={<AppLayout />}>
-            {/* Competitor analysis flow */}
-            <Route path="analyze" element={<InputPage />} />
+            {/* Competitor analysis flow — /analyze redirects to chat */}
+            <Route path="analyze" element={<Navigate to="/" replace />} />
             <Route path="progress" element={<ProgressPage />} />
             <Route path="results" element={<ResultsPage />} />
 

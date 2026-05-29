@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation } from 'react-router-dom'
-import { Settings, Search, MapPin, MessageSquare } from 'lucide-react'
+import { Settings, MapPin, MessageSquare } from 'lucide-react'
 
 interface AppLayoutProps {
   /**
@@ -13,8 +13,7 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
   const location = useLocation()
   const isSettings = location.pathname === '/settings'
   const isDiscover = location.pathname.startsWith('/discover')
-  const isChat = location.pathname === '/'
-  const isAnalyze = !isSettings && !isDiscover && !isChat
+  const isChat = location.pathname === '/' || location.pathname === '/progress' || location.pathname === '/results'
 
   return (
     <div className={`${noPadding ? 'h-[100dvh] flex flex-col overflow-hidden' : 'min-h-screen'} bg-slate-50`}>
@@ -41,18 +40,6 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
             >
               <MessageSquare size={14} />
               Chat
-            </Link>
-
-            <Link
-              to="/analyze"
-              className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md transition-colors ${
-                isAnalyze
-                  ? 'bg-slate-100 text-slate-900 font-medium'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-              }`}
-            >
-              <Search size={14} />
-              Analyze
             </Link>
 
             <Link
