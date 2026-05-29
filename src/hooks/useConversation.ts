@@ -119,11 +119,19 @@ export function useConversation() {
       intent = await parseIntent(geminiKey, safeText, parseController.signal)
       console.info('[chat] intent parsed:', intent)
     } catch (err) {
+      let errorContent = "Couldn't understand that — try rephrasing."
+      if (err instanceof GeminiError) {
+        if (err.code === 'AUTH_ERROR') {
+          errorContent = 'Gemini API key is invalid or missing. Go to Settings to update it.'
+        } else if (err.code === 'RATE_LIMITED') {
+          errorContent = 'Gemini rate limit hit — wait a few seconds and try again.'
+        } else if (err.message.toLowerCase().includes('network')) {
+          errorContent = 'Network error — check your connection and try again.'
+        }
+      }
       store.addMessage({
         role: 'assistant',
-        content: err instanceof GeminiError && err.code === 'AUTH_ERROR'
-          ? 'Add your Gemini key in Settings to get started.'
-          : "Couldn't understand that — try rephrasing.",
+        content: errorContent,
         timestamp: Date.now(),
         type: 'error',
       })

@@ -74,20 +74,31 @@ async function callGeminiForIntent(
     signal,
   })
 
+  // Always parse the body so we can distinguish auth errors from other failures.
+  // Gemini returns 400 INVALID_ARGUMENT for bad/missing API keys (not 401).
+  const json = await res.json().catch(() => null)
+
   if (!res.ok) {
-    await res.text().catch(() => '')
+    const status = json?.error?.status ?? ''
+    const msg: string = json?.error?.message ?? ''
+    const isAuthError =
+      res.status === 401 ||
+      status === 'UNAUTHENTICATED' ||
+      status === 'PERMISSION_DENIED' ||
+      msg.toLowerCase().includes('api key')
+    if (isAuthError) {
+      throw new GeminiError('AUTH_ERROR', 'Invalid Gemini API key. Check Settings.', false)
+    }
     throw new GeminiError(
       res.status === 429 ? 'RATE_LIMITED' : 'UNKNOWN',
-      `Intent parse failed: ${res.status}`,
+      `Intent parse failed: ${res.status} — ${msg || status}`,
       res.status >= 500,
     )
   }
 
-  const json = await res.json()
-
-  // Handle 401 — missing or invalid API key
-  if (json.error?.code === 401 || json.error?.status === 'UNAUTHENTICATED') {
-    throw new GeminiError('AUTH_ERROR', 'Invalid Gemini API key. Add your key in Settings.', false)
+  // Also handle inline error objects returned with 200 (edge case)
+  if (json?.error?.code === 401 || json?.error?.status === 'UNAUTHENTICATED') {
+    throw new GeminiError('AUTH_ERROR', 'Invalid Gemini API key. Check Settings.', false)
   }
 
   const candidate = json.candidates?.[0]
@@ -129,7 +140,8 @@ export async function parseIntent(
     raw = await callGeminiForIntent(geminiKey, userMessage, signal)
   } catch (err) {
     if (err instanceof GeminiError) throw err
-    throw new GeminiError(`Intent parse network error: ${String(err)}`, 'UNKNOWN', 0)
+    // Network-level error (DNS fail, CORS block, offline, etc.)
+    throw new GeminiError('UNKNOWN', `Network error: ${String(err)}`, false)
   }
 
   // First validation attempt
