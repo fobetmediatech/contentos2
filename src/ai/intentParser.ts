@@ -73,9 +73,6 @@ async function fetchIntent(
         maxOutputTokens: 512,
         responseMimeType: 'application/json',
       },
-      // Disable thinking for this simple classification task — it adds latency
-      // and can cause empty/truncated JSON responses with Gemini 2.5 Flash.
-      thinkingConfig: { thinkingBudget: 0 },
     }),
     signal,
   })
@@ -142,10 +139,12 @@ async function callGeminiForIntent(
       return await fetchIntent(geminiKey, prompt, signal)
     } catch (err) {
       lastErr = err
-      // Don't retry auth, rate-limit, or parse errors — they won't heal with a retry
-      if (err instanceof GeminiError && !err.retryable && err.code !== 'UNKNOWN') throw err
-      // Don't retry if caller aborted
-      if (signal?.aborted) throw err
+      // Don't retry deterministic errors — they won't heal:
+      //   AUTH_ERROR → bad key, RATE_LIMITED → needs backoff, non-retryable non-UNKNOWN
+      const isGemini = err instanceof GeminiError
+      const isAuthOrRate = isGemini && (err.code === 'AUTH_ERROR' || err.code === 'RATE_LIMITED')
+      const isNonRetryable = isGemini && !err.retryable && err.code !== 'UNKNOWN'
+      if (isAuthOrRate || isNonRetryable || signal?.aborted) throw err
       if (attempt < INTENT_RETRIES) {
         console.warn(`[intentParser] attempt ${attempt + 1} failed, retrying in ${INTENT_RETRY_DELAY_MS}ms:`, err)
         await new Promise((r) => setTimeout(r, INTENT_RETRY_DELAY_MS))
