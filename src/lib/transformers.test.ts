@@ -3,6 +3,7 @@
  *   1. null/undefined username → normalised to empty string
  *   2. relatedProfile with empty or null username is filtered out
  *   3. non-string hashtag values are skipped (no crash)
+ *   4. discoverySource field is NOT set by normalizeProfile (caller responsibility)
  */
 
 import { describe, it, expect } from 'vitest'
@@ -80,6 +81,35 @@ describe('normalizeProfile — relatedProfiles null username guard (diff patch)'
     const profile = normalizeProfile(raw)
     expect(profile.relatedHandles).not.toContain('privateuser')
     expect(profile.relatedHandles).toContain('publicuser')
+  })
+})
+
+describe('normalizeProfile — discoverySource field (source-tagging)', () => {
+  it('does not set discoverySource — it is the caller\'s responsibility', () => {
+    const raw = makeRaw({ username: 'someuser' })
+    const profile = normalizeProfile(raw)
+    // normalizeProfile must NOT set discoverySource — apifyClient.ts sets it after scraping
+    expect(profile.discoverySource).toBeUndefined()
+  })
+
+  it('preserves discoverySource when spread-tagged by caller', () => {
+    const raw = makeRaw({ username: 'hashtaguser' })
+    const profile = normalizeProfile(raw)
+    // Simulate apifyClient.ts tagging: { ...p, discoverySource: 'hashtag' }
+    const tagged = { ...profile, discoverySource: 'hashtag' as const }
+    expect(tagged.discoverySource).toBe('hashtag')
+    // Other fields must not be mutated by the spread
+    expect(tagged.username).toBe('hashtaguser')
+  })
+
+  it('accepts all valid DiscoverySource values', () => {
+    const raw = makeRaw()
+    const profile = normalizeProfile(raw)
+    const sources = ['input', 'relatedProfiles', 'hashtag', 'round3'] as const
+    for (const source of sources) {
+      const tagged = { ...profile, discoverySource: source }
+      expect(tagged.discoverySource).toBe(source)
+    }
   })
 })
 
