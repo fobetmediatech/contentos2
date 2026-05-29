@@ -11,7 +11,7 @@
  *   5. prompts.ts — buildCompetitorPrompt bio newline stripping, nicheDeriveBlock presence
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { normalizeProfiles } from './transformers'
 import type { ApifyProfileRaw } from './transformers'
 import { filterByLocation } from './locationFilter'

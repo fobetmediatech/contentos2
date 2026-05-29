@@ -23,13 +23,7 @@ export function InputPage() {
 
   const handleSubmit = () => {
     if (!canAnalyze) return
-    analyze(
-      { handles, depth, clientName, nicheContext: nicheContext.trim() },
-      {
-        onSuccess: () => navigate('/progress'),
-        onError: () => navigate('/progress'),
-      },
-    )
+    analyze({ handles, depth, clientName, nicheContext: nicheContext.trim() })
     navigate('/progress')
   }
 

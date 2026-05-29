@@ -44,6 +44,16 @@ const IntentSchema = z.object({
     .transform((arr) => (arr ?? []).map((h) => h.replace(/^@/, '').toLowerCase().trim()).filter(Boolean)),
   depth: z.enum(['standard', 'deep']).nullish().default('standard'),
   clientName: z.string().max(100).nullish().transform((s) => s?.trim() || undefined),
+  // Routes the intent to the correct pipeline.
+  // 'discovery' = user wants creators geographically located in a city.
+  // 'competitor' = user wants to find who's succeeding in a niche (default).
+  // .transform() coerces null → 'competitor' because .default() only fires for
+  // undefined, not null — and Gemini JSON mode returns null for absent fields.
+  // .catch('competitor') gracefully handles null, undefined, and unknown enum
+  // values (e.g. 'location') without triggering the validation-retry path.
+  pipelineType: z
+    .enum(['competitor', 'discovery'])
+    .catch('competitor'),
 })
 
 const ParsedIntentSchema = z.union([ClarificationSchema, IntentSchema])
@@ -147,7 +157,13 @@ async function callGeminiForIntent(
       if (isAuthOrRate || isNonRetryable || signal?.aborted) throw err
       if (attempt < INTENT_RETRIES) {
         console.warn(`[intentParser] attempt ${attempt + 1} failed, retrying in ${INTENT_RETRY_DELAY_MS}ms:`, err)
-        await new Promise((r) => setTimeout(r, INTENT_RETRY_DELAY_MS))
+        // Abort-aware delay: if the component unmounts during the wait, we
+        // cancel the timeout and stop the retry loop rather than firing a
+        // ghost network call into a dead AbortSignal.
+        await new Promise<void>((resolve, reject) => {
+          const t = setTimeout(resolve, INTENT_RETRY_DELAY_MS)
+          signal?.addEventListener('abort', () => { clearTimeout(t); reject(new Error('Aborted')) }, { once: true })
+        })
       }
     }
   }

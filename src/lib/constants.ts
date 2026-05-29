@@ -8,10 +8,9 @@
 /** Label for the "no directional preference" option in seed confirmation. */
 export const PROCEED_LABEL = 'Looks right, proceed as-is'
 
-/** Direction options shown in the confirming state. */
-export const DIRECTION_OPTIONS = [
-  'Focus on micro-influencers (< 100K followers)',
-  'Focus on macro creators (> 100K followers)',
-  'Mix of creator sizes',
-  'Include businesses and brands',
-] as const
+/**
+ * Option label shown in the discovery-pipeline confirming state.
+ * When selected, redirects from location discovery to competitor analysis.
+ * Matched in useConversation.confirmSeeds() — keep in sync with the options array.
+ */
+export const DISCOVERY_REDIRECT_TO_COMPETITOR = 'Actually, show me who dominates this niche globally'

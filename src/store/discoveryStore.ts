@@ -92,7 +92,7 @@ export const useDiscoveryStore = create<DiscoveryState>()((set) => ({
       sourceHashtags,
     }),
 
-  setError: (message) => set({ status: 'error', error: message }),
+  setError: (message) => set({ status: 'error', error: message, currentStep: 1 }),
 
   reset: () => set(initialState),
 }))

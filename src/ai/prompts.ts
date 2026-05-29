@@ -59,7 +59,7 @@ export function buildCompetitorPrompt(
   const inputSummary = inputProfiles
     .map(
       (p) =>
-        `@${p.username} (${p.followersCount.toLocaleString()} followers, ER: ${p.engagementRate?.toFixed(2) ?? 'N/A'}%, bio: "${p.biography.slice(0, 100)}")`,
+        `@${p.username} (${p.followersCount.toLocaleString()} followers, ER: ${p.engagementRate?.toFixed(2) ?? 'N/A'}%, bio: "${p.biography.replace(/"/g, '\\"').slice(0, 100)}")`,
     )
     .join('\n')
 
@@ -84,7 +84,7 @@ export function buildCompetitorPrompt(
           : p.discoverySource === 'relatedProfiles'
             ? ' [AUDIENCE-ADJACENT: relatedProfiles]'
             : '' // undefined = input profile (should not appear here, but safe fallback)
-      return `@${p.username} | followers: ${p.followersCount.toLocaleString()} | ER: ${er}% | posts: ${p.postsCount} | verified: ${p.verified} | bio: "${p.biography.replace(/[\n\r]/g, ' ').slice(0, 120)}"${establishedLabel}${sourceLabel}`
+      return `@${p.username} | followers: ${p.followersCount.toLocaleString()} | ER: ${er}% | posts: ${p.postsCount} | verified: ${p.verified} | bio: "${p.biography.replace(/[\n\r]/g, ' ').replace(/"/g, '\\"').slice(0, 120)}"${establishedLabel}${sourceLabel}`
     })
     .join('\n')
 
@@ -109,7 +109,7 @@ export function buildCompetitorPrompt(
   // bio-sourced clarification options that contain embedded newlines.
   const trimmedClarificationAnswer = (clarificationAnswer?.replace(/[\n\r]/g, ' ') ?? '').trim()
   const clarificationSection = trimmedClarificationAnswer
-    ? `\nUSER REFINEMENT (the strategist selected this direction after seeing the candidate pool):\n"${trimmedClarificationAnswer}"\nPrioritize candidates that match this direction. Deprioritize candidates that clearly belong to other sub-niches.\n`
+    ? `\nUSER REFINEMENT (the strategist selected this direction after seeing the candidate pool):\n"${trimmedClarificationAnswer.replace(/"/g, '\\"')}"\nPrioritize candidates that match this direction. Deprioritize candidates that clearly belong to other sub-niches.\n`
     : ''
 
   // Count instruction: use "up to" whenever any filtering signal is available
@@ -244,7 +244,7 @@ export function buildDiscoveryPrompt(
       const establishedLabel = p.followersCount > 500_000
         ? ' [ESTABLISHED: 500K+ followers — assign to Top category]'
         : ''
-      return `@${p.username} | type: ${accountType} | followers: ${p.followersCount.toLocaleString()} | ER: ${er}% | posts: ${p.postsCount} | verified: ${p.verified} | bio: "${p.biography.replace(/[\n\r]/g, ' ').slice(0, 150)}"${establishedLabel}`
+      return `@${p.username} | type: ${accountType} | followers: ${p.followersCount.toLocaleString()} | ER: ${er}% | posts: ${p.postsCount} | verified: ${p.verified} | bio: "${p.biography.replace(/[\n\r]/g, ' ').replace(/"/g, '\\"').slice(0, 150)}"${establishedLabel}`
     })
     .join('\n')
 
@@ -323,7 +323,7 @@ export function buildClarificationPrompt(
 ): string {
   const top20 = candidates.slice(0, 20)
   const candidateList = top20
-    .map((p) => `@${p.username}: "${p.biography.replace(/[\n\r]/g, ' ').slice(0, 80)}" (${p.followersCount.toLocaleString()} followers)`)
+    .map((p) => `@${p.username}: "${p.biography.replace(/[\n\r]/g, ' ').replace(/"/g, '\\"').slice(0, 80)}" (${p.followersCount.toLocaleString()} followers)`)
     .join('\n')
 
   const nicheContextLine = nicheContext.trim()
@@ -333,7 +333,7 @@ export function buildClarificationPrompt(
   return `You are analyzing Instagram account candidates to help a content strategist narrow their competitor research.
 
 Reference account: @${referenceProfile.username} (${referenceProfile.followersCount.toLocaleString()} followers)
-Bio: "${referenceProfile.biography.replace(/[\n\r]/g, ' ').slice(0, 120)}"${nicheContextLine}
+Bio: "${referenceProfile.biography.replace(/[\n\r]/g, ' ').replace(/"/g, '\\"').slice(0, 120)}"${nicheContextLine}
 
 I found ${candidates.length} candidate accounts. Here are the first 20:
 ${candidateList}
@@ -375,7 +375,7 @@ export function buildIntentPrompt(userMessage: string): string {
 
 The user types a natural-language request. Extract the intent as JSON.
 
-USER MESSAGE: "${safeMessage}"
+USER MESSAGE: "${safeMessage.replace(/"/g, '\\"')}"
 
 EXTRACT:
 - niche (required): what type of accounts they want to find, in 2-5 words (e.g. "food creators", "fitness influencers", "travel bloggers", "marketing educators")
@@ -392,6 +392,19 @@ RULES:
 - niche should describe WHO to find, not WHAT TO DO (not "analyze competitors", not "find accounts")
 - Strip @ from any handles mentioned
 
+PIPELINE ROUTING:
+Determine pipelineType based on what the user is asking for:
+- "discovery": user wants creators geographically located in a specific city/region
+  Examples: "find food bloggers in Mumbai", "who's posting about yoga in Delhi",
+  "creators based in Singapore", "local influencers in Lagos"
+- "competitor": user wants to find who's succeeding in a niche, regardless of location
+  Examples: "find competitors to @handle", "who's winning in fitness",
+  "top travel influencers", "similar accounts to X"
+- Default to "competitor" when unclear or when no location is mentioned.
+- When a location IS mentioned but phrasing is competitive ("top X in Y", "best X in Y"),
+  use "competitor" — location becomes a context filter, not a discovery dimension.
+- Only use "discovery" when the user's goal is explicitly geographic.
+
 OUTPUT FORMAT (valid JSON only, no markdown):
 {
   "needsClarification": false,
@@ -399,7 +412,8 @@ OUTPUT FORMAT (valid JSON only, no markdown):
   "location": "Mumbai",
   "knownHandles": [],
   "depth": "standard",
-  "clientName": null
+  "clientName": null,
+  "pipelineType": "competitor"
 }
 
 OR if clarification needed:

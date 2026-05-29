@@ -36,6 +36,7 @@ export function ChatPage() {
   const analysisStore = useAnalysisStore()
   const { status, conversationMessages, startChat, reset } = analysisStore
   const discoveryStatus = useDiscoveryStore((s) => s.status)
+  const discoveryError = useDiscoveryStore((s) => s.error)
   const resetDiscovery = useDiscoveryStore((s) => s.reset)
   const { isReady } = useKeysStore()
   const { sendMessage, confirmSeeds } = useConversation()
@@ -63,7 +64,7 @@ export function ChatPage() {
   // a locked confirming UI. 'error' is intentionally excluded here — the error-recovery
   // effect below handles that case with proper error surfacing.
   useEffect(() => {
-    if (discoveryStatus === 'done' || discoveryStatus === 'running' || discoveryStatus === 'confirming') {
+    if (discoveryStatus === 'done' || discoveryStatus === 'running') {
       resetDiscovery()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -86,7 +87,7 @@ export function ChatPage() {
   // Recover from a failed discovery — surface as chat error message, then reset
   useEffect(() => {
     if (discoveryStatus === 'error') {
-      const errMsg = useDiscoveryStore.getState().error ?? 'Discovery failed — please try again.'
+      const errMsg = discoveryError ?? 'Discovery failed — please try again.'
       analysisStore.addMessage({ role: 'assistant', content: errMsg, timestamp: Date.now(), type: 'error' })
       analysisStore.setStatus('chatting')
       resetDiscovery()

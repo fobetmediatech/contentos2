@@ -5,13 +5,17 @@ import type { NormalizedProfile } from './transformers'
 function makeProfile(overrides: Partial<NormalizedProfile>): NormalizedProfile {
   return {
     username: 'test',
+    fullName: 'Test User',
     biography: '',
     followersCount: 10000,
     followsCount: 500,
     postsCount: 100,
-    engagementRate: 3,
+    profilePicUrl: '',
     verified: false,
     isBusinessAccount: false,
+    avgLikes: 0,
+    avgComments: 0,
+    engagementRate: 3,
     topHashtags: [],
     relatedHandles: [],
     ...overrides,

@@ -80,6 +80,10 @@ export function useConversation() {
   // even if the async function is mid-flight.
   const discoveryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // D6: single-flight guard — prevents Enter + button click firing sendMessage
+  // twice in the same render frame before status transitions to 'discovering'.
+  const isSendingRef = useRef(false)
+
   // T20: cleanup on unmount
   useEffect(() => {
     return () => {
@@ -104,6 +108,8 @@ export function useConversation() {
     apifyKey: string,
   ) => {
     const discoveryController = new AbortController()
+    // Overwrites the parseController stored by sendMessage() — safe because
+    // runCompetitorDiscovery() is always called after parseIntent() has resolved.
     discoveryAbortRef.current = discoveryController
     // Store in ref so the useEffect cleanup (and re-runs) can cancel it on unmount.
     discoveryTimeoutRef.current = setTimeout(() => discoveryController.abort(), DISCOVERY_TIMEOUT_MS)
@@ -162,7 +168,8 @@ export function useConversation() {
     } catch (err) {
       let message = 'Search timed out — try again.'
       if (err instanceof ApifyError) {
-        message = `Scraping error: ${err.message}. Try again or check your Apify key.`
+        // Don't forward err.message — it may contain internal URLs or key fragments.
+        message = 'Scraping error — try again or check your Apify key.'
       } else if (err instanceof TypeError && String(err.message).includes('fetch')) {
         message = 'Network blocked — check your browser or disable shields.'
       } else if (discoveryController.signal.aborted) {
@@ -185,102 +192,87 @@ export function useConversation() {
   const sendMessage = async (text: string) => {
     if (store.status !== 'chatting') return
     if (!text.trim()) return
+    if (isSendingRef.current) return
+    isSendingRef.current = true
 
-    const safeText = text.replace(/[\n\r]/g, ' ').trim().slice(0, 500)
-
-    // Append user message to conversation
-    store.addMessage({ role: 'user', content: safeText, timestamp: Date.now(), type: 'text' })
-
-    const apifyKey = pickKey()
-    if (!apifyKey) {
-      store.addMessage({
-        role: 'assistant',
-        content: 'No Apify keys available. Add one in Settings.',
-        timestamp: Date.now(),
-        type: 'error',
-      })
-      return
-    }
-
-    if (!geminiKey?.trim()) {
-      store.addMessage({
-        role: 'assistant',
-        content: 'Gemini API key missing. Add it in Settings.',
-        timestamp: Date.now(),
-        type: 'error',
-      })
-      return
-    }
-
-    // Step 1: parse intent
-    store.setStatus('discovering')  // show typing indicator immediately
-
-    const parseController = new AbortController()
-    discoveryAbortRef.current = parseController
-
-    let intent: ParsedIntent
     try {
-      intent = await parseIntent(geminiKey, safeText, parseController.signal)
-      console.info('[chat] intent parsed:', intent)
-    } catch (err) {
-      let errorContent = "Couldn't understand that — try rephrasing."
-      if (err instanceof GeminiError) {
-        if (err.code === 'AUTH_ERROR') {
-          errorContent = 'Gemini API key is invalid or missing. Go to Settings to update it.'
-        } else if (err.code === 'RATE_LIMITED') {
-          errorContent = 'Gemini rate limit hit — wait a few seconds and try again.'
-        } else if (err.message.toLowerCase().includes('network')) {
-          errorContent = 'Network error — check your connection and try again.'
+      const safeText = text.replace(/[\n\r]/g, ' ').trim().slice(0, 500)
+
+      // Append user message to conversation
+      store.addMessage({ role: 'user', content: safeText, timestamp: Date.now(), type: 'text' })
+
+      const apifyKey = pickKey()
+      if (!apifyKey) {
+        store.addMessage({
+          role: 'assistant',
+          content: 'No Apify keys available. Add one in Settings.',
+          timestamp: Date.now(),
+          type: 'error',
+        })
+        return
+      }
+
+      if (!geminiKey?.trim()) {
+        store.addMessage({
+          role: 'assistant',
+          content: 'Gemini API key missing. Add it in Settings.',
+          timestamp: Date.now(),
+          type: 'error',
+        })
+        return
+      }
+
+      // Step 1: parse intent
+      store.setStatus('discovering')  // show typing indicator immediately
+
+      // Sequential guarantee: parseIntent() is fully awaited before
+      // runCompetitorDiscovery() runs and overwrites this ref with its own
+      // discoveryController — the parse phase is always complete by then.
+      const parseController = new AbortController()
+      discoveryAbortRef.current = parseController
+
+      let intent: ParsedIntent
+      try {
+        intent = await parseIntent(geminiKey, safeText, parseController.signal)
+        console.info('[chat] intent parsed:', intent)
+      } catch (err) {
+        let errorContent = "Couldn't understand that — try rephrasing."
+        if (err instanceof GeminiError) {
+          if (err.code === 'AUTH_ERROR') {
+            errorContent = 'Gemini API key is invalid or missing. Go to Settings to update it.'
+          } else if (err.code === 'RATE_LIMITED') {
+            errorContent = 'Gemini rate limit hit — wait a few seconds and try again.'
+          } else if (err.message.toLowerCase().includes('network')) {
+            errorContent = 'Network error — check your connection and try again.'
+          }
         }
-      }
-      store.addMessage({
-        role: 'assistant',
-        content: errorContent,
-        timestamp: Date.now(),
-        type: 'error',
-      })
-      store.setStatus('chatting')
-      return
-    }
-
-    // Handle needsClarification (T21: max 1 turn)
-    if ('needsClarification' in intent && intent.needsClarification === true) {
-      if (clarificationTurns < 1) {
-        setClarificationTurns((c) => c + 1)
         store.addMessage({
           role: 'assistant',
-          content: intent.question,
+          content: errorContent,
           timestamp: Date.now(),
-          type: 'text',
+          type: 'error',
         })
         store.setStatus('chatting')
         return
       }
-      // Second ambiguous response — force a handle-based fallback
-      store.addMessage({
-        role: 'assistant',
-        content: "Having trouble understanding. Name a handle you want to analyze, and I'll find similar accounts.",
-        timestamp: Date.now(),
-        type: 'text',
-      })
-      store.setStatus('chatting')
-      return
-    }
 
-    // Store parsed intent for confirmSeeds()
-    store.setParsedIntent(intent)
-
-    // Step 2: route to the correct pipeline
-    const niche = 'niche' in intent ? intent.niche : ''
-    const location = 'location' in intent ? (intent.location ?? '') : ''
-    const pipelineType = 'pipelineType' in intent ? (intent.pipelineType ?? 'competitor') : 'competitor'
-
-    if (pipelineType === 'discovery') {
-      // Discovery pipeline: requires a city — ask if missing
-      if (!location) {
+      // Handle needsClarification (T21: max 1 turn)
+      if ('needsClarification' in intent && intent.needsClarification === true) {
+        if (clarificationTurns < 1) {
+          setClarificationTurns((c) => c + 1)
+          store.addMessage({
+            role: 'assistant',
+            content: intent.question,
+            timestamp: Date.now(),
+            type: 'text',
+          })
+          store.setStatus('chatting')
+          return
+        }
+        // Second ambiguous response — force a handle-based fallback
         store.addMessage({
           role: 'assistant',
-          content: `I can find **${niche}** creators in a specific city. Which city should I search in?`,
+          content: "Having trouble understanding. Name a handle you want to analyze, and I'll find similar accounts.",
           timestamp: Date.now(),
           type: 'text',
         })
@@ -288,23 +280,47 @@ export function useConversation() {
         return
       }
 
-      // Confirm before firing the 150s discovery pipeline
-      store.setStatus('confirming')
-      store.addMessage({
-        role: 'assistant',
-        content: `I'll find **${niche}** creators physically based in **${location}**. Ready to search?`,
-        timestamp: Date.now(),
-        type: 'options',
-        options: [
-          PROCEED_LABEL,
-          DISCOVERY_REDIRECT_TO_COMPETITOR,
-        ],
-      })
-      return
-    }
+      // Store parsed intent for confirmSeeds()
+      store.setParsedIntent(intent)
 
-    // Competitor pipeline (default) — scrape seeds then confirm direction
-    await runCompetitorDiscovery(niche, location, geminiKey, apifyKey)
+      // Step 2: route to the correct pipeline
+      const niche = 'niche' in intent ? intent.niche : ''
+      const location = 'location' in intent ? (intent.location ?? '') : ''
+      const pipelineType = 'pipelineType' in intent ? (intent.pipelineType ?? 'competitor') : 'competitor'
+
+      if (pipelineType === 'discovery') {
+        // Discovery pipeline: requires a city — ask if missing
+        if (!location) {
+          store.addMessage({
+            role: 'assistant',
+            content: `I can find **${niche}** creators in a specific city. Which city should I search in?`,
+            timestamp: Date.now(),
+            type: 'text',
+          })
+          store.setStatus('chatting')
+          return
+        }
+
+        // Confirm before firing the 150s discovery pipeline
+        store.setStatus('confirming')
+        store.addMessage({
+          role: 'assistant',
+          content: `I'll find **${niche}** creators physically based in **${location}**. Ready to search?`,
+          timestamp: Date.now(),
+          type: 'options',
+          options: [
+            PROCEED_LABEL,
+            DISCOVERY_REDIRECT_TO_COMPETITOR,
+          ],
+        })
+        return
+      }
+
+      // Competitor pipeline (default) — scrape seeds then confirm direction
+      await runCompetitorDiscovery(niche, location, geminiKey, apifyKey)
+    } finally {
+      isSendingRef.current = false
+    }
   }
 
   /**
@@ -314,6 +330,11 @@ export function useConversation() {
    * T3: null guard on parsedIntent — if missing, reset to chatting.
    */
   const confirmSeeds = (selectedOption: string) => {
+    // Guard: confirmSeeds is wired to option buttons that are only rendered in
+    // the 'confirming' state, but ChatMessage doesn't enforce this — a stale
+    // closure or double-click could call this from any status.
+    if (store.status !== 'confirming') return
+
     const { parsedIntent, discoveredSeeds } = store
 
     // T3: null guard
