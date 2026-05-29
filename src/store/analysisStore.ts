@@ -1,14 +1,24 @@
 /**
  * Analysis state store — tracks the current analysis run.
  *
- * Status lifecycle:
- *   idle → running (discovery) → clarifying (waiting for user input) → running (ranking) → done
- *                                                                    ↓ error at any point
+ * Full status lifecycle (conversational + analysis):
+ *
+ *   idle → chatting → discovering → confirming → running → clarifying → done
+ *                ↑         │               │                           ↓ error
+ *                └─────────┘ (0 seeds)     └──── analyze() ───────────┘
+ *
+ * chatting    — user types intent; assistant may ask one clarification turn
+ * discovering — generateHashtags() + scrapeHashtagUsernames() running (up to 90s)
+ * confirming  — seeds shown, user picks direction or proceeds
+ * running     — existing analysis pipeline (unchanged, 150s timeout)
+ * clarifying  — existing ClarificationCard logic surfaced as chat bubble
+ * done|error  — unchanged
  */
 
 import { create } from 'zustand'
 import type { NormalizedProfile } from '../lib/transformers'
 import type { CompetitorAnalysisResult, AnalysisOutput, ClarificationQuestion } from '../ai/prompts'
+import type { ParsedIntent } from '../ai/intentParser'
 
 export type AnalysisStep = 1 | 2 | 3 | 4 | 5
 
@@ -20,7 +30,15 @@ export const STEP_LABELS: Record<AnalysisStep, string> = {
   5: 'Generating AI rationale',
 }
 
-export type AnalysisStatus = 'idle' | 'running' | 'clarifying' | 'done' | 'error'
+export type AnalysisStatus =
+  | 'idle'
+  | 'chatting'
+  | 'discovering'
+  | 'confirming'
+  | 'running'
+  | 'clarifying'
+  | 'done'
+  | 'error'
 
 export interface AnalysisParams {
   handles: string[]
@@ -35,6 +53,16 @@ export interface PendingDiscovery {
   inputProfiles: NormalizedProfile[]
   candidateProfiles: NormalizedProfile[]
   clarificationQuestion: ClarificationQuestion
+}
+
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: number
+  /** Controls rendering: text = plain bubble, options = pill choices, error = red bubble */
+  type?: 'text' | 'options' | 'error'
+  /** Present when type === 'options' */
+  options?: string[]
 }
 
 export interface AnalysisState {
@@ -53,6 +81,13 @@ export interface AnalysisState {
   summary: string
   error: string | null
 
+  /** Conversation history for the chat UI. Capped at 50 messages to prevent unbounded growth. */
+  conversationMessages: ChatMessage[]
+  /** Populated after successful seed discovery; read by confirmSeeds() in useConversation. */
+  discoveredSeeds: string[]
+  /** Populated after parseIntent() succeeds; read by confirmSeeds() to build analyze() params. */
+  parsedIntent: ParsedIntent | null
+
   // Actions
   startAnalysis: (params: AnalysisParams) => void
   setStep: (step: AnalysisStep) => void
@@ -63,6 +98,13 @@ export interface AnalysisState {
   setResults: (output: AnalysisOutput, inputProfiles: NormalizedProfile[]) => void
   setError: (message: string) => void
   reset: () => void
+
+  // Conversational actions
+  startChat: () => void
+  setStatus: (status: AnalysisStatus) => void
+  addMessage: (message: ChatMessage) => void
+  setDiscoveredSeeds: (seeds: string[]) => void
+  setParsedIntent: (intent: ParsedIntent | null) => void
 }
 
 const initialState = {
@@ -76,6 +118,10 @@ const initialState = {
   niche: '',
   summary: '',
   error: null,
+  // Conversational fields — T22: included in initialState for proper reset()
+  conversationMessages: [] as ChatMessage[],
+  discoveredSeeds: [] as string[],
+  parsedIntent: null,
 }
 
 export const useAnalysisStore = create<AnalysisState>()((set) => ({
@@ -104,4 +150,21 @@ export const useAnalysisStore = create<AnalysisState>()((set) => ({
   setError: (message) => set({ status: 'error', error: message }),
 
   reset: () => set(initialState),
+
+  // Conversational actions
+  startChat: () => set({ ...initialState, status: 'chatting' }),
+
+  setStatus: (status) => set({ status }),
+
+  addMessage: (message) =>
+    set((state) => ({
+      conversationMessages: [
+        ...state.conversationMessages,
+        message,
+      ].slice(-50),  // cap at 50 messages
+    })),
+
+  setDiscoveredSeeds: (seeds) => set({ discoveredSeeds: seeds }),
+
+  setParsedIntent: (intent) => set({ parsedIntent: intent }),
 }))

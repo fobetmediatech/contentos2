@@ -72,7 +72,7 @@ async function scrapeHandles(
  * @param signal       AbortController signal
  * @param perHashtag   Max posts to fetch per hashtag (default: 20)
  */
-async function scrapeHashtagUsernames(
+export async function scrapeHashtagUsernames(
   hashtags: string[],
   apiKey: string,
   signal?: AbortSignal,
