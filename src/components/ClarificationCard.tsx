@@ -13,6 +13,7 @@
 
 import { Search } from 'lucide-react'
 import type { ClarificationQuestion } from '../ai/prompts'
+import { PROCEED_LABEL } from '../lib/constants'
 
 interface ClarificationCardProps {
   question: ClarificationQuestion
@@ -59,7 +60,7 @@ export function ClarificationCard({ question, candidateCount, onAnswer, disabled
           disabled={disabled}
           className="w-full text-left px-4 py-3 rounded-lg bg-transparent border border-slate-200 border-dashed text-sm text-slate-500 hover:text-slate-700 hover:border-slate-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Looks right, proceed as-is
+          {PROCEED_LABEL}
         </button>
       </div>
     </div>
