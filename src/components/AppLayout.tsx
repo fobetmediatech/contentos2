@@ -1,16 +1,25 @@
 import { Link, Outlet, useLocation } from 'react-router-dom'
-import { Settings, Search, MapPin } from 'lucide-react'
+import { Settings, Search, MapPin, MessageSquare } from 'lucide-react'
 
-export function AppLayout() {
+interface AppLayoutProps {
+  /**
+   * T11: When true, removes page padding so ChatPage can use h-[100dvh].
+   * Without this, AppLayout's py-8 px-6 causes the sticky input to overflow.
+   */
+  noPadding?: boolean
+}
+
+export function AppLayout({ noPadding = false }: AppLayoutProps) {
   const location = useLocation()
   const isSettings = location.pathname === '/settings'
   const isDiscover = location.pathname.startsWith('/discover')
-  const isAnalyze = !isSettings && !isDiscover
+  const isChat = location.pathname === '/'
+  const isAnalyze = !isSettings && !isDiscover && !isChat
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className={`${noPadding ? 'h-[100dvh] flex flex-col overflow-hidden' : 'min-h-screen'} bg-slate-50`}>
       {/* Top navigation bar */}
-      <header className="sticky top-0 z-10 bg-white border-b border-slate-200 shadow-sm">
+      <header className="sticky top-0 z-10 bg-white border-b border-slate-200 shadow-sm flex-shrink-0">
         <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
           {/* Brand */}
           <Link
@@ -24,6 +33,18 @@ export function AppLayout() {
           <nav className="flex items-center gap-1">
             <Link
               to="/"
+              className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md transition-colors ${
+                isChat
+                  ? 'bg-slate-100 text-slate-900 font-medium'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <MessageSquare size={14} />
+              Chat
+            </Link>
+
+            <Link
+              to="/analyze"
               className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md transition-colors ${
                 isAnalyze
                   ? 'bg-slate-100 text-slate-900 font-medium'
@@ -61,10 +82,16 @@ export function AppLayout() {
         </div>
       </header>
 
-      {/* Page content */}
-      <main className="max-w-7xl mx-auto px-6 py-8">
-        <Outlet />
-      </main>
+      {/* Page content — noPadding mode fills remaining height for chat */}
+      {noPadding ? (
+        <div className="flex-1 overflow-hidden">
+          <Outlet />
+        </div>
+      ) : (
+        <main className="max-w-7xl mx-auto px-6 py-8">
+          <Outlet />
+        </main>
+      )}
     </div>
   )
 }
