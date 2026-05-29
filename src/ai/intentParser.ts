@@ -52,13 +52,16 @@ export type ParsedIntent = z.infer<typeof ParsedIntentSchema>
 
 // ── Gemini call ──────────────────────────────────────────────────────────────
 
-async function callGeminiForIntent(
+const INTENT_RETRIES = 2          // max network-level retries
+const INTENT_RETRY_DELAY_MS = 1500
+
+/** One-shot Gemini call. Retry logic lives in callGeminiForIntent. */
+async function fetchIntent(
   geminiKey: string,
-  userMessage: string,
+  prompt: string,
   signal?: AbortSignal,
 ): Promise<unknown> {
   const url = `${GEMINI_BASE}/models/${MODEL}:generateContent?key=${geminiKey}`
-  const prompt = buildIntentPrompt(userMessage)
 
   const res = await fetch(url, {
     method: 'POST',
@@ -67,19 +70,22 @@ async function callGeminiForIntent(
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
         temperature: 0.2,
-        maxOutputTokens: 256,
+        maxOutputTokens: 512,
         responseMimeType: 'application/json',
       },
+      // Disable thinking for this simple classification task — it adds latency
+      // and can cause empty/truncated JSON responses with Gemini 2.5 Flash.
+      thinkingConfig: { thinkingBudget: 0 },
     }),
     signal,
   })
 
-  // Always parse the body so we can distinguish auth errors from other failures.
+  // Always parse the body so we can distinguish auth errors from 4xx failures.
   // Gemini returns 400 INVALID_ARGUMENT for bad/missing API keys (not 401).
   const json = await res.json().catch(() => null)
 
   if (!res.ok) {
-    const status = json?.error?.status ?? ''
+    const status: string = json?.error?.status ?? ''
     const msg: string = json?.error?.message ?? ''
     const isAuthError =
       res.status === 401 ||
@@ -101,7 +107,7 @@ async function callGeminiForIntent(
     throw new GeminiError('AUTH_ERROR', 'Invalid Gemini API key. Check Settings.', false)
   }
 
-  const candidate = json.candidates?.[0]
+  const candidate = json?.candidates?.[0]
   if (!candidate) {
     throw new GeminiError('UNKNOWN', 'Gemini returned empty response for intent parsing', false)
   }
@@ -115,6 +121,41 @@ async function callGeminiForIntent(
 
   const cleaned = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim()
   return JSON.parse(cleaned)
+}
+
+/**
+ * fetchIntent with up to INTENT_RETRIES network-level retries.
+ * Only retries on transient errors (fetch failures, 5xx). Auth and rate-limit
+ * errors are not retried — they need user action or backing off.
+ */
+async function callGeminiForIntent(
+  geminiKey: string,
+  userMessage: string,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  const prompt = buildIntentPrompt(userMessage)
+  let lastErr: unknown
+
+  for (let attempt = 0; attempt <= INTENT_RETRIES; attempt++) {
+    if (signal?.aborted) throw new GeminiError('UNKNOWN', 'Aborted', false)
+    try {
+      return await fetchIntent(geminiKey, prompt, signal)
+    } catch (err) {
+      lastErr = err
+      // Don't retry auth, rate-limit, or parse errors — they won't heal with a retry
+      if (err instanceof GeminiError && !err.retryable && err.code !== 'UNKNOWN') throw err
+      // Don't retry if caller aborted
+      if (signal?.aborted) throw err
+      if (attempt < INTENT_RETRIES) {
+        console.warn(`[intentParser] attempt ${attempt + 1} failed, retrying in ${INTENT_RETRY_DELAY_MS}ms:`, err)
+        await new Promise((r) => setTimeout(r, INTENT_RETRY_DELAY_MS))
+      }
+    }
+  }
+
+  // All retries exhausted
+  if (lastErr instanceof GeminiError) throw lastErr
+  throw new GeminiError('UNKNOWN', `Network error: ${String(lastErr)}`, false)
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────
@@ -134,15 +175,8 @@ export async function parseIntent(
   userMessage: string,
   signal?: AbortSignal,
 ): Promise<ParsedIntent> {
-  let raw: unknown
-
-  try {
-    raw = await callGeminiForIntent(geminiKey, userMessage, signal)
-  } catch (err) {
-    if (err instanceof GeminiError) throw err
-    // Network-level error (DNS fail, CORS block, offline, etc.)
-    throw new GeminiError('UNKNOWN', `Network error: ${String(err)}`, false)
-  }
+  // callGeminiForIntent already retries up to INTENT_RETRIES times on network failures.
+  const raw = await callGeminiForIntent(geminiKey, userMessage, signal)
 
   // First validation attempt
   const result = ParsedIntentSchema.safeParse(raw)
