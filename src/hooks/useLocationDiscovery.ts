@@ -96,12 +96,13 @@ export function useLocationDiscovery() {
         )
 
         // Zero-result guard: if Gemini returned nothing, retry without city/niche context
+        // (removes Gemini's geographic/niche framing so it ranks by engagement alone)
         if (output.results.length === 0) {
           console.warn('[discovery] zero results from AI — retrying without city/niche context')
           output = await analyzeDiscovery(
             geminiKey,
-            safeCity,
-            safeNiche,
+            '',  // remove city context
+            '',  // remove niche context
             candidateProfiles,  // use ALL candidates, not just filtered
             controller.signal,
             creatorCount,

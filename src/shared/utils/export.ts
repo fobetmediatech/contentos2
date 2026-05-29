@@ -97,8 +97,12 @@ export function downloadCSV(csv: string, filename: string): void {
   const link = document.createElement('a')
   link.href = url
   link.download = filename
+  // Attach to DOM before clicking — required by Firefox for downloads to trigger
+  document.body.appendChild(link)
   link.click()
-  URL.revokeObjectURL(url)
+  document.body.removeChild(link)
+  // Delay revoke so browser has time to initiate the download
+  setTimeout(() => URL.revokeObjectURL(url), 100)
 }
 
 /**

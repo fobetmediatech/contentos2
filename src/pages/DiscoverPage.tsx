@@ -28,13 +28,7 @@ export function DiscoverPage() {
 
   const handleSubmit = () => {
     if (!canDiscover) return
-    discover(
-      { city: safeCity, niche: safeNiche, depth, clientName: clientName.trim() },
-      {
-        onSuccess: () => navigate('/discover/results'),
-        onError: () => navigate('/discover'),
-      },
-    )
+    discover({ city: safeCity, niche: safeNiche, depth, clientName: clientName.trim() })
     navigate('/discover/progress')
   }
 
@@ -104,7 +98,7 @@ export function DiscoverPage() {
               <button
                 key={d}
                 onClick={() => setDepth(d)}
-                className={`flex-1 py-2 text-sm font-medium rounded-lg border transition-colors ${
+                className={`flex-1 py-2 text-sm font-medium rounded-lg border transition-colors focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:outline-none ${
                   depth === d
                     ? 'bg-teal-600 text-white border-teal-600'
                     : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
@@ -128,8 +122,9 @@ export function DiscoverPage() {
           <input
             type="text"
             value={clientName}
-            onChange={(e) => setClientName(e.target.value)}
+            onChange={(e) => setClientName(e.target.value.replace(/[^\w\s-]/g, '').slice(0, 100))}
             placeholder="Acme Corp"
+            maxLength={100}
             className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
           />
         </div>

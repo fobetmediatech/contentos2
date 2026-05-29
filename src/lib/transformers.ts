@@ -39,6 +39,17 @@ export interface ApifyProfileRaw {
 
 // ----- Normalized shape used by AI + UI -----
 
+/**
+ * Which pipeline path discovered this profile.
+ * Set by apifyClient.ts after each scrape batch — NOT by normalizeProfile itself.
+ *
+ * 'input'          → reference account supplied by the user (not a candidate)
+ * 'hashtag'        → found via content-niche path: posts using reference account hashtags
+ * 'relatedProfiles' → found via audience-adjacency: Instagram relatedProfiles graph (Round 2)
+ * 'round3'         → found via audience-adjacency: relatedProfiles of R2 candidates (deeper hop)
+ */
+export type DiscoverySource = 'input' | 'relatedProfiles' | 'hashtag' | 'round3'
+
 export interface NormalizedProfile {
   username: string
   fullName: string
@@ -61,6 +72,20 @@ export interface NormalizedProfile {
 
   /** Top 10 hashtags by post frequency, stopwords removed. Empty array when no posts or no hashtags. */
   topHashtags: string[]
+
+  /**
+   * Date of the most recent post (ISO string from Apify latestPosts[0].timestamp).
+   * Undefined when the profile has no posts or Apify did not return latestPosts.
+   * Used by the dead account gate in apifyClient.ts to filter inactive profiles.
+   */
+  lastPostDate?: string
+
+  /**
+   * Which discovery path found this profile.
+   * Set by apifyClient.ts — undefined on input profiles (they are in inputProfiles, not candidateProfiles).
+   * Used by buildCompetitorPrompt to label candidates as [CONTENT-NICHE] or [AUDIENCE-ADJACENT].
+   */
+  discoverySource?: DiscoverySource
 }
 
 // ----- Hashtag stopwords -----
@@ -145,6 +170,9 @@ export function normalizeProfile(raw: ApifyProfileRaw): NormalizedProfile {
     .slice(0, 10)
     .map(([tag]) => tag)
 
+  // Most recent post date: latestPosts is ordered most-recent-first by Apify.
+  const lastPostDate = raw.latestPosts?.[0]?.timestamp
+
   return {
     username: raw.username ?? '',
     fullName: raw.fullName ?? '',
@@ -160,6 +188,7 @@ export function normalizeProfile(raw: ApifyProfileRaw): NormalizedProfile {
     engagementRate,
     relatedHandles,
     topHashtags,
+    lastPostDate,
   }
 }
 

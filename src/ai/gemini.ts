@@ -9,7 +9,7 @@
  *   empty candidates[]      → SAFETY block, surface as content policy error
  */
 
-import { buildCompetitorPrompt, buildDiscoveryPrompt, type AnalysisOutput, type DiscoveryOutput } from './prompts'
+import { buildCompetitorPrompt, buildDiscoveryPrompt, buildClarificationPrompt, type AnalysisOutput, type DiscoveryOutput, type ClarificationQuestion } from './prompts'
 import type { NormalizedProfile } from '../lib/transformers'
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta'
@@ -207,8 +207,10 @@ function parseAnalysisOutput(raw: string): AnalysisOutput {
  * Run competitor analysis using Gemini.
  * Takes normalized profiles, builds prompt with live taxonomy, returns structured output.
  *
- * @param nicheContext  Strategist-provided niche description (optional). Injected into
- *                      the prompt as an EXPLICIT NICHE CONTEXT block that improves filtering accuracy.
+ * @param nicheContext          Strategist-provided niche description (optional). Injected into
+ *                              the prompt as an EXPLICIT NICHE CONTEXT block that improves filtering accuracy.
+ * @param clarificationAnswer   User's answer from the mid-run clarification card (optional).
+ *                              When present and non-empty, injected as USER REFINEMENT to direct ranking.
  */
 export async function analyzeCompetitors(
   geminiKey: string,
@@ -216,8 +218,9 @@ export async function analyzeCompetitors(
   candidateProfiles: NormalizedProfile[],
   signal?: AbortSignal,
   nicheContext?: string,
+  clarificationAnswer?: string,
 ): Promise<AnalysisOutput> {
-  const prompt = buildCompetitorPrompt(inputProfiles, candidateProfiles, nicheContext)
+  const prompt = buildCompetitorPrompt(inputProfiles, candidateProfiles, nicheContext, clarificationAnswer)
   const raw = await callGemini(geminiKey, prompt, signal)
   return parseAnalysisOutput(raw)
 }
@@ -232,7 +235,19 @@ function parseDiscoveryOutput(raw: string): DiscoveryOutput {
     if (!parsed.results || !Array.isArray(parsed.results)) {
       throw new Error('Missing results array')
     }
-    return parsed
+    // Coerce per-item fields: Gemini structured output can return null for array/string
+    // fields even with responseSchema (best-effort enforcement). Defensive defaults here
+    // prevent downstream crashes in DiscoveryCard and export functions.
+    return {
+      ...parsed,
+      results: parsed.results.map((r) => ({
+        ...r,
+        rank: Number(r.rank) || 0,
+        specialties: Array.isArray(r.specialties) ? r.specialties : [],
+        contentFocus: r.contentFocus ?? '',
+        rationale: r.rationale ?? '',
+      })),
+    }
   } catch (err) {
     throw new GeminiError(
       'PARSE_ERROR',
@@ -331,6 +346,91 @@ export async function analyzeDiscovery(
   if (!text) throw new GeminiError('SAFETY_BLOCK', 'Gemini returned empty response.', false)
 
   return parseDiscoveryOutput(text)
+}
+
+// ----- Clarification question -----
+
+/**
+ * Generate a niche clarification question based on the discovered candidate pool.
+ * Shown to the user before ranking so they can confirm which sub-niche direction
+ * the tool should prioritize.
+ *
+ * Follows the analyzeDiscovery pattern — direct fetch with its own responseSchema.
+ * thinkingBudget: 0 (simple classification task — no extended reasoning needed, saves 2–8s).
+ *
+ * NEVER throws to the caller — always returns a valid question.
+ * On any error (network, parse, safety block) returns a safe generic fallback
+ * so the analysis pipeline never halts due to this optional step.
+ */
+export async function generateClarificationQuestion(
+  geminiKey: string,
+  referenceProfile: NormalizedProfile,
+  candidates: NormalizedProfile[],
+  nicheContext: string,
+  signal?: AbortSignal,
+): Promise<ClarificationQuestion> {
+  const FALLBACK: ClarificationQuestion = {
+    question: 'Which direction best fits your client?',
+    options: [
+      'Exact niche match — same content style and audience',
+      'Broader category — adjacent creators are fine',
+    ],
+  }
+
+  try {
+    const prompt = buildClarificationPrompt(referenceProfile, candidates, nicheContext)
+    const url = `${GEMINI_BASE}/models/${MODEL}:generateContent?key=${geminiKey}`
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.3,
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: 'object',
+            properties: {
+              question: { type: 'string' },
+              options: { type: 'array', items: { type: 'string' } },
+            },
+            required: ['question', 'options'],
+          },
+          thinkingConfig: { thinkingBudget: 0 },
+        },
+      }),
+      signal,
+    })
+
+    if (!res.ok) return FALLBACK
+
+    const json = (await res.json()) as GeminiResponse
+    if (!json.candidates || json.candidates.length === 0) return FALLBACK
+
+    const candidate = json.candidates[0]
+    const text = (candidate.content?.parts ?? [])
+      .filter((p) => !p.thought)
+      .map((p) => p.text ?? '')
+      .join('')
+
+    if (!text) return FALLBACK
+
+    const cleaned = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim()
+    const parsed = JSON.parse(cleaned) as ClarificationQuestion
+
+    if (
+      typeof parsed.question !== 'string' ||
+      !Array.isArray(parsed.options) ||
+      parsed.options.length < 2
+    ) {
+      return FALLBACK
+    }
+
+    return parsed
+  } catch {
+    return FALLBACK
+  }
 }
 
 // ----- Utilities -----

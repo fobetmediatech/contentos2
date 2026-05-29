@@ -58,7 +58,7 @@ const limit = pLimit(MAX_CONCURRENT)
 /** If fewer than this many creator accounts exist in the initial pool, trigger expansion */
 const MIN_CREATOR_THRESHOLD = 8
 /** Max additional handles to scrape in one expansion round */
-const EXPANSION_CAP = 40
+const EXPANSION_CAP = 20
 
 // ----- Quality gate -----
 

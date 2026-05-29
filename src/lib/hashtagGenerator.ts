@@ -142,11 +142,12 @@ Return ONLY a JSON array of strings. No # prefix. No explanation. No markdown.`
 
   if (!Array.isArray(parsed)) throw new Error('Gemini hashtag response is not an array')
 
-  // Sanitize: remove # prefix, filter empties, dedup
+  // Sanitize: remove # prefix, strip non-alphanumeric/underscore chars (Instagram rules),
+  // truncate to 30 chars (Instagram hashtag limit), filter empties, dedup
   const tags = [...new Set(
     parsed
       .filter((t): t is string => typeof t === 'string')
-      .map((t) => t.replace(/^#/, '').trim())
+      .map((t) => t.replace(/^#/, '').replace(/[^\w]/g, '').slice(0, 30).trim())
       .filter(Boolean)
   )]
 

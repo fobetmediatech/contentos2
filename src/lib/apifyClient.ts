@@ -172,7 +172,8 @@ export async function discoverCompetitors(
       : Promise.resolve([] as string[]),
   ])
 
-  const round2Profiles = round2Results.flat()
+  // Tag Round 2 profiles as audience-adjacency signal (relatedProfiles)
+  const round2Profiles = round2Results.flat().map((p) => ({ ...p, discoverySource: 'relatedProfiles' as const }))
   candidateHandles.forEach((h) => seenHandles.add(h.toLowerCase()))
 
   // Compute hashtag handles first (filtered against round1+round2 seen set).
@@ -226,8 +227,35 @@ export async function discoverCompetitors(
     })(),
   ])
 
-  const candidateProfiles = [...round2Profiles, ...hashtagProfiles, ...round3Profiles]
-  console.log(`[pipeline] total candidates: ${candidateProfiles.length} (r2: ${round2Profiles.length}, hashtag: ${hashtagProfiles.length}, r3: ${round3Profiles.length})`)
+  // Tag each path's profiles with their discovery source so Gemini can tell which
+  // candidates come from the content-niche signal vs audience-adjacency signal.
+  const taggedHashtagProfiles = hashtagProfiles.map((p) => ({ ...p, discoverySource: 'hashtag' as const }))
+  const taggedRound3Profiles = round3Profiles.map((p) => ({ ...p, discoverySource: 'round3' as const }))
+
+  // Merge order: hashtag (content-niche) first — Gemini's context window reads top-down,
+  // so placing the highest-confidence niche candidates first creates an ordering bias that
+  // reinforces the SOURCE PRIORITY instruction in the prompt.
+  const allCandidates = [...taggedHashtagProfiles, ...round2Profiles, ...taggedRound3Profiles]
+  console.log(`[pipeline] total candidates: ${allCandidates.length} (hashtag: ${taggedHashtagProfiles.length}, r2: ${round2Profiles.length}, r3: ${taggedRound3Profiles.length})`)
+
+  // Dead account gate: remove inactive accounts before handing the pool to Gemini.
+  // Accounts with no posts or last post >180 days ago are not active competitors —
+  // keeping them wastes context window tokens and degrades ranking quality.
+  // Computed at call time (not module scope) so tests don't get stale timestamps.
+  const sixMonthsAgo = Date.now() - 180 * 24 * 60 * 60 * 1000
+  const candidateProfiles = allCandidates.filter((p) => {
+    if (p.postsCount === 0) return false
+    if (p.lastPostDate) {
+      const lastPostTs = new Date(p.lastPostDate).getTime()
+      if (!isNaN(lastPostTs) && lastPostTs < sixMonthsAgo) return false
+    }
+    return true
+  })
+  const removedCount = allCandidates.length - candidateProfiles.length
+  if (removedCount > 0) {
+    console.log(`[dead-account-gate] removed ${removedCount} inactive accounts (0 posts or last post >180 days ago)`)
+  }
+
   return { inputProfiles, candidateProfiles }
 }
 

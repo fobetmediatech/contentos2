@@ -14,6 +14,15 @@
 import { COMPETITOR_CATEGORIES, DISCOVERY_CATEGORIES } from '../shared/utils/categories'
 import type { NormalizedProfile } from '../lib/transformers'
 
+/**
+ * Clarification question returned by Gemini after discovery.
+ * Shown to the user before the ranking step to confirm niche direction.
+ */
+export interface ClarificationQuestion {
+  question: string
+  options: string[]
+}
+
 export interface CompetitorAnalysisResult {
   username: string
   category: 'top' | 'trending'
@@ -33,13 +42,16 @@ export interface AnalysisOutput {
  * Build the competitor classification prompt.
  * Taxonomy language comes entirely from COMPETITOR_CATEGORIES — not hardcoded.
  *
- * @param nicheContext  Strategist-provided niche description (optional). When present it is
- *                      injected as an EXPLICIT NICHE CONTEXT block that overrides hashtag inference.
+ * @param nicheContext          Strategist-provided niche description (optional). When present it is
+ *                              injected as an EXPLICIT NICHE CONTEXT block that overrides hashtag inference.
+ * @param clarificationAnswer   User's answer from the mid-run clarification card (optional).
+ *                              When present and non-empty, injected as USER REFINEMENT to direct ranking.
  */
 export function buildCompetitorPrompt(
   inputProfiles: NormalizedProfile[],
   candidates: NormalizedProfile[],
   nicheContext?: string,
+  clarificationAnswer?: string,
 ): string {
   const topCategory = COMPETITOR_CATEGORIES.top
   const trendingCategory = COMPETITOR_CATEGORIES.trending
@@ -60,7 +72,19 @@ export function buildCompetitorPrompt(
       const establishedLabel = p.followersCount > 500_000
         ? ' [ESTABLISHED: 500K+ followers — assign to Top category]'
         : ''
-      return `@${p.username} | followers: ${p.followersCount.toLocaleString()} | ER: ${er}% | posts: ${p.postsCount} | verified: ${p.verified} | bio: "${p.biography.replace(/[\n\r]/g, ' ').slice(0, 120)}"${establishedLabel}`
+      // Source label: tells Gemini how this candidate was discovered.
+      // CONTENT-NICHE accounts were found by scraping posts using the reference accounts'
+      // own hashtags — they are the highest-confidence niche matches.
+      // AUDIENCE-ADJACENT accounts were found via Instagram's relatedProfiles (audience overlap) —
+      // they may or may not be in the same niche.
+      const sourceLabel = p.discoverySource === 'hashtag'
+        ? ' [CONTENT-NICHE: posted with reference account hashtags]'
+        : p.discoverySource === 'round3'
+          ? ' [AUDIENCE-ADJACENT: 2-hop relatedProfiles]'
+          : p.discoverySource === 'relatedProfiles'
+            ? ' [AUDIENCE-ADJACENT: relatedProfiles]'
+            : '' // undefined = input profile (should not appear here, but safe fallback)
+      return `@${p.username} | followers: ${p.followersCount.toLocaleString()} | ER: ${er}% | posts: ${p.postsCount} | verified: ${p.verified} | bio: "${p.biography.replace(/[\n\r]/g, ' ').slice(0, 120)}"${establishedLabel}${sourceLabel}`
     })
     .join('\n')
 
@@ -79,31 +103,51 @@ export function buildCompetitorPrompt(
     ? `\nNICHE SIGNALS (extracted from reference accounts' recent posts — their own hashtag usage):\n${uniqueHashtags.join(', ')}\n`
     : ''
 
+  // User refinement from the mid-run clarification card (highest-priority signal when present).
+  // Empty string means the user clicked "Looks right, proceed as-is" — treat as no refinement.
+  // Strip newlines before injecting into prompt to prevent prompt injection via
+  // bio-sourced clarification options that contain embedded newlines.
+  const trimmedClarificationAnswer = (clarificationAnswer?.replace(/[\n\r]/g, ' ') ?? '').trim()
+  const clarificationSection = trimmedClarificationAnswer
+    ? `\nUSER REFINEMENT (the strategist selected this direction after seeing the candidate pool):\n"${trimmedClarificationAnswer}"\nPrioritize candidates that match this direction. Deprioritize candidates that clearly belong to other sub-niches.\n`
+    : ''
+
   // Count instruction: use "up to" whenever any filtering signal is available
-  // (strategist context OR hashtag signals), so Gemini can legitimately exclude
-  // wrong-niche accounts. Without any signals, force "exactly" so Gemini doesn't
-  // return fewer accounts simply because it has no filter criterion to apply.
-  const hasFilterSignal = trimmedNicheContext.length > 0 || uniqueHashtags.length > 0
+  // (strategist context OR hashtag signals OR user refinement), so Gemini can
+  // legitimately exclude wrong-niche accounts. Without any signals, force "exactly"
+  // so Gemini doesn't return fewer accounts simply because it has no filter criterion.
+  const hasFilterSignal = trimmedNicheContext.length > 0 || uniqueHashtags.length > 0 || trimmedClarificationAnswer.length > 0
   const countInstruction = hasFilterSignal ? 'up to' : 'exactly'
 
-  // Injected when filter signals exist — forces Gemini to derive the specific sub-niche
-  // from the reference accounts before evaluating candidates. Anchors chain-of-thought
-  // in the output via the "derivedNiche" JSON field so strict JSON-output pressure
-  // doesn't cause the model to skip the derivation step silently.
+  // Injected when filter signals exist — forces Gemini to (1) derive the specific sub-niche
+  // from the reference accounts, and (2) explicitly identify adjacent-but-NOT-target niches
+  // before evaluating candidates. The two-step process prevents "business umbrella bleed"
+  // where trading/podcast/finance accounts pass the filter because they are broadly "business."
+  // Anchors chain-of-thought in the output via the "derivedNiche" JSON field.
   const nicheDeriveBlock = hasFilterSignal
-    ? `\nNICHE DERIVATION — complete this before evaluating candidates:
-1. From the reference accounts' bios and hashtags above, identify the SPECIFIC sub-niche they represent.
+    ? `\nNICHE DERIVATION — complete BOTH steps before evaluating candidates:
+STEP 1 — Derive the specific sub-niche from the reference accounts' bios and hashtags:
    "Business" could mean entrepreneurship, finance/trading, corporate leadership, or SME content — the reference accounts tell you which.
-2. This derived sub-niche overrides the raw niche keyword. If reference accounts are entrepreneurship creators, finance/trading/investing accounts are NOT relevant for this search.
-3. Include an account if its primary focus is within the derived sub-niche. Accounts whose content meaningfully spans both the derived sub-niche AND an adjacent sub-niche (e.g. an entrepreneur who also covers investing, when the reference accounts themselves cover both) should be included.
-Populate the "derivedNiche" field in your JSON output with the sub-niche you identified.\n`
+   Aim for precision: "entrepreneurship & startup content" beats "business".
+
+STEP 2 — Identify 2–3 ADJACENT-BUT-NOT-TARGET niches to explicitly exclude:
+   These are niches that share audience overlap with the target but are NOT what the reference accounts cover.
+   Annotate your "derivedNiche" output with these exclusions.
+   Reference examples (use your own judgment, these are illustrations only):
+   - Reference = entrepreneurship/startup tips → EXCLUDE: trading, investing, crypto, personal finance, podcast-only accounts
+   - Reference = fitness/gym content → EXCLUDE: nutrition coaching, wellness/mindfulness, yoga, sports supplements
+   - Reference = beauty/makeup tutorials → EXCLUDE: fashion/OOTD, general lifestyle, skincare brand accounts
+   - Reference = travel vlogging → EXCLUDE: adventure sports, food-tourism-only, general lifestyle
+   A candidate whose bio leads with excluded-niche signals (e.g. "📈 trading tips", "forex", "crypto alpha", "stock picks") is in the EXCLUDED adjacent niche — reject them even if they occasionally post adjacent content.
+
+Populate "derivedNiche" as: "<sub-niche> | EXCLUDE: <adjacent1>, <adjacent2>"\n`
     : ''
 
   return `You are an Instagram competitive intelligence analyst for a social media agency.
 
 REFERENCE ACCOUNTS (the client's handles or known competitors in their niche):
 ${inputSummary}
-${nicheContextSection}${nicheSignalsSection}${nicheDeriveBlock}
+${clarificationSection}${nicheContextSection}${nicheSignalsSection}${nicheDeriveBlock}
 YOUR TASK:
 Analyze the candidate accounts below and select ${countInstruction}:
 - 5 "${topCategory.label}" competitors: ${topCategory.taxonomy}
@@ -114,6 +158,8 @@ ${candidateSummary}
 
 SELECTION CRITERIA:
 - FIRST: Check niche relevance. If EXPLICIT NICHE CONTEXT is provided above, treat it as the definitive niche boundary. When the niche is a PROFESSION (e.g. "marketing education", "productivity coaching", "content strategy"), accounts whose PRIMARY focus is a TOOL CATEGORY adjacent to that profession (e.g. "AI tools reviews", "tech news", "coding tutorials") are NOT niche-relevant — even if that tool is used by the profession. Include an account only if its primary content IS the profession itself, not just the tools. If only NICHE SIGNALS are provided, apply the same distinction. Borderline accounts whose content is clearly about the profession topic (even if they sometimes cover tools) should be included.
+- ADJACENT NICHE GUARD: Different sub-niches within the same broad umbrella are still different niches. "Entrepreneurship tips" and "trading/investing" are both "business" broadly — but they are NOT the same niche and serve different audiences. Apply the STEP 2 exclusion list from NICHE DERIVATION above: reject any candidate whose PRIMARY content or bio belongs to an adjacent-but-excluded sub-niche, even if they occasionally post on-niche content. Bio signals are decisive: a bio leading with trading emojis (📈), "forex", "crypto", "stock picks", or similar adjacent-niche language indicates an excluded account.
+- SOURCE PRIORITY: Each candidate is labeled [CONTENT-NICHE] or [AUDIENCE-ADJACENT]. [CONTENT-NICHE] candidates were discovered by scraping posts that used the reference accounts' own hashtags — they are the highest-confidence niche matches. [AUDIENCE-ADJACENT] candidates came from Instagram's relatedProfiles graph (audience overlap) — they may or may not share the niche. When assigning candidates to Top 5 or Trending 5, prefer [CONTENT-NICHE] accounts over [AUDIENCE-ADJACENT] accounts at the same follower tier and ER band. Do NOT override the Top/Trending tier logic: a [CONTENT-NICHE] account with 50K followers still belongs in Trending, not Top. Only include an [AUDIENCE-ADJACENT] candidate if (a) there are not enough [CONTENT-NICHE] accounts to fill the category, AND (b) their bio clearly confirms niche alignment with the reference accounts.
 - GOAL: Fill both categories as completely as possible. Aim for 5 in each. Only reduce the count if there are genuinely not enough niche-relevant candidates — do not leave slots empty out of excessive strictness.
 - For Top 5: prioritize follower count, brand authority, posting consistency, and verified status. Accounts with the [ESTABLISHED: 500K+ followers] label MUST be assigned to Top, not Trending.
 - For Trending 5: prioritize engagement rate (ER %) relative to follower tier — accounts in their growth phase where ER significantly exceeds peers at the same follower count.
@@ -221,7 +267,7 @@ BALANCE RULE — this is mandatory:
 - Across all 10 results, aim for at least 5 content creators (type: creator) and at most 5 businesses (type: business).
 - If the niche or context mentions "vlogger", "blogger", or "creator", lean heavier on creators: aim for 6-7 creators out of 10.
 - If fewer creator profiles exist than needed to fill 10 slots, fill the remaining slots with the most niche-relevant businesses from the candidate list.
-- MINIMUM RESULT COUNT: Always return exactly 10 results. If fewer than 10 candidate profiles appear in this list, return all of them. Never reduce the count.
+- MINIMUM RESULT COUNT: Return up to 10 results. If fewer than 10 candidate profiles appear in this list, return all of them. Do not fabricate or guess handles not in the list above.
 
 SELECTION CRITERIA:
 - Select any account whose bio or username strongly suggests it is relevant to ${niche}.
@@ -258,4 +304,48 @@ OUTPUT FORMAT (valid JSON only, no markdown):
 }
 
 Return ONLY the JSON object. Rank starts at 1 within each category (1 = best fit).`
+}
+
+// ----- Clarification prompt -----
+
+/**
+ * Build the niche clarification prompt.
+ * Gemini looks at the first 20 candidates and generates one targeted question
+ * with 3–4 options that capture the real sub-niche splits it observes.
+ *
+ * The result is shown to the user before ranking runs — their answer is injected
+ * into buildCompetitorPrompt as a USER REFINEMENT block (clarificationAnswer param).
+ */
+export function buildClarificationPrompt(
+  referenceProfile: NormalizedProfile,
+  candidates: NormalizedProfile[],
+  nicheContext: string,
+): string {
+  const top20 = candidates.slice(0, 20)
+  const candidateList = top20
+    .map((p) => `@${p.username}: "${p.biography.replace(/[\n\r]/g, ' ').slice(0, 80)}" (${p.followersCount.toLocaleString()} followers)`)
+    .join('\n')
+
+  const nicheContextLine = nicheContext.trim()
+    ? `\nStated niche: "${nicheContext.trim()}"`
+    : ''
+
+  return `You are analyzing Instagram account candidates to help a content strategist narrow their competitor research.
+
+Reference account: @${referenceProfile.username} (${referenceProfile.followersCount.toLocaleString()} followers)
+Bio: "${referenceProfile.biography.replace(/[\n\r]/g, ' ').slice(0, 120)}"${nicheContextLine}
+
+I found ${candidates.length} candidate accounts. Here are the first 20:
+${candidateList}
+
+Look at these accounts and identify the main sub-niche directions they fall into.
+Generate ONE targeted question and 3–4 options that capture the real splits you see.
+
+Rules:
+- Question must be specific to what you actually found — not generic
+- Options must be concrete and distinct (not "other" or "all of the above")
+- If all accounts clearly fit one niche, generate 2 options showing the focused spectrum
+- Options should be 5–10 words each
+
+Return JSON: { "question": "...", "options": ["...", "...", "..."] }`
 }
