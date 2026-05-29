@@ -10,6 +10,9 @@
  * T17: message area is flex justify-center (empty) → justify-end (has messages).
  * T18: input container uses pb-[env(safe-area-inset-bottom)].
  * T23: status === 'error' on mount → reset + back to chatting.
+ * T-routing: watches discoveryStore.status to navigate to /discover/progress when
+ *   location discovery pipeline fires; resets discoveryStore on mount if done/error
+ *   to prevent re-navigation from a previous run.
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -17,6 +20,7 @@ import type { KeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AlertTriangle, Bot, Send } from 'lucide-react'
 import { useAnalysisStore } from '../store/analysisStore'
+import { useDiscoveryStore } from '../store/discoveryStore'
 import { useKeysStore } from '../store/keysStore'
 import { useConversation } from '../hooks/useConversation'
 import { ChatMessage, TypingIndicator } from '../components/ChatMessage'
@@ -29,7 +33,10 @@ const EXAMPLE_PROMPTS = [
 
 export function ChatPage() {
   const navigate = useNavigate()
-  const { status, conversationMessages, startChat, reset } = useAnalysisStore()
+  const analysisStore = useAnalysisStore()
+  const { status, conversationMessages, startChat, reset } = analysisStore
+  const discoveryStatus = useDiscoveryStore((s) => s.status)
+  const resetDiscovery = useDiscoveryStore((s) => s.reset)
   const { isReady } = useKeysStore()
   const { sendMessage, confirmSeeds } = useConversation()
 
@@ -51,12 +58,41 @@ export function ChatPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Navigate to progress page when analysis pipeline starts
+  // Mount reset: if a prior discovery run is in any non-idle state, clear it so we
+  // don't immediately navigate to /discover/progress (done/running) or get stuck with
+  // a locked confirming UI. 'error' is intentionally excluded here — the error-recovery
+  // effect below handles that case with proper error surfacing.
+  useEffect(() => {
+    if (discoveryStatus === 'done' || discoveryStatus === 'running' || discoveryStatus === 'confirming') {
+      resetDiscovery()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Navigate to progress page when competitor analysis pipeline starts
   useEffect(() => {
     if (status === 'running') {
       navigate('/progress')
     }
   }, [status, navigate])
+
+  // Navigate to discovery progress when location discovery pipeline starts
+  useEffect(() => {
+    if (discoveryStatus === 'running') {
+      navigate('/discover/progress')
+    }
+  }, [discoveryStatus, navigate])
+
+  // Recover from a failed discovery — surface as chat error message, then reset
+  useEffect(() => {
+    if (discoveryStatus === 'error') {
+      const errMsg = useDiscoveryStore.getState().error ?? 'Discovery failed — please try again.'
+      analysisStore.addMessage({ role: 'assistant', content: errMsg, timestamp: Date.now(), type: 'error' })
+      analysisStore.setStatus('chatting')
+      resetDiscovery()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discoveryStatus, resetDiscovery])
 
   // Scroll to bottom whenever messages change or typing indicator appears
   useEffect(() => {
