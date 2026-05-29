@@ -121,7 +121,7 @@ export function useConversation() {
     } catch (err) {
       store.addMessage({
         role: 'assistant',
-        content: err instanceof GeminiError && err.message.includes('key')
+        content: err instanceof GeminiError && err.code === 'AUTH_ERROR'
           ? 'Add your Gemini key in Settings to get started.'
           : "Couldn't understand that — try rephrasing.",
         timestamp: Date.now(),

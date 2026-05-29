@@ -21,6 +21,9 @@ const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta'
 const MODEL = import.meta.env.VITE_GEMINI_MODEL ?? 'gemini-2.5-flash'
 
 // ── Zod schema (T1: schema validation) ──────────────────────────────────────
+//
+// All optional fields use .nullish() (not just .optional()) because Gemini JSON
+// mode returns null for absent fields, not undefined — .optional() rejects null.
 
 const ClarificationSchema = z.object({
   needsClarification: z.literal(true),
@@ -28,16 +31,18 @@ const ClarificationSchema = z.object({
 })
 
 const IntentSchema = z.object({
-  needsClarification: z.union([z.literal(false), z.undefined()]).optional(),
+  // Gemini may return null when no clarification is needed — treat as false.
+  needsClarification: z.union([z.literal(false), z.null(), z.undefined()]).nullish(),
   niche: z.string().min(1).max(100).transform((s) => s.trim()),
   location: z.string().max(50).nullish().transform((s) => s?.trim() || undefined),
+  // Gemini often returns null for an empty array — normalise to [].
   knownHandles: z
     .array(z.string())
     .max(5)
-    .optional()
+    .nullish()
     .default([])
-    .transform((arr) => arr.map((h) => h.replace(/^@/, '').toLowerCase().trim()).filter(Boolean)),
-  depth: z.enum(['standard', 'deep']).optional().default('standard'),
+    .transform((arr) => (arr ?? []).map((h) => h.replace(/^@/, '').toLowerCase().trim()).filter(Boolean)),
+  depth: z.enum(['standard', 'deep']).nullish().default('standard'),
   clientName: z.string().max(100).nullish().transform((s) => s?.trim() || undefined),
 })
 
@@ -70,20 +75,24 @@ async function callGeminiForIntent(
   })
 
   if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new GeminiError(`Intent parse failed: ${res.status}`, res.status === 429 ? 'RATE_LIMITED' : 'UNKNOWN', res.status)
+    await res.text().catch(() => '')
+    throw new GeminiError(
+      res.status === 429 ? 'RATE_LIMITED' : 'UNKNOWN',
+      `Intent parse failed: ${res.status}`,
+      res.status >= 500,
+    )
   }
 
   const json = await res.json()
 
   // Handle 401 — missing or invalid API key
   if (json.error?.code === 401 || json.error?.status === 'UNAUTHENTICATED') {
-    throw new GeminiError('Invalid Gemini API key. Add your key in Settings.', 'AUTH_ERROR', 401)
+    throw new GeminiError('AUTH_ERROR', 'Invalid Gemini API key. Add your key in Settings.', false)
   }
 
   const candidate = json.candidates?.[0]
   if (!candidate) {
-    throw new GeminiError('Gemini returned empty response for intent parsing', 'EMPTY_RESPONSE', 0)
+    throw new GeminiError('UNKNOWN', 'Gemini returned empty response for intent parsing', false)
   }
 
   const text = (candidate.content?.parts ?? [])
@@ -91,7 +100,7 @@ async function callGeminiForIntent(
     .map((p: { text?: string }) => p.text ?? '')
     .join('')
 
-  if (!text) throw new GeminiError('Gemini returned empty intent response', 'EMPTY_RESPONSE', 0)
+  if (!text) throw new GeminiError('UNKNOWN', 'Gemini returned empty intent response', false)
 
   const cleaned = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim()
   return JSON.parse(cleaned)
@@ -139,13 +148,9 @@ export async function parseIntent(
     const retryResult = ParsedIntentSchema.safeParse(retryRaw)
     if (retryResult.success) return retryResult.data
 
-    throw new GeminiError(
-      `Couldn't understand that — try rephrasing.`,
-      'PARSE_ERROR',
-      0,
-    )
+    throw new GeminiError('PARSE_ERROR', "Couldn't parse the intent after two attempts.", false)
   } catch (err) {
     if (err instanceof GeminiError) throw err
-    throw new GeminiError(`Couldn't understand that — try rephrasing.`, 'PARSE_ERROR', 0)
+    throw new GeminiError('PARSE_ERROR', "Couldn't parse the intent after two attempts.", false)
   }
 }

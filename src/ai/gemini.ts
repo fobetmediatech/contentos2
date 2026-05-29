@@ -26,6 +26,7 @@ export type GeminiErrorCode =
   | 'UNAVAILABLE'
   | 'SAFETY_BLOCK'
   | 'PARSE_ERROR'
+  | 'AUTH_ERROR'
   | 'UNKNOWN'
 
 export class GeminiError extends Error {
