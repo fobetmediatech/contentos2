@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [0.1.0] — 2026-05-27
+## [0.2.0] — 2026-05-27
 
 ### Added
 
@@ -24,6 +24,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Discovery export** — `formatDiscoveryForClipboard`, `generateDiscoveryCSV` (rank, category, username, followers, ER, verified, specialties, content_focus, partnership_ready, location_confidence, rationale, city, niche, source_hashtags)
 - **DISCOVERY_CATEGORIES** (`src/shared/utils/categories.ts`) — discovery-context taxonomy alongside existing COMPETITOR_CATEGORIES
 - **Test script** (`scripts/test-discovery.mjs`) — 8-gate integration test (hashtag gen, rule fallback, scraper field check, profile normalization, location filter accuracy, pipeline timing < 120s, yield gate ≥3 profiles, AI schema validation)
+
+### Fixed
+
+- **Discovery crash on null array fields** (`src/ai/gemini.ts`) — `parseDiscoveryOutput` now coerces per-item fields (`specialties`, `contentFocus`, `rationale`, `rank`) before returning; Gemini can return `null` for array-typed properties even with a responseSchema
+- **Discovery prompt over-constrains result count** (`src/ai/prompts.ts`) — changed "Always return exactly 10" → "Return up to 10" in `buildDiscoveryPrompt`; the previous instruction forced Gemini to hallucinate handles to fill 10, which then failed the hallucination filter leaving fewer results than expected
+- **Deep scan timeout overflow** (`src/lib/discoveryClient.ts`) — reduced `EXPANSION_CAP` 40 → 20; worst-case budget was ~165s against the 150s AbortController timeout
+- **`onError` navigation conflict in DiscoverPage** (`src/pages/DiscoverPage.tsx`) — removed redundant `onSuccess`/`onError` TanStack Query callbacks; navigation is handled by `DiscoveryProgressPage` via its `useEffect` on store status
+- **Double-click race in ClarificationCard** (`src/components/ClarificationCard.tsx`) — added `disabled?: boolean` prop; option buttons now disable immediately after first click (wired from `isPending` in `ProgressPage`)
+- **Hashtag injection sanitization** (`src/lib/hashtagGenerator.ts`) — Gemini-returned hashtags now stripped of non-`[\w]` chars and capped at 30 characters (Instagram hashtag rules)
+- **Prompt injection via clarification newlines** (`src/ai/prompts.ts`) — `trimmedClarificationAnswer` now strips internal `\n`/`\r` before prompt injection
+- **Zero-result retry still passed city/niche context** (`src/hooks/useLocationDiscovery.ts`) — retry now passes `''` for both city and niche (was incorrectly passing `safeCity`/`safeNiche`)
+- **Firefox CSV download silent fail** (`src/shared/utils/export.ts`) — anchor element now appended to DOM before `.click()` and removed after; `revokeObjectURL` delayed 100ms for Firefox download initiation
+- **clientName input unsanitized** (`src/pages/DiscoverPage.tsx`) — `onChange` now strips non-`[\w\s-]` chars; added `maxLength={100}`
+- **Depth toggle buttons not keyboard-accessible** (`src/pages/DiscoverPage.tsx`) — added `focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:outline-none` to toggle button classes
 
 ### Changed
 
