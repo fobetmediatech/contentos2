@@ -1,6 +1,9 @@
 /**
  * ChatPage — conversational entry point for the analysis pipeline.
  *
+ * All pipeline states (running, clarifying, done, error) now render inline
+ * within the chat — no navigation away to /progress or /discover/progress.
+ *
  * Layout (T11): rendered inside AppLayout's noPadding mode (h-[100dvh] flex flex-col).
  * T5:  send button + textarea disabled when status !== 'chatting'.
  * T6:  maxLength=500, char counter shown at 400+ chars.
@@ -10,20 +13,20 @@
  * T17: message area is flex justify-center (empty) → justify-end (has messages).
  * T18: input container uses pb-[env(safe-area-inset-bottom)].
  * T23: status === 'error' on mount → reset + back to chatting.
- * T-routing: watches discoveryStore.status to navigate to /discover/progress when
- *   location discovery pipeline fires; resets discoveryStore on mount if done/error
- *   to prevent re-navigation from a previous run.
  */
 
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, Bot, Send } from 'lucide-react'
+import { AlertTriangle, Bot, Send, CheckCircle, MapPin } from 'lucide-react'
 import { useAnalysisStore } from '../store/analysisStore'
 import { useDiscoveryStore } from '../store/discoveryStore'
 import { useKeysStore } from '../store/keysStore'
 import { useConversation } from '../hooks/useConversation'
+import { useCompetitorAnalysis } from '../hooks/useCompetitorAnalysis'
 import { ChatMessage, TypingIndicator } from '../components/ChatMessage'
+import { ProgressSteps } from '../components/ProgressSteps'
+import { ClarificationCard } from '../components/ClarificationCard'
 
 const EXAMPLE_PROMPTS = [
   'Indian food bloggers in Mumbai',
@@ -31,21 +34,51 @@ const EXAMPLE_PROMPTS = [
   'Personal finance influencers in Delhi',
 ]
 
+const DISCOVERY_STEPS = [
+  'Generating location hashtags',
+  'Scraping location-tagged posts',
+  'Fetching creator profiles',
+  'Filtering by location signals',
+  'Generating AI insights',
+]
+
 export function ChatPage() {
   const navigate = useNavigate()
   const analysisStore = useAnalysisStore()
-  const { status, conversationMessages, startChat, reset } = analysisStore
+  const {
+    status,
+    conversationMessages,
+    currentStep,
+    pendingDiscovery,
+    competitors,
+    niche,
+    error: analysisError,
+    startChat,
+    reset,
+    addMessage,
+    setStatus,
+  } = analysisStore
+
   const discoveryStatus = useDiscoveryStore((s) => s.status)
+  const discoveryStep = useDiscoveryStore((s) => s.currentStep)
+  const discoveryParams = useDiscoveryStore((s) => s.params)
+  const discoveryResults = useDiscoveryStore((s) => s.results)
   const discoveryError = useDiscoveryStore((s) => s.error)
   const resetDiscovery = useDiscoveryStore((s) => s.reset)
+
   const { isReady } = useKeysStore()
   const { sendMessage, confirmSeeds } = useConversation()
+  const { answerClarification, isPending: clarificationPending } = useCompetitorAnalysis()
 
   const [inputText, setInputText] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  // Guard: only emit one "analysis failed" chat message per error event
+  const analysisErrorHandledRef = useRef(false)
 
   const ready = isReady()
+  const isInPipeline = ['running', 'clarifying', 'done', 'error'].includes(status) ||
+    ['running', 'done', 'error'].includes(discoveryStatus)
   const canSend = status === 'chatting' && inputText.trim().length > 0 && ready
 
   // T7 + T23: initialise chat state on mount
@@ -59,46 +92,41 @@ export function ChatPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Mount reset: if a prior discovery run is in any non-idle state, clear it so we
-  // don't immediately navigate to /discover/progress (done/running) or get stuck with
-  // a locked confirming UI. 'error' is intentionally excluded here — the error-recovery
-  // effect below handles that case with proper error surfacing.
+  // Mount reset: clear stale discovery state so we don't immediately show old results
   useEffect(() => {
-    if (discoveryStatus === 'done' || discoveryStatus === 'running') {
+    if (discoveryStatus === 'done') {
       resetDiscovery()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Navigate to progress page when competitor analysis pipeline starts
+  // Analysis error → surface as chat message + return to chatting
   useEffect(() => {
-    if (status === 'running') {
-      navigate('/progress')
+    if (status === 'error' && analysisError && !analysisErrorHandledRef.current) {
+      analysisErrorHandledRef.current = true
+      addMessage({ role: 'assistant', content: analysisError, timestamp: Date.now(), type: 'error' })
+      setStatus('chatting')
     }
-  }, [status, navigate])
-
-  // Navigate to discovery progress when location discovery pipeline starts
-  useEffect(() => {
-    if (discoveryStatus === 'running') {
-      navigate('/discover/progress')
+    if (status !== 'error') {
+      analysisErrorHandledRef.current = false
     }
-  }, [discoveryStatus, navigate])
+  }, [status, analysisError, addMessage, setStatus])
 
-  // Recover from a failed discovery — surface as chat error message, then reset
+  // Discovery error → surface as chat message then reset
   useEffect(() => {
     if (discoveryStatus === 'error') {
       const errMsg = discoveryError ?? 'Discovery failed — please try again.'
-      analysisStore.addMessage({ role: 'assistant', content: errMsg, timestamp: Date.now(), type: 'error' })
-      analysisStore.setStatus('chatting')
+      addMessage({ role: 'assistant', content: errMsg, timestamp: Date.now(), type: 'error' })
+      setStatus('chatting')
       resetDiscovery()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [discoveryStatus, resetDiscovery])
 
-  // Scroll to bottom whenever messages change or typing indicator appears
+  // Scroll to bottom whenever messages change or pipeline state changes
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [conversationMessages, status])
+  }, [conversationMessages, status, discoveryStatus, currentStep, discoveryStep])
 
   const resetTextareaHeight = () => {
     if (textareaRef.current) {
@@ -129,8 +157,26 @@ export function ChatPage() {
     el.style.height = `${Math.min(el.scrollHeight, 120)}px`
   }
 
+  const handleStartOver = () => {
+    reset()
+    resetDiscovery()
+    startChat()
+  }
+
   const hasMessages = conversationMessages.length > 0
   const isDiscovering = status === 'discovering'
+
+  // Competitor analysis inline states
+  const isAnalysisRunning = status === 'running'
+  const isAnalysisClarifying = status === 'clarifying'
+  const isAnalysisDone = status === 'done'
+
+  // Location discovery inline states
+  const isDiscoveryRunning = discoveryStatus === 'running'
+  const isDiscoveryDone = discoveryStatus === 'done'
+
+  const showInlineContent = isAnalysisRunning || isAnalysisClarifying || isAnalysisDone ||
+    isDiscoveryRunning || isDiscoveryDone
 
   return (
     <div className="h-full flex flex-col bg-slate-50">
@@ -150,7 +196,7 @@ export function ChatPage() {
 
       {/* ── Message area ──────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto">
-        {!hasMessages ? (
+        {!hasMessages && !showInlineContent ? (
           // T17: centered empty / welcome state
           <div className="h-full flex flex-col items-center justify-center px-6 py-12">
             <div className="w-12 h-12 rounded-full bg-indigo-100 flex items-center justify-center mb-4">
@@ -181,9 +227,8 @@ export function ChatPage() {
             </div>
           </div>
         ) : (
-          // T17: messages pushed to bottom via flex spacer
+          // T17: messages + inline pipeline content pushed to bottom
           <div className="min-h-full flex flex-col px-4 pt-4 pb-2">
-            {/* Spacer pushes content toward the bottom */}
             <div className="flex-1" aria-hidden="true" />
 
             {/* T14: accessible message log */}
@@ -202,8 +247,109 @@ export function ChatPage() {
                 />
               ))}
 
-              {/* T12: animated typing indicator while discovering */}
+              {/* T12: animated typing indicator while parsing intent */}
               {isDiscovering && <TypingIndicator />}
+
+              {/* ── Inline competitor analysis progress ──────────────────── */}
+              {(isAnalysisRunning || isAnalysisClarifying) && (
+                <div className="w-full max-w-2xl mx-auto py-2">
+                  <p className="text-xs text-slate-500 text-center mb-4">
+                    {isAnalysisClarifying
+                      ? 'Help me rank the right accounts for your client.'
+                      : "Analyzing competitors — this takes up to 2 minutes…"}
+                  </p>
+                  <ProgressSteps
+                    currentStep={isAnalysisClarifying ? 5 : currentStep}
+                  />
+                  {isAnalysisClarifying && pendingDiscovery && (
+                    <ClarificationCard
+                      question={pendingDiscovery.clarificationQuestion}
+                      candidateCount={pendingDiscovery.candidateProfiles.length}
+                      onAnswer={answerClarification}
+                      disabled={clarificationPending}
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* ── Inline location discovery progress ───────────────────── */}
+              {isDiscoveryRunning && (
+                <div className="w-full max-w-2xl mx-auto py-2">
+                  <div className="flex items-center justify-center gap-2 mb-4">
+                    <MapPin size={14} className="text-teal-600" />
+                    <p className="text-xs text-slate-500">
+                      {discoveryParams
+                        ? `Discovering creators in ${discoveryParams.city}…`
+                        : 'Running location discovery…'}
+                    </p>
+                  </div>
+                  <ProgressSteps currentStep={discoveryStep} steps={DISCOVERY_STEPS} />
+                </div>
+              )}
+
+              {/* ── Competitor analysis done ──────────────────────────────── */}
+              {isAnalysisDone && (
+                <div className="w-full max-w-2xl mx-auto mt-2 rounded-xl border border-green-200 bg-green-50 p-5">
+                  <div className="flex items-start gap-3">
+                    <CheckCircle size={20} className="text-green-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-900">
+                        Analysis complete — found {competitors.length} competitor{competitors.length !== 1 ? 's' : ''}
+                        {niche ? ` in the ${niche} space` : ''}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Ranked by engagement, location fit, and partnership readiness.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 mt-4">
+                    <button
+                      onClick={() => navigate('/results')}
+                      className="flex-1 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                    >
+                      View full report →
+                    </button>
+                    <button
+                      onClick={handleStartOver}
+                      className="px-4 py-2 text-sm text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                    >
+                      Start over
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Location discovery done ───────────────────────────────── */}
+              {isDiscoveryDone && discoveryResults && (
+                <div className="w-full max-w-2xl mx-auto mt-2 rounded-xl border border-teal-200 bg-teal-50 p-5">
+                  <div className="flex items-start gap-3">
+                    <CheckCircle size={20} className="text-teal-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-900">
+                        Found {discoveryResults.length} creator{discoveryResults.length !== 1 ? 's' : ''}
+                        {discoveryParams ? ` in ${discoveryParams.city}` : ''}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Filtered for location signals and partnership readiness.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 mt-4">
+                    <button
+                      onClick={() => navigate('/discover/results')}
+                      className="flex-1 py-2 text-sm font-medium bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+                    >
+                      View full report →
+                    </button>
+                    <button
+                      onClick={handleStartOver}
+                      className="px-4 py-2 text-sm text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                    >
+                      Start over
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Anchor for auto-scroll */}
@@ -225,7 +371,9 @@ export function ChatPage() {
               onKeyDown={handleKeyDown}
               onInput={handleTextareaInput}
               placeholder={
-                status === 'discovering'
+                isInPipeline
+                  ? 'Analysis in progress…'
+                  : status === 'discovering'
                   ? 'Searching for accounts…'
                   : status === 'confirming'
                   ? 'Select an option above to continue…'
