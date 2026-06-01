@@ -136,6 +136,17 @@ React UI is written only after both binary gates have passed. Build pages in thi
 
 ---
 
+## 🟠 P1 Deferred — Conversational UX Polish
+
+Captured during `/ship` review (2026-06-01). Deferred from PLAN.md per plan completion audit.
+
+- [ ] **AD1 — "Quick picks:" label above confirm buttons** · Add a subtle label above the `<ChatOptions>` buttons when `status === 'confirming'` so users understand the buttons and typed input are equivalent entry points. **Priority:** P1. Effort: XS (~5 min).
+- [ ] **AD5 — Retry counter + escalation message** · Track failed `sendMessage` attempts in confirming state. After 2 failures, lock the textarea and show "Let's keep it simple — just pick one of the options." to guide the user back to the button UI. **Priority:** P1. Effort: S (~20 min).
+- [ ] **AD10 — Auto-focus textarea on confirming entry** · Add a `useEffect` that focuses the textarea when `status` transitions to `'confirming'` so users can type immediately without clicking. **Priority:** P1. Effort: XS (~5 min).
+- [ ] **Integration tests for confirming path** · `useConversation.sendMessage` during confirming: (1) calls `callGeminiConfirmReply` then `confirmSeeds`; (2) empty text is a no-op; (3) `isConfirmingPending` resets to `false` in the error path. Requires React hook test harness (RTL or vitest + jsdom). **Priority:** P1. Effort: M (~45 min).
+
+---
+
 ## 🟡 P2 Deferred — Discovery Polish
 
 Captured during `/ship` review (2026-05-29). Not blocking current PR.

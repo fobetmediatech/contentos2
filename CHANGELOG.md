@@ -4,6 +4,42 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.3.0] — 2026-06-01
+
+### Added
+
+- **Conversational pipeline UX** — chat input is now active during the confirming state, so users can type their direction instead of only clicking buttons
+  - Three-stage handler: pipeline-switch detection → heuristic keyword match (no Gemini call) → Gemini fallback for free-form text
+  - `detectPipelineSwitch()` — pure function detecting mid-confirmation intent to switch between competitor and discovery pipelines; exported for testability
+  - `heuristicConfirmMatch()` — pure function mapping typed keywords (micro, macro, brands, proceed) to option strings; checks specific options before generic affirmatives to prevent false positives
+  - `callGeminiConfirmReply()` — Gemini JSON mode fallback (temp 0, maxTokens 64) with `availableOptions` validation and safe fallback to `options[0]`
+  - `buildConfirmReplyPrompt()` — prompt builder with full JSON-safe escaping for user text
+  - `isConfirmingPending` state — disables textarea and buttons while Gemini mapping is in-flight, shows `TypingIndicator`
+  - Textarea activates during confirming with "Or describe what you want…" placeholder and indigo focus ring
+- **Pipeline Registry** (`src/tools/registry.ts`) — centralises `confirmMessage` and `confirmOptions` per pipeline type; `useActivePipeline` hook reads it to compute active pipeline state
+- **Richer follow-up context** — `buildFollowUpContext` now accepts account summaries (top 5 found accounts) so Gemini can reference specific handles when answering refinement questions
+- **Transparent pipeline routing** — confirm messages now name the pipeline type ("running **competitor analysis**" / "Running **location discovery**") and include a "Wrong pipeline?" hint
+- **Inline progress** — pipeline progress steps shown inline in the chat thread; removed separate `ProgressPage`, `DiscoverPage`, `DiscoveryProgressPage`, and `InputPage` — `/analyze` redirects to Chat
+- **`routingConfidence` intent field** — Gemini rates routing confidence (`high`/`medium`) for future UX differentiation; `.catch('high')` default keeps prior intents valid
+
+### Fixed
+
+- Intent parser: removed `thinkingConfig` that caused `400 INVALID_ARGUMENT`; added transient-failure retry logic
+- Intent parser: null-safe Zod schema guards + correct `GeminiError` argument order
+- Competitor prompt: niche derivation block prevents broad-keyword contamination of results
+- Blank results page: redirect moved to `useEffect`, guards empty hallucination-filtered output
+- Security: sanitize scraped Apify usernames before Gemini prompt injection; `buildConfirmReplyPrompt` uses `JSON.stringify` escaping (handles backslashes, control chars)
+- Regex hardening: `detectPipelineSwitch` no longer uses unbounded `find.*creator` wildcard (false positive on "find the right macro creator"); `\banalysis\b` removed from discovery→competitor trigger (false positive on "thanks for the analysis!")
+- Zombie AbortController: follow-up path now cancels the previous in-flight request before starting a new one
+
+### Tests
+
+- 358 unit tests across 17 test files (up from 61 at v0.1.0)
+- `conversationalUX.test.ts` — 52 tests for `detectPipelineSwitch` and `heuristicConfirmMatch` including regression tests for the CRITICAL ORDER constraint (specific options before generic affirmatives)
+- `useActivePipeline.test.ts` — 45 tests for pipeline state computation, precedence, and `progressLabel` fallbacks
+- `registry.test.ts` — 23 tests for `PIPELINE_REGISTRY` shape and invariants
+- `prompts.test.ts` — extended with `buildConfirmReplyPrompt` and `buildFollowUpContext` coverage including prompt-injection sanitization
+
 ## [0.2.0] — 2026-05-27
 
 ### Added
