@@ -185,7 +185,7 @@ export function ResultsPage() {
                 onClick={handleCopy}
                 className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-[#C4A882] border border-[rgba(245,237,214,0.08)] rounded-lg hover:border-[rgba(245,237,214,0.15)] hover:text-[#F5EDD6] transition-colors"
               >
-                {copied ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
+                {copied ? <Check size={14} className="text-success" /> : <Copy size={14} />}
                 {copied ? 'Copied!' : 'Copy for Slides'}
               </button>
               <button

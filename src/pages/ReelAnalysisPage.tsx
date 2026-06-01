@@ -262,6 +262,11 @@ function ReelCard({ reel, analysis }: { reel: ReelData; analysis?: ReelAnalysis 
         {/* Views */}
         <p className="text-xs text-[#7A6A54] font-mono">{formatViews(reel.videoViewCount)} views</p>
 
+        {/* Verbatim hook line (HookMap-style) */}
+        {analysis?.openingLine && (
+          <p className="text-xs text-[#F5EDD6] mt-1 leading-snug italic">"{analysis.openingLine}"</p>
+        )}
+
         {/* Hook archetype chip */}
         {analysis && (
           <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded-full bg-[#A78BFA]/10 text-[#A78BFA] border border-[#A78BFA]/20">

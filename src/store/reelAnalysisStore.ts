@@ -29,6 +29,7 @@ export interface ReelData {
 export interface ReelAnalysis {
   hookArchetype: string
   secondaryArchetype?: string
+  openingLine?: string        // the verbatim/implied hook line that stops the scroll (HookMap-style)
   commentsLikesRatio: number  // computed client-side (commentsCount / Math.max(1, likesCount))
   retentionMechanism: string
   psychologyTrigger: string

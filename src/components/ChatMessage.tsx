@@ -7,7 +7,7 @@
  *   error    — red bubble with retry affordance
  *
  * T12: animated typing indicator for 'discovering' state
- * T13: error bubble variant (bg-red-50 border-red-200)
+ * T13: error bubble variant (warm danger tokens — rgba(224,92,92,…))
  * T15: Lucide Bot/User icon circles instead of emoji
  */
 

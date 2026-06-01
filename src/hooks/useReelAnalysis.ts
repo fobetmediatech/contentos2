@@ -3,7 +3,7 @@ import pLimit from 'p-limit'
 import { useReelAnalysisStore } from '../store/reelAnalysisStore'
 import { useKeysStore } from '../store/keysStore'
 import { scrapeTopReels, NoReelsError } from '../lib/reelScraper'
-import { analyzeReel, synthesizeNiche, buildPerCreatorSummary } from '../lib/reelAnalyzer'
+import { analyzeReel, synthesizeNiche, buildPerCreatorSummary, computeBenchmarks } from '../lib/reelAnalyzer'
 
 // Cap Gemini concurrency across all creators in a run.
 const geminiLimiter = pLimit(5)
@@ -99,18 +99,20 @@ export function useReelAnalysis() {
     // Synthesis — explicit, after every creator reached a terminal state.
     // Read fresh from the store to avoid a stale closure over creatorStates.
     const states = useReelAnalysisStore.getState().creatorStates
-    const doneSummaries = Object.values(states)
-      .filter((s) => s.status === 'done')
-      .map((s) => buildPerCreatorSummary(s.handle, s.analyses, s.reels))
+    const doneCreators = Object.values(states).filter((s) => s.status === 'done')
+    const doneSummaries = doneCreators.map((s) => buildPerCreatorSummary(s.handle, s.analyses, s.reels))
 
     if (doneSummaries.length === 0) {
       setSynthesisError('All creators failed — no reel data to synthesize. Try more active creators.')
       return
     }
 
+    // M5: benchmarks computed in code from the real reel metrics, not the LLM.
+    const benchmarks = computeBenchmarks(doneCreators.flatMap((s) => s.reels))
+
     setSynthesisStatus('running')
     try {
-      const output = await synthesizeNiche(doneSummaries, geminiKey, controller.signal)
+      const output = await synthesizeNiche(doneSummaries, geminiKey, benchmarks, controller.signal)
       if (controller.signal.aborted) return
       setSynthesis(output)
     } catch {

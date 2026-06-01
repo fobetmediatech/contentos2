@@ -33,6 +33,7 @@ export async function analyzeReel(
   const raw = await callGeminiWithSchema<{
     hookArchetype: string
     secondaryArchetype?: string
+    openingLine?: string
     retentionMechanism: string
     psychologyTrigger: string
     replicationTemplate: string
@@ -44,6 +45,7 @@ export async function analyzeReel(
   return {
     hookArchetype: raw.hookArchetype,
     secondaryArchetype: raw.secondaryArchetype,
+    openingLine: raw.openingLine,
     commentsLikesRatio,
     retentionMechanism: raw.retentionMechanism,
     psychologyTrigger: raw.psychologyTrigger,
@@ -64,14 +66,32 @@ export async function analyzeReel(
 export async function synthesizeNiche(
   summaries: PerCreatorSummary[],
   geminiKey: string,
+  benchmarks: SynthesisOutput['benchmarks'],
   signal?: AbortSignal,
 ): Promise<SynthesisOutput> {
   const prompt = buildSynthesisPrompt(summaries)
 
-  return callGeminiWithSchema<SynthesisOutput>(geminiKey, prompt, SYNTHESIS_SCHEMA, {
-    temperature: 0.4,
-    signal,
-  })
+  // Gemini returns ONLY the qualitative synthesis; benchmarks are computed in code (M5).
+  const raw = await callGeminiWithSchema<{
+    topPatterns?: Array<{ archetype?: string; count?: number; example?: string }>
+    replicateTips?: string[]
+    avoidTips?: string[]
+  }>(geminiKey, prompt, SYNTHESIS_SCHEMA, { temperature: 0.4, signal })
+
+  // M4: coerce/guard the LLM output so a missing or mistyped field can't crash the UI.
+  const topPatterns = Array.isArray(raw.topPatterns)
+    ? raw.topPatterns
+        .filter((p): p is { archetype: string; count?: number; example?: string } => !!p && typeof p.archetype === 'string')
+        .map((p) => ({ archetype: p.archetype, count: Number(p.count) || 0, example: p.example ?? '' }))
+    : []
+  const replicateTips = Array.isArray(raw.replicateTips)
+    ? raw.replicateTips.filter((t): t is string => typeof t === 'string')
+    : []
+  const avoidTips = Array.isArray(raw.avoidTips)
+    ? raw.avoidTips.filter((t): t is string => typeof t === 'string')
+    : []
+
+  return { topPatterns, benchmarks, replicateTips, avoidTips }
 }
 
 // ---------------------------------------------------------------------------
@@ -126,6 +146,28 @@ export function buildPerCreatorSummary(
     medianViews,
     commentsLikesRatios,
     reelCount,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// computeBenchmarks
+// ---------------------------------------------------------------------------
+
+/**
+ * Compute niche benchmarks from raw reel metrics — deterministically, in code.
+ * M5: this was previously asked of the LLM, which is unreliable at arithmetic and
+ * rendered its guesses as precise percentages. Code does the math; the LLM does
+ * the pattern recognition.
+ */
+export function computeBenchmarks(reels: ReelData[]): SynthesisOutput['benchmarks'] {
+  if (reels.length === 0) return { medianViews: 0, likesViewsRatio: 0, commentsLikesRatio: 0 }
+  const totalViews = reels.reduce((sum, r) => sum + r.videoViewCount, 0)
+  const totalLikes = reels.reduce((sum, r) => sum + r.likesCount, 0)
+  const totalComments = reels.reduce((sum, r) => sum + r.commentsCount, 0)
+  return {
+    medianViews: computeMedian(reels.map((r) => r.videoViewCount)),
+    likesViewsRatio: totalViews > 0 ? totalLikes / totalViews : 0,
+    commentsLikesRatio: totalLikes > 0 ? totalComments / totalLikes : 0,
   }
 }
 

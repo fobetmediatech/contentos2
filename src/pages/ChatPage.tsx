@@ -383,9 +383,10 @@ export function ChatPage() {
                     </div>
                   </div>
 
-                  {/* AI summary */}
+                  {/* AI summary — violet AI tint + Gemini eyebrow per DESIGN.md */}
                   {summary && (
                     <div className="px-4 py-3 bg-[rgba(167,139,250,0.08)] border border-[#A78BFA]/20 rounded-xl">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-[#A78BFA] mb-1">✦ Gemini</p>
                       <p className="text-sm text-[#C4B5FD] leading-relaxed">{summary}</p>
                     </div>
                   )}
@@ -575,6 +576,10 @@ export function ChatPage() {
                     synthesisStatus={synthesisStatus}
                     synthesis={synthesis}
                     synthesisError={synthesisError}
+                    onSuggest={(text) => {
+                      setInputText(text)
+                      textareaRef.current?.focus()
+                    }}
                   />
 
                   {isReelDone && (

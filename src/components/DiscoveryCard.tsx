@@ -124,7 +124,7 @@ export function DiscoveryCard({ result, profile, cohortAvgER, isSelected, onSele
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="font-semibold text-[#F5EDD6] text-sm">@{result.username}</span>
             {profile?.verified && (
-              <BadgeCheck size={14} className="text-blue-500 flex-shrink-0" />
+              <BadgeCheck size={14} className="text-[#C4A882] flex-shrink-0" />
             )}
             <LocationBadge confidence={result.locationConfidence} />
           </div>
@@ -144,7 +144,7 @@ export function DiscoveryCard({ result, profile, cohortAvgER, isSelected, onSele
         <div className="mt-3 flex items-baseline gap-1.5">
           <span
             className={`text-xl font-bold tabular-nums ${
-              erAboveAvg ? 'text-green-600' : 'text-amber-600'
+              erAboveAvg ? 'text-success' : 'text-warning'
             }`}
           >
             {er.toFixed(2)}%

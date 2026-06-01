@@ -39,6 +39,7 @@ export const REEL_ANALYSIS_SCHEMA = {
       type: 'string',
       enum: [...HOOK_ARCHETYPES],
     },
+    openingLine: { type: 'string' },
     retentionMechanism: { type: 'string' },
     psychologyTrigger: { type: 'string' },
     replicationTemplate: { type: 'string' },
@@ -67,19 +68,11 @@ export const SYNTHESIS_SCHEMA = {
         required: ['archetype', 'count', 'example'],
       },
     },
-    benchmarks: {
-      type: 'object',
-      properties: {
-        medianViews: { type: 'number' },
-        likesViewsRatio: { type: 'number' },
-        commentsLikesRatio: { type: 'number' },
-      },
-      required: ['medianViews', 'likesViewsRatio', 'commentsLikesRatio'],
-    },
     replicateTips: { type: 'array', items: { type: 'string' } },
     avoidTips: { type: 'array', items: { type: 'string' } },
   },
-  required: ['topPatterns', 'benchmarks', 'replicateTips', 'avoidTips'],
+  // benchmarks are computed client-side from real reel metrics (M5) — not asked of the LLM.
+  required: ['topPatterns', 'replicateTips', 'avoidTips'],
 }
 
 // ---------------------------------------------------------------------------
@@ -141,6 +134,7 @@ Analyse the reel data below and return a structured classification.
 **Rules:**
 - \`hookArchetype\` MUST be one of the exact enum values in the taxonomy above.
 - \`secondaryArchetype\` is optional — only populate if a second archetype is clearly present.
+- \`openingLine\`: the verbatim hook — the first line of the caption (or the implied on-screen opening line) that stops the scroll. Quote it directly when it is present in the caption; otherwise reconstruct the most likely opening line. Keep it under ~120 characters.
 - \`retentionMechanism\`: Explain in one sentence what keeps viewers watching past the hook.
 - \`psychologyTrigger\`: Name the core psychological driver (e.g. FOMO, identity, curiosity, social proof).
 - \`replicationTemplate\`: Provide a fill-in-the-blank hook sentence a creator could adapt.
@@ -185,16 +179,12 @@ Given the per-creator reel summaries below, synthesise niche-level insights:
    with a count of how many creator summaries feature that archetype as dominant or second-dominant,
    and a short example hook sentence for each.
 
-2. **Benchmarks** — compute from all creators combined:
-   - \`medianViews\`: median of all per-creator medianViews values
-   - \`likesViewsRatio\`: average of (topReelViews-normalised likes proxy; use medianViews if topReelViews unavailable)
-     — compute as mean of (likesCount / views) across creators where possible; otherwise estimate from
-     the distribution in the data
-   - \`commentsLikesRatio\`: compute as mean across all commentsLikesRatios arrays flattened
+2. **3 replicate tips** — concrete, actionable advice for a new creator entering this niche.
 
-3. **3 replicate tips** — concrete, actionable advice for a new creator entering this niche.
+3. **2 avoid tips** — patterns or mistakes that appear to correlate with low performance in this data.
 
-4. **2 avoid tips** — patterns or mistakes that appear to correlate with low performance in this data.
+Do NOT compute numeric benchmarks — view/like/comment ratios are calculated separately
+from the raw metrics, so omit them entirely.
 
 ## Per-Creator Summaries (JSON)
 

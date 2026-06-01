@@ -17,15 +17,18 @@ interface Props {
   synthesisStatus: 'idle' | 'running' | 'done' | 'failed'
   synthesis: SynthesisOutput | null
   synthesisError: string | null
+  /** Prefill the chat input — used by the "remix for my niche" button to hand off
+   *  the winning patterns to the content copilot. */
+  onSuggest?: (text: string) => void
 }
 
-export function InlineReelResults({ handles, creatorStates, synthesisStatus, synthesis, synthesisError }: Props) {
+export function InlineReelResults({ handles, creatorStates, synthesisStatus, synthesis, synthesisError, onSuggest }: Props) {
   return (
     <div className="w-full mt-2">
       {synthesisStatus === 'running' && <SynthesisLoadingCard />}
-      {synthesisStatus === 'done' && synthesis && <SynthesisCard synthesis={synthesis} />}
+      {synthesisStatus === 'done' && synthesis && <SynthesisCard synthesis={synthesis} onSuggest={onSuggest} />}
       {synthesisStatus === 'failed' && (
-        <div className="mb-4 px-4 py-3 bg-[#2C1818] border border-red-900/40 rounded-xl text-sm text-red-400">
+        <div className="mb-4 px-4 py-3 bg-[#2C1818] border border-danger/30 rounded-xl text-sm text-danger">
           Synthesis failed: {synthesisError ?? 'Unknown error'}
         </div>
       )}
@@ -46,7 +49,7 @@ function SynthesisLoadingCard() {
   )
 }
 
-function SynthesisCard({ synthesis }: { synthesis: SynthesisOutput }) {
+function SynthesisCard({ synthesis, onSuggest }: { synthesis: SynthesisOutput; onSuggest?: (text: string) => void }) {
   return (
     <div className="mb-8 px-5 py-5 bg-[#1E1A2E] border border-[#A78BFA]/20 rounded-xl">
       <h2 className="text-lg font-semibold text-[#F5EDD6] mb-4">Hook patterns dominating this niche</h2>
@@ -87,16 +90,32 @@ function SynthesisCard({ synthesis }: { synthesis: SynthesisOutput }) {
           </ul>
         </div>
         <div>
-          <h3 className="text-xs font-semibold text-red-400 uppercase tracking-wide mb-2">Avoid</h3>
+          <h3 className="text-xs font-semibold text-danger uppercase tracking-wide mb-2">Avoid</h3>
           <ul className="space-y-2">
             {synthesis.avoidTips.map((tip, i) => (
               <li key={i} className="flex items-start gap-2 text-sm text-[#C4A882]">
-                <span className="text-red-500 mt-0.5">–</span>{tip}
+                <span className="text-danger mt-0.5">–</span>{tip}
               </li>
             ))}
           </ul>
         </div>
       </div>
+
+      {/* Remix → hand the winning patterns to the content copilot */}
+      {onSuggest && synthesis.topPatterns.length > 0 && (
+        <button
+          onClick={() =>
+            onSuggest(
+              `Write me 5 reel hooks for my niche using these winning patterns: ${synthesis.topPatterns
+                .map((p) => p.archetype)
+                .join(', ')}.`,
+            )
+          }
+          className="mt-5 w-full px-4 py-2.5 text-sm font-semibold rounded-xl bg-[#A78BFA]/15 text-[#C4B5FD] border border-[#A78BFA]/30 hover:bg-[#A78BFA]/25 transition-colors"
+        >
+          ✦ Generate hooks like these for my niche
+        </button>
+      )}
     </div>
   )
 }
@@ -108,8 +127,8 @@ function CreatorSection({ state }: { state: CreatorAnalysisState }) {
 
   if (state.status === 'failed') {
     return (
-      <div className="mb-4 px-4 py-3 bg-[#2C1818] border border-red-900/40 rounded-xl text-sm text-red-400">
-        @{state.handle} — analysis failed: {state.error ?? 'Unknown error'}. Check if the account is public.
+      <div className="mb-4 px-4 py-3 bg-[#2C1818] border border-danger/30 rounded-xl text-sm text-danger">
+        @{state.handle} — {state.error ?? 'analysis failed'}
       </div>
     )
   }
@@ -167,6 +186,9 @@ function ReelCard({ reel, analysis }: { reel: ReelData; analysis?: ReelAnalysis 
       )}
       <div className="p-3">
         <p className="text-xs text-[#7A6A54] font-mono">{formatViews(reel.videoViewCount)} views</p>
+        {analysis?.openingLine && (
+          <p className="text-xs text-[#F5EDD6] mt-1 leading-snug italic">"{analysis.openingLine}"</p>
+        )}
         {analysis && (
           <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded-full bg-[#A78BFA]/10 text-[#A78BFA] border border-[#A78BFA]/20">
             {analysis.hookArchetype}

@@ -84,7 +84,7 @@ export function CompetitorCard({ competitor, profile, cohortAvgER, isSelected, o
           <div className="flex items-center gap-1.5">
             <span className="font-semibold text-[#F5EDD6] text-sm">@{competitor.username}</span>
             {profile?.verified && (
-              <BadgeCheck size={14} className="text-blue-500 flex-shrink-0" />
+              <BadgeCheck size={14} className="text-[#C4A882] flex-shrink-0" />
             )}
           </div>
           {profile?.fullName && profile.fullName !== competitor.username && (
