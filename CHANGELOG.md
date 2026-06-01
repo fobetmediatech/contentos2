@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.3.0.2] — 2026-06-01
+
+### Added
+
+- **Location discovery quality gate** — when a city search finds fewer than 4 location-matched creators, the tool automatically runs a second hashtag batch (excluding already-tried hashtags) to expand the pool before AI ranking. The done card shows a note when expansion ran.
+- **Handle fast-path** — when you type `@handle` mentions directly in a message (e.g. "analyze @fitgirl and @delhibakes"), the tool skips the hashtag-discovery Apify run entirely and goes straight to confirming those handles as seeds. Faster and more reliable for direct competitor lookups.
+- **Design system** — added `DESIGN.md` as the canonical design source of truth (Chai Dark aesthetic, Instrument Serif + Outfit + DM Mono typography, saffron orange accent).
+
+### Fixed
+
+- Discovery results done-card no longer shows garbled text when expansion ran — expansion detail text is cleared when results are set, so the city name renders correctly.
+- Competitor sparse-niche detection now correctly reports when a niche has fewer than 8 discoverable accounts, without conflating "sparse" with "search expanded."
+- `@handle` extraction now applies the same 50-character length cap as Gemini's own handle validation, preventing oversized handles reaching Apify.
+- Removed stale `console.log` / `console.warn` calls from the quality-gate expansion path.
+- `MIN_LOCATION_RESULTS` constant exported from the hook so the done-card copy stays in sync if the threshold ever changes.
+- `MIN_COMPETITOR_RESULTS` elevated to module scope for the same reason.
+
+### Changed
+
+- 420 unit tests (up from 377) — added coverage for quality-gate expansion (catch path, dedup merge), handle fast-path (gemini vs client precedence, dedup, 5-handle cap), `setDidExpand` / `stepProgressDetail` store fields, step-6 dynamic labels in `useActivePipeline`, and `hashtagGenerator.excludeHashtags` param.
+
 ## [0.3.0.1] — 2026-06-01
 
 ### Fixed
