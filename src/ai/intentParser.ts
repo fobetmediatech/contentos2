@@ -87,8 +87,30 @@ async function fetchIntent(
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
         temperature: 0.2,
-        maxOutputTokens: 512,
+        maxOutputTokens: 1024,
         responseMimeType: 'application/json',
+        // responseSchema enforces JSON grammar at the token level — prevents unquoted keys,
+        // trailing commas, and other malformed output that JSON.parse can't handle.
+        // All fields are optional at the schema level; Zod validation enforces the
+        // semantic invariants (e.g. niche is required when needsClarification is false).
+        responseSchema: {
+          type: 'object',
+          properties: {
+            needsClarification: { type: 'boolean' },
+            question: { type: 'string' },
+            niche: { type: 'string' },
+            location: { type: 'string' },
+            knownHandles: { type: 'array', items: { type: 'string' } },
+            depth: { type: 'string', enum: ['standard', 'deep'] },
+            clientName: { type: 'string' },
+            pipelineType: { type: 'string', enum: ['competitor', 'discovery'] },
+            routingConfidence: { type: 'string', enum: ['high', 'medium'] },
+          },
+          required: ['needsClarification'],
+        },
+        // thinkingBudget: 0 disables internal reasoning for this deterministic
+        // classification task. Only valid for gemini-2.5-* models — omit for others.
+        ...(MODEL.includes('2.5') ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
       },
     }),
     signal,
@@ -124,6 +146,12 @@ async function fetchIntent(
   const candidate = json?.candidates?.[0]
   if (!candidate) {
     throw new GeminiError('UNKNOWN', 'Gemini returned empty response for intent parsing', false)
+  }
+
+  // MAX_TOKENS means the model stopped mid-output — JSON will be truncated and unparseable.
+  // Short-circuit before JSON.parse to give a clean error instead of a vague SyntaxError.
+  if (candidate.finishReason === 'MAX_TOKENS') {
+    throw new GeminiError('PARSE_ERROR', 'Intent response was truncated (MAX_TOKENS). Increase maxOutputTokens.', false)
   }
 
   const text = (candidate.content?.parts ?? [])
@@ -177,7 +205,14 @@ async function callGeminiForIntent(
 
   // All retries exhausted
   if (lastErr instanceof GeminiError) throw lastErr
-  throw new GeminiError('UNKNOWN', `Network error: ${String(lastErr)}`, false)
+  // SyntaxError = Gemini returned malformed JSON (not a network failure).
+  // Use PARSE_ERROR so useConversation shows the correct message.
+  const isParse = lastErr instanceof SyntaxError
+  throw new GeminiError(
+    isParse ? 'PARSE_ERROR' : 'UNKNOWN',
+    isParse ? `Gemini returned invalid JSON: ${String(lastErr)}` : `Network error: ${String(lastErr)}`,
+    false,
+  )
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────

@@ -238,7 +238,7 @@ export function useConversation() {
       // know what's running. Escape hatch hint is shown statically in the UI (AD4).
       store.addMessage({
         role: 'assistant',
-        content: `Found ${seeds.length} **${niche}** accounts — running **competitor analysis**. Pick a direction:`,
+        content: `Found **${seeds.length} ${niche} accounts** via hashtag search: ${seeds.slice(0, 4).map(s => '@' + s).join(', ')}${seeds.length > 4 ? ` + ${seeds.length - 4} more` : ''}. Which direction should I focus on?`,
         timestamp: Date.now(),
         type: 'options',
         options: [
@@ -542,6 +542,8 @@ export function useConversation() {
             errorContent = 'Gemini API key is invalid or missing. Go to Settings to update it.'
           } else if (err.code === 'RATE_LIMITED') {
             errorContent = 'Gemini rate limit hit — wait a few seconds and try again.'
+          } else if (err.code === 'PARSE_ERROR') {
+            errorContent = 'Gemini returned an unexpected response — try again.'
           } else if (err.message.toLowerCase().includes('network')) {
             errorContent = 'Network error — check your connection and try again.'
           }
