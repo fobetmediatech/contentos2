@@ -211,3 +211,14 @@ _38 tasks total (12 CEO-phase + 2 pre-L1 gates + 11 design-phase + 13 eng-phase)
 ## Future: Client Handoff
 
 - [ ] **UI rendering tests** — Add React Testing Library tests for `ResultsPage` provenance line (`candidateCount` interpolation) and confirming message format. Deferred: internal pre-call tool; manual QA is sufficient until the tool is handed off to clients. Context: store tests (T6 in UX Transparency Layer) cover data path but not JSX rendering. Prerequisite: React Testing Library + mock store setup (~1h one-time). Triggered by: `plan-eng-review` D7 / outside voice finding.
+
+---
+
+## Reel Analysis — Deferred (added by /plan-eng-review 2026-06-01)
+
+- [ ] **REEL-CACHE-1** · `localStorage` cache keyed by `{handle}-{date}` with 24h TTL for reel analysis results.
+  - **Why:** Without caching, every page refresh re-runs all Apify scrapes (90-180s per creator) and all Gemini calls (50 calls per 5-creator run = 10+ min total). A 24h cache turns a repeat visit into an instant load.
+  - **How:** On `ReelAnalysisPage` mount, check `localStorage.getItem('reel-analysis-{handle}-{YYYY-MM-DD}')` before firing Apify. If hit, inject into store directly and skip scrape + Gemini analysis. On completion, write `ReelData[]` + `ReelAnalysis[]` to the same key with a timestamp.
+  - **Scope:** `reelScraper.ts` for the cache read/write wrapper; `ReelAnalysisPage.tsx` for cache-aware mount logic.
+  - **Blocked by:** v1 feature shipped.
+  - **Priority:** High — cost and time per run make caching the highest-leverage follow-up.

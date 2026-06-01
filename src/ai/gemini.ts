@@ -67,50 +67,56 @@ interface GeminiResponse {
   }
 }
 
-// ----- Core fetch with retry -----
+// ----- Generic schema-constrained Gemini call with retry -----
 
-async function callGemini(
+/**
+ * Low-level helper for all JSON-mode Gemini calls.
+ *
+ * Builds and POSTs to Gemini with a caller-supplied responseSchema, applies
+ * 3-attempt exponential backoff on 429, filters thought parts, handles
+ * MAX_TOKENS and safety blocks, and JSON-parses the result as T.
+ *
+ * Use this for every structured-output call. For plain-text output
+ * (conversational follow-ups) keep using direct fetch — see callGeminiFollowUp.
+ */
+export async function callGeminiWithSchema<T>(
   apiKey: string,
   prompt: string,
-  signal?: AbortSignal,
+  schema: Record<string, unknown>,          // responseSchema object
+  options?: {
+    temperature?: number                    // default: 0.3
+    maxOutputTokens?: number               // default: 8192
+    thinkingBudget?: number               // when set, adds thinkingConfig
+    signal?: AbortSignal
+  },
   attempt = 0,
-): Promise<string> {
+): Promise<T> {
+  const {
+    temperature = 0.3,
+    maxOutputTokens = 8192,
+    thinkingBudget,
+    signal,
+  } = options ?? {}
+
   const url = `${GEMINI_BASE}/models/${MODEL}:generateContent?key=${apiKey}`
+
+  const generationConfig: Record<string, unknown> = {
+    temperature,
+    maxOutputTokens,
+    responseMimeType: 'application/json',
+    responseSchema: schema,
+  }
+
+  if (thinkingBudget !== undefined) {
+    generationConfig.thinkingConfig = { thinkingBudget }
+  }
 
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.3,       // low temp = more consistent JSON output
-        maxOutputTokens: 16384, // 8192 can truncate with 50-80 candidate pool + verbose rationales
-        responseMimeType: 'application/json',
-        // responseSchema constrains output at generation time — prevents Gemini from adding
-        // JSON comments, extra fields, or malformed tokens that would break JSON.parse.
-        responseSchema: {
-          type: 'object',
-          properties: {
-            derivedNiche: { type: 'string' },
-            niche: { type: 'string' },
-            summary: { type: 'string' },
-            competitors: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  username: { type: 'string' },
-                  category: { type: 'string', enum: ['top', 'trending'] },
-                  rank: { type: 'integer' },
-                  rationale: { type: 'string' },
-                },
-                required: ['username', 'category', 'rank', 'rationale'],
-              },
-            },
-          },
-          required: ['niche', 'summary', 'competitors'],
-        },
-      },
+      generationConfig,
     }),
     signal,
   })
@@ -125,7 +131,7 @@ async function callGemini(
       if (attempt < 3) {
         const backoff = Math.pow(2, attempt) * 1000 // 1s, 2s, 4s
         await sleep(backoff)
-        return callGemini(apiKey, prompt, signal, attempt + 1)
+        return callGeminiWithSchema<T>(apiKey, prompt, schema, options, attempt + 1)
       }
       throw new GeminiError('RATE_LIMITED', 'Gemini API rate limit exceeded after 3 retries.', false)
     }
@@ -140,6 +146,16 @@ async function callGemini(
 
     if (res.status === 503 || status === 'UNAVAILABLE') {
       throw new GeminiError('UNAVAILABLE', 'Gemini service temporarily unavailable.', true)
+    }
+
+    // Auth error detection (mirrors callGeminiFollowUp pattern)
+    const isAuthError =
+      res.status === 401 ||
+      status === 'UNAUTHENTICATED' ||
+      status === 'PERMISSION_DENIED' ||
+      (body.error?.message ?? '').toLowerCase().includes('api key')
+    if (isAuthError) {
+      throw new GeminiError('AUTH_ERROR', 'Invalid Gemini API key. Check Settings.', false)
     }
 
     throw new GeminiError('UNKNOWN', `Unexpected Gemini error: ${res.status} ${body.error?.message}`, true)
@@ -178,27 +194,97 @@ async function callGemini(
     throw new GeminiError('SAFETY_BLOCK', 'Gemini returned an empty response.', false)
   }
 
-  return text
-}
-
-// ----- Parse Gemini JSON output -----
-
-function parseAnalysisOutput(raw: string): AnalysisOutput {
   // Strip markdown code fences if present (some models add them despite responseMimeType)
-  const cleaned = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim()
+  const cleaned = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim()
 
   try {
-    const parsed = JSON.parse(cleaned) as AnalysisOutput
-    if (!parsed.competitors || !Array.isArray(parsed.competitors)) {
-      throw new Error('Missing competitors array')
-    }
-    return parsed
+    return JSON.parse(cleaned) as T
   } catch (err) {
     throw new GeminiError(
       'PARSE_ERROR',
       `Could not parse Gemini response as JSON: ${(err as Error).message}`,
       false,
     )
+  }
+}
+
+// ----- Competitor analysis schema -----
+
+const COMPETITOR_SCHEMA = {
+  type: 'object',
+  properties: {
+    derivedNiche: { type: 'string' },
+    niche: { type: 'string' },
+    summary: { type: 'string' },
+    competitors: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          username: { type: 'string' },
+          category: { type: 'string', enum: ['top', 'trending'] },
+          rank: { type: 'integer' },
+          rationale: { type: 'string' },
+        },
+        required: ['username', 'category', 'rank', 'rationale'],
+      },
+    },
+  },
+  required: ['niche', 'summary', 'competitors'],
+}
+
+// ----- Discovery analysis schema -----
+
+const DISCOVERY_SCHEMA = {
+  type: 'object',
+  properties: {
+    niche: { type: 'string' },
+    results: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          username: { type: 'string' },
+          category: { type: 'string', enum: ['top', 'trending'] },
+          rank: { type: 'integer' },
+          rationale: { type: 'string' },
+          specialties: { type: 'array', items: { type: 'string' } },
+          contentFocus: { type: 'string' },
+          partnershipReady: { type: 'boolean' },
+          locationConfidence: { type: 'string', enum: ['confirmed', 'likely', 'unknown'] },
+        },
+        required: ['username', 'category', 'rank', 'rationale', 'specialties', 'contentFocus', 'partnershipReady', 'locationConfidence'],
+      },
+    },
+  },
+  required: ['niche', 'results'],
+}
+
+// ----- Parse helpers (post-processing after JSON parse) -----
+
+function validateAnalysisOutput(parsed: AnalysisOutput): AnalysisOutput {
+  if (!parsed.competitors || !Array.isArray(parsed.competitors)) {
+    throw new GeminiError('PARSE_ERROR', 'Missing competitors array', false)
+  }
+  return parsed
+}
+
+function coerceDiscoveryOutput(parsed: DiscoveryOutput): DiscoveryOutput {
+  if (!parsed.results || !Array.isArray(parsed.results)) {
+    throw new GeminiError('PARSE_ERROR', 'Missing results array', false)
+  }
+  // Coerce per-item fields: Gemini structured output can return null for array/string
+  // fields even with responseSchema (best-effort enforcement). Defensive defaults here
+  // prevent downstream crashes in DiscoveryCard and export functions.
+  return {
+    ...parsed,
+    results: parsed.results.map((r) => ({
+      ...r,
+      rank: Number(r.rank) || 0,
+      specialties: Array.isArray(r.specialties) ? r.specialties : [],
+      contentFocus: r.contentFocus ?? '',
+      rationale: r.rationale ?? '',
+    })),
   }
 }
 
@@ -222,41 +308,16 @@ export async function analyzeCompetitors(
   clarificationAnswer?: string,
 ): Promise<AnalysisOutput> {
   const prompt = buildCompetitorPrompt(inputProfiles, candidateProfiles, nicheContext, clarificationAnswer)
-  const raw = await callGemini(geminiKey, prompt, signal)
-  return parseAnalysisOutput(raw)
+  const parsed = await callGeminiWithSchema<AnalysisOutput>(
+    geminiKey,
+    prompt,
+    COMPETITOR_SCHEMA,
+    { temperature: 0.3, maxOutputTokens: 16384, signal },
+  )
+  return validateAnalysisOutput(parsed)
 }
 
 // ----- Discovery analysis -----
-
-/** Parse Gemini JSON for the discovery output shape */
-function parseDiscoveryOutput(raw: string): DiscoveryOutput {
-  const cleaned = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim()
-  try {
-    const parsed = JSON.parse(cleaned) as DiscoveryOutput
-    if (!parsed.results || !Array.isArray(parsed.results)) {
-      throw new Error('Missing results array')
-    }
-    // Coerce per-item fields: Gemini structured output can return null for array/string
-    // fields even with responseSchema (best-effort enforcement). Defensive defaults here
-    // prevent downstream crashes in DiscoveryCard and export functions.
-    return {
-      ...parsed,
-      results: parsed.results.map((r) => ({
-        ...r,
-        rank: Number(r.rank) || 0,
-        specialties: Array.isArray(r.specialties) ? r.specialties : [],
-        contentFocus: r.contentFocus ?? '',
-        rationale: r.rationale ?? '',
-      })),
-    }
-  } catch (err) {
-    throw new GeminiError(
-      'PARSE_ERROR',
-      `Could not parse Gemini discovery response: ${(err as Error).message}`,
-      false,
-    )
-  }
-}
 
 /**
  * Run location discovery analysis using Gemini.
@@ -276,77 +337,13 @@ export async function analyzeDiscovery(
   businessCount?: number,
 ): Promise<DiscoveryOutput> {
   const prompt = buildDiscoveryPrompt(city, niche, candidateProfiles, creatorCount, businessCount)
-
-  // Use callGemini with a discovery-specific responseSchema
-  const url = `${GEMINI_BASE}/models/${MODEL}:generateContent?key=${geminiKey}`
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.3,
-        maxOutputTokens: 16384,
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: 'object',
-          properties: {
-            niche: { type: 'string' },
-            results: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  username: { type: 'string' },
-                  category: { type: 'string', enum: ['top', 'trending'] },
-                  rank: { type: 'integer' },
-                  rationale: { type: 'string' },
-                  specialties: { type: 'array', items: { type: 'string' } },
-                  contentFocus: { type: 'string' },
-                  partnershipReady: { type: 'boolean' },
-                  locationConfidence: { type: 'string', enum: ['confirmed', 'likely', 'unknown'] },
-                },
-                required: ['username', 'category', 'rank', 'rationale', 'specialties', 'contentFocus', 'partnershipReady', 'locationConfidence'],
-              },
-            },
-          },
-          required: ['niche', 'results'],
-        },
-      },
-    }),
-    signal,
-  })
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: { code: res.status, message: res.statusText, status: 'UNKNOWN' } })) as { error?: { code: number; message: string; status: string } }
-    const status = body.error?.status ?? ''
-    if (res.status === 429 || status === 'RESOURCE_EXHAUSTED') {
-      throw new GeminiError('RATE_LIMITED', 'Gemini API rate limit exceeded.', false)
-    }
-    if (res.status === 400 || status === 'INVALID_ARGUMENT') {
-      throw new GeminiError('INVALID_PROMPT', `Bad prompt: ${body.error?.message}`, false)
-    }
-    throw new GeminiError('UNKNOWN', `Gemini error: ${res.status} ${body.error?.message}`, true)
-  }
-
-  const json = (await res.json()) as { candidates?: Array<{ content: { parts: Array<{ text: string; thought?: boolean }> }; finishReason: string }> }
-  if (!json.candidates || json.candidates.length === 0) {
-    throw new GeminiError('SAFETY_BLOCK', 'Gemini blocked the response.', false)
-  }
-
-  const candidate = json.candidates[0]
-  const text = (candidate.content?.parts ?? [])
-    .filter((p) => !p.thought)
-    .map((p) => p.text ?? '')
-    .join('')
-
-  if (candidate.finishReason === 'MAX_TOKENS') {
-    throw new GeminiError('PARSE_ERROR', 'Gemini response was cut off (MAX_TOKENS).', false)
-  }
-
-  if (!text) throw new GeminiError('SAFETY_BLOCK', 'Gemini returned empty response.', false)
-
-  return parseDiscoveryOutput(text)
+  const parsed = await callGeminiWithSchema<DiscoveryOutput>(
+    geminiKey,
+    prompt,
+    DISCOVERY_SCHEMA,
+    { temperature: 0.3, maxOutputTokens: 16384, signal },
+  )
+  return coerceDiscoveryOutput(parsed)
 }
 
 // ----- Clarification question -----
@@ -356,7 +353,7 @@ export async function analyzeDiscovery(
  * Shown to the user before ranking so they can confirm which sub-niche direction
  * the tool should prioritize.
  *
- * Follows the analyzeDiscovery pattern — direct fetch with its own responseSchema.
+ * Follows the analyzeDiscovery pattern — uses callGeminiWithSchema with its own responseSchema.
  * thinkingBudget: 0 (simple classification task — no extended reasoning needed, saves 2–8s).
  *
  * NEVER throws to the caller — always returns a valid question.
@@ -378,47 +375,23 @@ export async function generateClarificationQuestion(
     ],
   }
 
+  const CLARIFICATION_SCHEMA = {
+    type: 'object',
+    properties: {
+      question: { type: 'string' },
+      options: { type: 'array', items: { type: 'string' } },
+    },
+    required: ['question', 'options'],
+  }
+
   try {
     const prompt = buildClarificationPrompt(referenceProfile, candidates, nicheContext)
-    const url = `${GEMINI_BASE}/models/${MODEL}:generateContent?key=${geminiKey}`
-
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.3,
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: 'object',
-            properties: {
-              question: { type: 'string' },
-              options: { type: 'array', items: { type: 'string' } },
-            },
-            required: ['question', 'options'],
-          },
-          thinkingConfig: { thinkingBudget: 0 },
-        },
-      }),
-      signal,
-    })
-
-    if (!res.ok) return FALLBACK
-
-    const json = (await res.json()) as GeminiResponse
-    if (!json.candidates || json.candidates.length === 0) return FALLBACK
-
-    const candidate = json.candidates[0]
-    const text = (candidate.content?.parts ?? [])
-      .filter((p) => !p.thought)
-      .map((p) => p.text ?? '')
-      .join('')
-
-    if (!text) return FALLBACK
-
-    const cleaned = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim()
-    const parsed = JSON.parse(cleaned) as ClarificationQuestion
+    const parsed = await callGeminiWithSchema<ClarificationQuestion>(
+      geminiKey,
+      prompt,
+      CLARIFICATION_SCHEMA,
+      { temperature: 0.3, thinkingBudget: 0, signal },
+    )
 
     if (
       typeof parsed.question !== 'string' ||
@@ -540,65 +513,32 @@ export async function callGeminiConfirmReply(
   if (availableOptions.length === 0) return ''
 
   const prompt = buildConfirmReplyPrompt(userText, availableOptions)
-  const url = `${GEMINI_BASE}/models/${MODEL}:generateContent?key=${geminiKey}`
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0,
-        maxOutputTokens: 64,
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: 'object',
-          properties: {
-            selectedOption: { type: 'string' },
-          },
-          required: ['selectedOption'],
-        },
-      },
-    }),
-    signal,
-  })
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as GeminiResponse
-    const status = body.error?.status ?? ''
-    const isAuthError =
-      res.status === 401 ||
-      status === 'UNAUTHENTICATED' ||
-      status === 'PERMISSION_DENIED' ||
-      (body.error?.message ?? '').toLowerCase().includes('api key')
-    if (isAuthError) {
-      throw new GeminiError('AUTH_ERROR', 'Invalid Gemini API key. Check Settings.', false)
-    }
-    if (res.status === 429 || status === 'RESOURCE_EXHAUSTED') {
-      throw new GeminiError('RATE_LIMITED', 'Gemini rate limit hit.', false)
-    }
-    throw new GeminiError('UNKNOWN', `Confirm reply failed: ${res.status}`, true)
+  const CONFIRM_SCHEMA = {
+    type: 'object',
+    properties: {
+      selectedOption: { type: 'string' },
+    },
+    required: ['selectedOption'],
   }
 
-  const json = (await res.json()) as GeminiResponse
-
-  if (!json.candidates || json.candidates.length === 0) {
-    // Safety block — fall back to default option silently
-    return availableOptions[0]
+  let parsed: { selectedOption?: unknown; selected_option?: unknown; SelectedOption?: unknown }
+  try {
+    parsed = await callGeminiWithSchema<typeof parsed>(
+      geminiKey,
+      prompt,
+      CONFIRM_SCHEMA,
+      { temperature: 0, maxOutputTokens: 64, signal },
+    )
+  } catch (err) {
+    // Safety block falls back to default; other errors are rethrown
+    if (err instanceof GeminiError && err.code === 'SAFETY_BLOCK') {
+      return availableOptions[0]
+    }
+    throw err
   }
-
-  const candidate = json.candidates[0]
-  const text = (candidate.content?.parts ?? [])
-    .filter((p) => !p.thought)
-    .map((p) => p.text ?? '')
-    .join('')
-    .trim()
-
-  if (!text) return availableOptions[0]
 
   try {
-    const cleaned = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim()
-    const parsed = JSON.parse(cleaned) as Record<string, unknown>
     // Try camelCase key first (canonical schema), then fallback variants (snake_case,
     // PascalCase) in case different Gemini model variants return different key formats.
     const selected = String(
