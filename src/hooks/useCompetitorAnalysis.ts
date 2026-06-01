@@ -250,7 +250,9 @@ function buildErrorMessage(
     return `Network blocked — could not reach Apify API. If you're using Brave browser, click the Brave shield icon in the address bar and turn off "Block trackers & ads" for localhost, then try again.`
   }
   if (err instanceof Error) {
-    return err.message
+    // SECURITY (C2): never surface a raw error message — even a generic Error
+    // could carry interpolated internal detail. Map to a fixed string.
+    return 'An unexpected error occurred — try again.'
   }
   return 'An unexpected error occurred.'
 }

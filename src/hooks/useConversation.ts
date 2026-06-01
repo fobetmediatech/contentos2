@@ -590,6 +590,19 @@ export function useConversation() {
           const directHandles = rawTokens
             .map(h => h.toLowerCase())
             .filter(h => !seen.has(h) && seen.add(h))
+          // Synthesize a competitor intent — this fast path bypasses parseIntent
+          // (which normally sets parsedIntent), so without this confirmSeeds() hits
+          // its null guard and the user dead-ends on "Session expired".
+          store.setParsedIntent({
+            needsClarification: false,
+            niche: '',
+            location: undefined,
+            knownHandles: directHandles,
+            depth: 'standard',
+            clientName: undefined,
+            pipelineType: 'competitor',
+            routingConfidence: 'high',
+          } as ParsedIntent)
           store.setDiscoveredSeeds(directHandles)
           store.setStatus('confirming')
           store.addMessage({
