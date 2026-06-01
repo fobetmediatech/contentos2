@@ -98,18 +98,19 @@ export async function scrapeTopReels(
     // Start the actor run
     const { runId, datasetId } = await startRun(ACTORS.REEL_SCRAPER, input, apiKey)
 
-    // Poll until SUCCEEDED (or throws on failure/timeout/abort)
-    await pollRun(runId, apiKey, signal)
+    // Poll until SUCCEEDED — 3 min timeout for apify~instagram-scraper cold starts
+    await pollRun(runId, apiKey, signal, 180_000)
 
     // Fetch the raw dataset
     const rawPosts = await fetchDataset<RawPost>(datasetId, apiKey)
 
     // Filter to reels only, map to ReelData, sort by views desc, take top n
-    const reels = rawPosts
+    const allReels = rawPosts
       .filter((p) => p.productType === 'clips' && (p.videoViewCount ?? 0) > 0)
       .map(toReelData)
       .sort((a, b) => b.videoViewCount - a.videoViewCount)
-      .slice(0, Math.min(n, rawPosts.length))
+
+    const reels = allReels.slice(0, Math.min(n, allReels.length))
 
     if (reels.length === 0) {
       throw new NoReelsError(handle)
