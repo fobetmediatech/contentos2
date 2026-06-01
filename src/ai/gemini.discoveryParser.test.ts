@@ -213,10 +213,27 @@ describe('analyzeDiscovery / parseDiscoveryOutput — error paths', () => {
   })
 
   it('throws RATE_LIMITED on 429 response', async () => {
-    mockFetch({ error: { code: 429, status: 'RESOURCE_EXHAUSTED', message: 'quota' } }, false, 429)
-    await expect(analyzeDiscovery('key', 'Mumbai', 'food', [])).rejects.toMatchObject({
-      code: 'RATE_LIMITED',
-    })
+    // callGeminiWithSchema retries 3 times on 429 (exponential backoff 1s+2s+4s).
+    // Use fake timers so the sleeps resolve instantly; mock fetch persistently so
+    // all 4 calls (original + 3 retries) see a 429.
+    vi.useFakeTimers()
+    const rateLimitedResponse = {
+      ok: false,
+      status: 429,
+      json: () => Promise.resolve({ error: { code: 429, status: 'RESOURCE_EXHAUSTED', message: 'quota' } }),
+      text: () => Promise.resolve(''),
+    }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(rateLimitedResponse))
+
+    // Attach rejection handler BEFORE runAllTimersAsync to prevent the
+    // "unhandled rejection" warning that Node emits when a promise rejects
+    // between the setTimeout resolution and our await.
+    const promise = analyzeDiscovery('key', 'Mumbai', 'food', [])
+    promise.catch(() => { /* handled below */ })
+
+    await vi.runAllTimersAsync()
+    await expect(promise).rejects.toMatchObject({ code: 'RATE_LIMITED' })
+    vi.useRealTimers()
   })
 
   it('throws INVALID_PROMPT on 400 response', async () => {

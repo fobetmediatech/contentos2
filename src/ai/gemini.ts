@@ -89,7 +89,7 @@ export async function callGeminiWithSchema<T>(
     thinkingBudget?: number               // when set, adds thinkingConfig
     signal?: AbortSignal
   },
-  attempt = 0,
+  _attempt = 0,
 ): Promise<T> {
   const {
     temperature = 0.3,
@@ -128,10 +128,10 @@ export async function callGeminiWithSchema<T>(
     const status = body.error?.status ?? ''
 
     if (res.status === 429 || status === 'RESOURCE_EXHAUSTED') {
-      if (attempt < 3) {
-        const backoff = Math.pow(2, attempt) * 1000 // 1s, 2s, 4s
+      if (_attempt < 3) {
+        const backoff = Math.pow(2, _attempt) * 1000 // 1s, 2s, 4s
         await sleep(backoff)
-        return callGeminiWithSchema<T>(apiKey, prompt, schema, options, attempt + 1)
+        return callGeminiWithSchema<T>(apiKey, prompt, schema, options, _attempt + 1)
       }
       throw new GeminiError('RATE_LIMITED', 'Gemini API rate limit exceeded after 3 retries.', false)
     }
@@ -235,7 +235,7 @@ const COMPETITOR_SCHEMA = {
 
 // ----- Discovery analysis schema -----
 
-const DISCOVERY_SCHEMA = {
+export const DISCOVERY_SCHEMA = {
   type: 'object',
   properties: {
     niche: { type: 'string' },
@@ -260,7 +260,7 @@ const DISCOVERY_SCHEMA = {
   required: ['niche', 'results'],
 }
 
-// ----- Parse helpers (post-processing after JSON parse) -----
+// ----- Post-parse validation helpers -----
 
 function validateAnalysisOutput(parsed: AnalysisOutput): AnalysisOutput {
   if (!parsed.competitors || !Array.isArray(parsed.competitors)) {
@@ -353,8 +353,8 @@ export async function analyzeDiscovery(
  * Shown to the user before ranking so they can confirm which sub-niche direction
  * the tool should prioritize.
  *
- * Follows the analyzeDiscovery pattern — uses callGeminiWithSchema with its own responseSchema.
- * thinkingBudget: 0 (simple classification task — no extended reasoning needed, saves 2–8s).
+ * Uses callGeminiWithSchema with thinkingBudget: 0 (simple classification task —
+ * no extended reasoning needed, saves 2–8s).
  *
  * NEVER throws to the caller — always returns a valid question.
  * On any error (network, parse, safety block) returns a safe generic fallback
@@ -531,7 +531,7 @@ export async function callGeminiConfirmReply(
       { temperature: 0, maxOutputTokens: 64, signal },
     )
   } catch (err) {
-    // Safety block falls back to default; other errors are rethrown
+    // Safety block falls back to default option silently; other errors propagate
     if (err instanceof GeminiError && err.code === 'SAFETY_BLOCK') {
       return availableOptions[0]
     }
@@ -548,7 +548,7 @@ export async function callGeminiConfirmReply(
     // This prevents near-miss hallucinations from corrupting downstream pipeline logic.
     if (availableOptions.includes(selected)) return selected
   } catch {
-    // JSON parse failure — fall through to default
+    // key extraction failure — fall through to default
   }
 
   return availableOptions[0]
