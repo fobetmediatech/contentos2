@@ -9,7 +9,7 @@
  *   empty candidates[]      → SAFETY block, surface as content policy error
  */
 
-import { buildCompetitorPrompt, buildDiscoveryPrompt, buildClarificationPrompt, type AnalysisOutput, type DiscoveryOutput, type ClarificationQuestion } from './prompts'
+import { buildCompetitorPrompt, buildDiscoveryPrompt, buildClarificationPrompt, buildFollowUpContext, buildConfirmReplyPrompt, type AnalysisOutput, type DiscoveryOutput, type ClarificationQuestion } from './prompts'
 import type { NormalizedProfile } from '../lib/transformers'
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta'
@@ -432,6 +432,186 @@ export async function generateClarificationQuestion(
   } catch {
     return FALLBACK
   }
+}
+
+// ----- Follow-up prose response -----
+
+/**
+ * Send a free-form follow-up message to Gemini after a pipeline completes.
+ *
+ * Unlike the analysis functions, this call:
+ *   - Uses plain text MIME (not JSON mode) — response is conversational prose.
+ *   - Does NOT use responseSchema — no structured output needed.
+ *   - Is intentionally simple: the system context from buildFollowUpContext()
+ *     frames the conversation and the user message is appended directly.
+ *
+ * @param geminiKey        Active Gemini API key.
+ * @param summary          Short description of what the completed pipeline found.
+ *                         Injected via buildFollowUpContext() as system context.
+ * @param userMessage      The user's follow-up message (already sanitized by sendMessage).
+ * @param signal           AbortController signal.
+ * @param accountSummaries Optional list of accounts found by the pipeline.
+ *                         When provided, Gemini can reference specific accounts in its response.
+ * @returns                Gemini's prose response (1–3 sentences).
+ */
+export async function callGeminiFollowUp(
+  geminiKey: string,
+  summary: string,
+  userMessage: string,
+  signal?: AbortSignal,
+  accountSummaries?: Array<{ username: string; followers: number; er: number }>,
+): Promise<string> {
+  const systemContext = buildFollowUpContext(summary, accountSummaries)
+  const fullPrompt = `${systemContext}\n\nUser: ${userMessage}`
+
+  const url = `${GEMINI_BASE}/models/${MODEL}:generateContent?key=${geminiKey}`
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: fullPrompt }] }],
+      generationConfig: {
+        temperature: 0.7,       // slightly higher for natural conversational tone
+        maxOutputTokens: 256,   // prose follow-up is always short
+      },
+    }),
+    signal,
+  })
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as GeminiResponse
+    const status = body.error?.status ?? ''
+    if (res.status === 429 || status === 'RESOURCE_EXHAUSTED') {
+      throw new GeminiError('RATE_LIMITED', 'Gemini rate limit hit — wait a moment and try again.', false)
+    }
+    const isAuthError =
+      res.status === 401 ||
+      status === 'UNAUTHENTICATED' ||
+      status === 'PERMISSION_DENIED' ||
+      (body.error?.message ?? '').toLowerCase().includes('api key')
+    if (isAuthError) {
+      throw new GeminiError('AUTH_ERROR', 'Invalid Gemini API key. Check Settings.', false)
+    }
+    throw new GeminiError('UNKNOWN', `Follow-up failed: ${res.status}`, true)
+  }
+
+  const json = (await res.json()) as GeminiResponse
+
+  if (!json.candidates || json.candidates.length === 0) {
+    throw new GeminiError('SAFETY_BLOCK', 'Gemini blocked the follow-up response.', false)
+  }
+
+  const candidate = json.candidates[0]
+  const text = (candidate.content?.parts ?? [])
+    .filter((p) => !p.thought)
+    .map((p) => p.text ?? '')
+    .join('')
+    .trim()
+
+  if (!text) {
+    throw new GeminiError('SAFETY_BLOCK', 'Gemini returned an empty follow-up response.', false)
+  }
+
+  return text
+}
+
+// ----- Confirm reply mapping -----
+
+/**
+ * Map a free-text confirming-state reply to one of the available pipeline option strings.
+ *
+ * Uses JSON mode at temperature 0 to deterministically select the best matching option.
+ * Validates the returned string is actually in availableOptions — falls back to
+ * availableOptions[0] if Gemini returns a near-miss or hallucinated string.
+ *
+ * @param geminiKey        Active Gemini API key.
+ * @param userText         The user's free-text message (already sanitised — max 500 chars, newlines stripped).
+ * @param availableOptions The exact option strings to choose between.
+ * @param signal           AbortController signal.
+ * @returns                One of availableOptions (guaranteed).
+ */
+export async function callGeminiConfirmReply(
+  geminiKey: string,
+  userText: string,
+  availableOptions: string[],
+  signal?: AbortSignal,
+): Promise<string> {
+  if (availableOptions.length === 0) return ''
+
+  const prompt = buildConfirmReplyPrompt(userText, availableOptions)
+  const url = `${GEMINI_BASE}/models/${MODEL}:generateContent?key=${geminiKey}`
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0,
+        maxOutputTokens: 64,
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'object',
+          properties: {
+            selectedOption: { type: 'string' },
+          },
+          required: ['selectedOption'],
+        },
+      },
+    }),
+    signal,
+  })
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as GeminiResponse
+    const status = body.error?.status ?? ''
+    const isAuthError =
+      res.status === 401 ||
+      status === 'UNAUTHENTICATED' ||
+      status === 'PERMISSION_DENIED' ||
+      (body.error?.message ?? '').toLowerCase().includes('api key')
+    if (isAuthError) {
+      throw new GeminiError('AUTH_ERROR', 'Invalid Gemini API key. Check Settings.', false)
+    }
+    if (res.status === 429 || status === 'RESOURCE_EXHAUSTED') {
+      throw new GeminiError('RATE_LIMITED', 'Gemini rate limit hit.', false)
+    }
+    throw new GeminiError('UNKNOWN', `Confirm reply failed: ${res.status}`, true)
+  }
+
+  const json = (await res.json()) as GeminiResponse
+
+  if (!json.candidates || json.candidates.length === 0) {
+    // Safety block — fall back to default option silently
+    return availableOptions[0]
+  }
+
+  const candidate = json.candidates[0]
+  const text = (candidate.content?.parts ?? [])
+    .filter((p) => !p.thought)
+    .map((p) => p.text ?? '')
+    .join('')
+    .trim()
+
+  if (!text) return availableOptions[0]
+
+  try {
+    const cleaned = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim()
+    const parsed = JSON.parse(cleaned) as Record<string, unknown>
+    // Try camelCase key first (canonical schema), then fallback variants (snake_case,
+    // PascalCase) in case different Gemini model variants return different key formats.
+    const selected = String(
+      parsed.selectedOption ?? parsed.selected_option ?? parsed.SelectedOption ?? '',
+    )
+    // Validate the returned string is an exact member of availableOptions.
+    // This prevents near-miss hallucinations from corrupting downstream pipeline logic.
+    if (availableOptions.includes(selected)) return selected
+  } catch {
+    // JSON parse failure — fall through to default
+  }
+
+  return availableOptions[0]
 }
 
 // ----- Utilities -----

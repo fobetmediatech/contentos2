@@ -31,19 +31,86 @@
 
 import { useRef, useState, useEffect } from 'react'
 import { useAnalysisStore } from '../store/analysisStore'
+import { useDiscoveryStore } from '../store/discoveryStore'
 import { useKeysStore } from '../store/keysStore'
 import { useCompetitorAnalysis } from './useCompetitorAnalysis'
 import { useLocationDiscovery } from './useLocationDiscovery'
 import { parseIntent } from '../ai/intentParser'
 import { generateHashtags } from '../lib/hashtagGenerator'
 import { scrapeHashtagUsernames } from '../lib/apifyClient'
-import { GeminiError } from '../ai/gemini'
+import { GeminiError, callGeminiFollowUp, callGeminiConfirmReply } from '../ai/gemini'
 import { ApifyError } from '../lib/apifyCore'
 import { PROCEED_LABEL, DISCOVERY_REDIRECT_TO_COMPETITOR } from '../lib/constants'
+import { PIPELINE_REGISTRY } from '../tools/registry'
 import type { ParsedIntent } from '../ai/intentParser'
+import type { ResolvedIntent } from '../tools/types'
 
 const DISCOVERY_TIMEOUT_MS = 90_000
 const DISCOVERY_SOFT_NUDGE_MS = 60_000
+
+// ── Pure confirming-state helpers (outside hook, no side effects) ─────────────
+
+/**
+ * Returns true if the user's typed text indicates they want to switch to the
+ * *other* pipeline rather than confirm the current one.
+ *
+ * Intentionally conservative: only fires on strong explicit signals to avoid
+ * false positives on regular confirmations.
+ */
+export function detectPipelineSwitch(text: string, currentPipeline: string): boolean {
+  const lower = text.toLowerCase()
+  if (currentPipeline === 'competitor') {
+    // Trigger a switch to discovery only when the user explicitly names a location context.
+    // Intentionally avoids `find.*creator` (too broad — matches "find the right macro creator")
+    // and standalone `location` (matches "I know the location"). Anchored on concrete phrases.
+    return /\blocal\b|\bbased in\b|\blocated in\b|\bdiscovery\b/.test(lower)
+  }
+  if (currentPipeline === 'discovery') {
+    // Trigger a switch to competitor when the user explicitly asks for competitive analysis.
+    // Removes standalone `\banalysis\b` (matches "thanks for the analysis!").
+    // Bounds who.*winning wildcard to prevent runaway matching.
+    return /\bcompetitor\b|\bglobal\w*|\bdominates?\b|\bsimilar to\b|\bwho.{0,30}winning\b/.test(lower)
+  }
+  return false
+}
+
+/**
+ * Keyword pre-filter that maps common typed responses to a known option string
+ * WITHOUT a Gemini call. Returns the matched option string or null.
+ *
+ * CRITICAL ORDER: specific options (micro/macro/biz/redirect) MUST be checked
+ * BEFORE generic affirmatives (yes/go/ok/fine/start) to avoid false positives
+ * like "I'm fine with micro" matching the generic affirmative first.
+ */
+export function heuristicConfirmMatch(text: string, options: string[]): string | null {
+  if (options.length === 0) return null
+  const lower = text.toLowerCase()
+
+  // Specific options FIRST — checked before generic affirmatives to avoid false
+  // positives on phrases like "I'm fine with micro" or "start with brands".
+
+  // Redirect: "competitors globally", "global analysis", "who dominates" etc.
+  // Use \bcompetitors?\b and global\w* to catch plurals/adverbs like "globally".
+  const redirectOpt = options.find((o) => o === DISCOVERY_REDIRECT_TO_COMPETITOR)
+  if (redirectOpt && /\bcompetitors?\b|\bglobal\w*|\bdominates?\b|\banalysis\b/.test(lower)) return redirectOpt
+
+  // Micro: "micro", "small", "under" — NOT "100k" alone (ambiguous with macro).
+  const microOpt = options.find((o) => /micro/i.test(o))
+  if (microOpt && /\b(micro|small|under)\b/.test(lower)) return microOpt
+
+  // Macro: "macro", "large", "big", or the literal "100k+" string.
+  const macroOpt = options.find((o) => /macro/i.test(o))
+  if (macroOpt && (/\b(macro|large|big)\b/.test(lower) || lower.includes('100k+'))) return macroOpt
+
+  // Business/brand/company — handle plural forms (brands, companies).
+  const bizOpt = options.find((o) => /business/i.test(o))
+  if (bizOpt && /\bbusiness(?:es)?\b|\bbrands?\b|\bcompan(?:y|ies)\b/.test(lower)) return bizOpt
+
+  // Generic affirmatives LAST (catch-all for "yes", "go", "ok", "sure", "start", "fine", etc.)
+  if (/\b(yes|go|ok|sure|proceed|start|looks? right|fine)\b/.test(lower)) return options[0]
+
+  return null
+}
 
 /** Scrape location-aware hashtags → post authors → return first 10 unique handles. */
 async function discoverSeedHandles(
@@ -61,12 +128,22 @@ async function discoverSeedHandles(
 
 export function useConversation() {
   const store = useAnalysisStore()
+  const discoveryStore = useDiscoveryStore()
   const { geminiKey, pickKey } = useKeysStore()
   const { analyze } = useCompetitorAnalysis()
   const { discover } = useLocationDiscovery()
 
   // T21: clarification turn counter — resets each mount, never stored in Zustand
   const [clarificationTurns, setClarificationTurns] = useState(0)
+
+  // Tracks whether we are currently awaiting Gemini's response for a typed
+  // confirming-state message. Exposed to ChatPage so it can show a TypingIndicator
+  // and disable the option buttons to prevent a button+type race condition.
+  const [isConfirmingPending, setIsConfirmingPending] = useState(false)
+  // Ref mirror of isConfirmingPending — used inside confirmSeeds() to guard
+  // against button clicks that arrive during the 200ms window before React
+  // re-renders the disabled state. A ref is read synchronously; state is not.
+  const isConfirmingPendingRef = useRef(false)
 
   // T20: AbortController ref for discovery — cleaned up on unmount
   const discoveryAbortRef = useRef<AbortController | null>(null)
@@ -151,10 +228,11 @@ export function useConversation() {
       store.setStatus('confirming')
       console.info('[confirm] seeds set, transitioning to confirming:', seeds)
 
-      // Show seeds with direction options
+      // Show seeds with direction options — label the pipeline explicitly so users
+      // know what's running. Escape hatch hint is shown statically in the UI (AD4).
       store.addMessage({
         role: 'assistant',
-        content: `Found ${seeds.length} accounts in the **${niche}** space${location ? ` in ${location}` : ''}. Which direction should I focus on?`,
+        content: `Found ${seeds.length} **${niche}** accounts — running **competitor analysis**. Pick a direction:`,
         timestamp: Date.now(),
         type: 'options',
         options: [
@@ -186,10 +264,209 @@ export function useConversation() {
   }
 
   /**
+   * Build a short summary of the completed pipeline for follow-up context.
+   * Reads from whichever store has a done result.
+   */
+  const buildPipelineSummary = (): string => {
+    if (store.status === 'done') {
+      const n = store.competitors.length
+      return `Competitor analysis complete — found ${n} account${n !== 1 ? 's' : ''}${store.niche ? ` in the ${store.niche} space` : ''}.`
+    }
+    if (discoveryStore.status === 'done') {
+      const n = discoveryStore.results.length
+      const city = discoveryStore.params?.city
+      return `Location discovery complete — found ${n} creator${n !== 1 ? 's' : ''}${city ? ` in ${city}` : ''}.`
+    }
+    return 'Analysis complete.'
+  }
+
+  /**
+   * Extract account summaries from whichever pipeline just finished.
+   * Used to give Gemini richer context in follow-up calls.
+   * Case-insensitive username match to prevent 0-followers context on casing mismatches.
+   */
+  const buildFollowUpAccountSummaries = (): Array<{ username: string; followers: number; er: number }> | undefined => {
+    if (store.status === 'done' && store.competitors.length > 0) {
+      return store.competitors.map((c) => {
+        const profile = store.candidateProfiles.find(
+          (p) => p.username.toLowerCase() === c.username.toLowerCase(),
+        )
+        return {
+          username: c.username,
+          followers: profile?.followersCount ?? 0,
+          er: profile?.engagementRate ?? 0,
+        }
+      })
+    }
+    if (discoveryStore.status === 'done' && discoveryStore.results.length > 0) {
+      return discoveryStore.results.map((r) => {
+        const profile = discoveryStore.candidateProfiles.find(
+          (p) => p.username.toLowerCase() === r.username.toLowerCase(),
+        )
+        return {
+          username: r.username,
+          followers: profile?.followersCount ?? 0,
+          er: profile?.engagementRate ?? 0,
+        }
+      })
+    }
+    return undefined
+  }
+
+  /**
    * Handle a user message in the chat input.
-   * Only processes when status === 'chatting'.
+   * When a pipeline is done, routes to follow-up instead of re-running parseIntent.
    */
   const sendMessage = async (text: string) => {
+    // ── Confirming path: user typed text while waiting to pick a direction ────
+    // This runs BEFORE the pipelineDone and chatting checks so it handles
+    // the 'confirming' status (which is not 'chatting' and not 'done').
+    if (store.status === 'confirming') {
+      if (!text.trim() || isSendingRef.current) return
+      isSendingRef.current = true
+      setIsConfirmingPending(true)
+      isConfirmingPendingRef.current = true
+      try {
+        const safeText = text.replace(/[\n\r]/g, ' ').trim().slice(0, 500)
+        store.addMessage({ role: 'user', content: safeText, timestamp: Date.now(), type: 'text' })
+
+        if (!geminiKey?.trim()) {
+          store.addMessage({
+            role: 'assistant',
+            content: 'Gemini API key missing. Add it in Settings.',
+            timestamp: Date.now(),
+            type: 'error',
+          })
+          return
+        }
+
+        const { parsedIntent } = store
+        const pipelineType =
+          parsedIntent && 'pipelineType' in parsedIntent
+            ? (parsedIntent.pipelineType ?? 'competitor')
+            : 'competitor'
+
+        // 1. Pipeline-switch detection — re-enter the full intent pipeline
+        if (detectPipelineSwitch(safeText, pipelineType)) {
+          store.addMessage({
+            role: 'assistant',
+            content: 'Switching pipelines…',
+            timestamp: Date.now(),
+            type: 'text',
+          })
+          // CRITICAL: clear guards BEFORE recursive call or the inner sendMessage
+          // hits isSendingRef.current = true and silently no-ops (AE1).
+          isSendingRef.current = false
+          setIsConfirmingPending(false)
+          isConfirmingPendingRef.current = false
+          store.setStatus('chatting')
+          await sendMessage(safeText)
+          return
+        }
+
+        // Guard: if the stored intent is a clarification (needsClarification: true),
+        // the pipeline was never fully resolved — drop back to chatting so the user
+        // can re-state their request with a full query.
+        if (!parsedIntent || ('needsClarification' in parsedIntent && parsedIntent.needsClarification)) {
+          store.setStatus('chatting')
+          return
+        }
+        const intent = parsedIntent as ResolvedIntent
+        const availableOptions =
+          PIPELINE_REGISTRY[pipelineType]?.confirmOptions(intent) ?? [PROCEED_LABEL]
+
+        // 2. Heuristic pre-filter — no Gemini call needed
+        const heuristicMatch = heuristicConfirmMatch(safeText, availableOptions)
+        if (heuristicMatch) {
+          store.addMessage({
+            role: 'assistant',
+            content: `Got it — running with "${heuristicMatch}"…`,
+            timestamp: Date.now(),
+            type: 'text',
+          })
+          confirmSeeds(heuristicMatch)
+          return
+        }
+
+        // 3. Gemini fallback — maps free text to the closest option string
+        const confirmController = new AbortController()
+        discoveryAbortRef.current = confirmController  // allow abort on navigate/unmount (AE4)
+        const mappedOption = await callGeminiConfirmReply(
+          geminiKey,
+          safeText,
+          availableOptions,
+          confirmController.signal,
+        )
+        store.addMessage({
+          role: 'assistant',
+          content: `Got it — running with "${mappedOption}"…`,
+          timestamp: Date.now(),
+          type: 'text',
+        })
+        confirmSeeds(mappedOption)
+      } catch {
+        store.addMessage({
+          role: 'assistant',
+          content: "I'm not sure which direction you mean — use one of the options, or describe what you want more specifically.",
+          timestamp: Date.now(),
+          type: 'text',
+        })
+        // Stay in confirming so the user can still click a button
+        store.setStatus('confirming')
+      } finally {
+        isSendingRef.current = false
+        setIsConfirmingPending(false)
+        isConfirmingPendingRef.current = false
+      }
+      return
+    }
+
+    // Follow-up path: pipeline finished, user refines/asks a question
+    const pipelineDone = store.status === 'done' || discoveryStore.status === 'done'
+    if (pipelineDone) {
+      if (!text.trim()) return
+      if (isSendingRef.current) return
+      isSendingRef.current = true
+      try {
+        const safeText = text.replace(/[\n\r]/g, ' ').trim().slice(0, 500)
+        store.addMessage({ role: 'user', content: safeText, timestamp: Date.now(), type: 'text' })
+
+        if (!geminiKey?.trim()) {
+          store.addMessage({
+            role: 'assistant',
+            content: 'Gemini API key missing. Add it in Settings.',
+            timestamp: Date.now(),
+            type: 'error',
+          })
+          return
+        }
+
+        // Abort any in-flight follow-up before starting a new one — otherwise the
+        // old request becomes a zombie and calls store.addMessage with stale data.
+        discoveryAbortRef.current?.abort()
+        const followUpController = new AbortController()
+        discoveryAbortRef.current = followUpController
+
+        try {
+          const summary = buildPipelineSummary()
+          const accountSummaries = buildFollowUpAccountSummaries()
+          const reply = await callGeminiFollowUp(geminiKey, summary, safeText, followUpController.signal, accountSummaries)
+          store.addMessage({ role: 'assistant', content: reply, timestamp: Date.now(), type: 'text' })
+        } catch (err) {
+          let content = 'Something went wrong — try again.'
+          if (err instanceof GeminiError) {
+            if (err.code === 'AUTH_ERROR') content = 'Gemini API key is invalid or missing. Go to Settings to update it.'
+            else if (err.code === 'RATE_LIMITED') content = 'Gemini rate limit hit — wait a few seconds and try again.'
+          }
+          store.addMessage({ role: 'assistant', content, timestamp: Date.now(), type: 'error' })
+        }
+      } finally {
+        isSendingRef.current = false
+      }
+      return
+    }
+
+    // Normal chat path
     if (store.status !== 'chatting') return
     if (!text.trim()) return
     if (isSendingRef.current) return
@@ -283,14 +560,16 @@ export function useConversation() {
       // Store parsed intent for confirmSeeds()
       store.setParsedIntent(intent)
 
-      // Step 2: route to the correct pipeline
+      // Step 2: route to the correct pipeline via registry
       const niche = 'niche' in intent ? intent.niche : ''
       const location = 'location' in intent ? (intent.location ?? '') : ''
       const pipelineType = 'pipelineType' in intent ? (intent.pipelineType ?? 'competitor') : 'competitor'
 
-      if (pipelineType === 'discovery') {
-        // Discovery pipeline: requires a city — ask if missing
-        if (!location) {
+      const descriptor = PIPELINE_REGISTRY[pipelineType]
+
+      if (descriptor && pipelineType !== 'competitor') {
+        // Non-competitor pipelines: show confirm message from registry, require a location if missing
+        if (pipelineType === 'discovery' && !location) {
           store.addMessage({
             role: 'assistant',
             content: `I can find **${niche}** creators in a specific city. Which city should I search in?`,
@@ -301,17 +580,14 @@ export function useConversation() {
           return
         }
 
-        // Confirm before firing the 150s discovery pipeline
+        // Confirm before firing the pipeline
         store.setStatus('confirming')
         store.addMessage({
           role: 'assistant',
-          content: `I'll find **${niche}** creators physically based in **${location}**. Ready to search?`,
+          content: descriptor.confirmMessage(intent),
           timestamp: Date.now(),
           type: 'options',
-          options: [
-            PROCEED_LABEL,
-            DISCOVERY_REDIRECT_TO_COMPETITOR,
-          ],
+          options: descriptor.confirmOptions(intent),
         })
         return
       }
@@ -328,12 +604,21 @@ export function useConversation() {
    * Routes to either the competitor analysis pipeline or location discovery pipeline.
    *
    * T3: null guard on parsedIntent — if missing, reset to chatting.
+   *
+   * Extension point: to add a third pipeline, add a new `if (pipelineType === 'your-type')` block
+   * here (and a matching PipelineToolDescriptor entry in registry.ts). The registry handles
+   * UI metadata; confirmSeeds handles the dispatch logic.
    */
   const confirmSeeds = (selectedOption: string) => {
     // Guard: confirmSeeds is wired to option buttons that are only rendered in
     // the 'confirming' state, but ChatMessage doesn't enforce this — a stale
     // closure or double-click could call this from any status.
     if (store.status !== 'confirming') return
+
+    // AE2: Button+type race guard. If the user types+submits and then clicks a
+    // button within the 200ms before React re-renders the disabled state, this
+    // ref catches the double-fire synchronously (state would still read false).
+    if (isConfirmingPendingRef.current) return
 
     const { parsedIntent, discoveredSeeds } = store
 
@@ -377,8 +662,6 @@ export function useConversation() {
       }
 
       // User confirmed discovery — fire the location discovery pipeline
-      // Navigation to /discover/progress is driven by discoveryStore.status → 'running'
-      // (watched in ChatPage useEffect — not mutation state)
       discover({
         city: location,
         niche,
@@ -403,5 +686,5 @@ export function useConversation() {
     // useEffect in ChatPage watches status === 'running' → navigates to /progress
   }
 
-  return { sendMessage, confirmSeeds }
+  return { sendMessage, confirmSeeds, isConfirmingPending }
 }

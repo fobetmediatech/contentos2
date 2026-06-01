@@ -54,6 +54,13 @@ const IntentSchema = z.object({
   pipelineType: z
     .enum(['competitor', 'discovery'])
     .catch('competitor'),
+  // How confident Gemini is about the pipeline routing decision.
+  // 'high' = clear from the message; 'medium' = judgment call or ambiguous.
+  // Must use .catch() (not .nullish().default()) because Gemini JSON mode
+  // returns null for absent fields and .default() only fires for undefined.
+  routingConfidence: z
+    .enum(['high', 'medium'])
+    .catch('high'),
 })
 
 const ParsedIntentSchema = z.union([ClarificationSchema, IntentSchema])

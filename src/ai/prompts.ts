@@ -404,6 +404,8 @@ Determine pipelineType based on what the user is asking for:
 - When a location IS mentioned but phrasing is competitive ("top X in Y", "best X in Y"),
   use "competitor" — location becomes a context filter, not a discovery dimension.
 - Only use "discovery" when the user's goal is explicitly geographic.
+- routingConfidence: "high" if the pipelineType is unambiguous from the message;
+  "medium" if you had to make a judgment call or the message could fit either pipeline.
 
 OUTPUT FORMAT (valid JSON only, no markdown):
 {
@@ -413,7 +415,8 @@ OUTPUT FORMAT (valid JSON only, no markdown):
   "knownHandles": [],
   "depth": "standard",
   "clientName": null,
-  "pipelineType": "competitor"
+  "pipelineType": "competitor",
+  "routingConfidence": "high"
 }
 
 OR if clarification needed:
@@ -421,4 +424,81 @@ OR if clarification needed:
   "needsClarification": true,
   "question": "What type of accounts are you looking for? (e.g. food bloggers, fitness coaches, travel photographers)"
 }`
+}
+
+// ── Follow-up prompts ────────────────────────────────────────────────────────
+
+/**
+ * Build the system context injected into a follow-up refinement call.
+ *
+ * Follow-up messages bypass parseIntent() entirely and go straight to a prose
+ * Gemini call (callGeminiFollowUp). This context tells Gemini what the
+ * pipeline already produced so it can give an informed refinement response
+ * rather than treating the follow-up as a brand-new query.
+ *
+ * @param summary          A short human-readable description of what the pipeline
+ *                         found, e.g. "Found 8 fitness creators in Mumbai" or
+ *                         "Competitor analysis complete — 12 accounts in the
+ *                         Indian food blogging space".
+ * @param accountSummaries Optional list of accounts found by the pipeline.
+ *                         When provided, Gemini can reference specific accounts
+ *                         when answering refinement questions.
+ */
+export function buildFollowUpContext(
+  summary: string,
+  accountSummaries?: Array<{ username: string; followers: number; er: number }>,
+): string {
+  // Sanitize usernames before embedding in the prompt — Apify data is external and could
+  // contain prompt-injection text. Instagram usernames are [a-zA-Z0-9._] only.
+  const accountsSection = accountSummaries && accountSummaries.length > 0
+    ? `\nACCOUNTS FOUND:\n${accountSummaries
+        .map((a) => {
+          const safeUsername = a.username.replace(/[^a-zA-Z0-9._]/g, '').slice(0, 30)
+          return `@${safeUsername} — ${a.followers.toLocaleString()} followers, ${a.er.toFixed(1)}% ER`
+        })
+        .join('\n')}\n`
+    : ''
+
+  return `You are a helpful assistant for a social media creator research tool.
+
+The analysis pipeline just completed with the following result:
+${summary}
+${accountsSection}
+The user is now sending a follow-up message to refine or filter these results.
+Respond conversationally in 1-3 sentences. Focus on:
+- Acknowledging what they want to refine or filter
+- Confirming whether their refinement can be applied to the existing results
+- Suggesting a concrete next action if useful (e.g. "Start a new search for micro-influencers only")
+
+Do not re-run any analysis. Do not describe capabilities you don't have.
+Keep your response short, friendly, and actionable.`
+}
+
+/**
+ * Build the prompt used to map a free-text confirming-state reply to one of the
+ * available pipeline option strings.
+ *
+ * The return schema is { "selectedOption": "<one of availableOptions>" }.
+ * Callers MUST validate that the returned value is actually in availableOptions
+ * and fall back to availableOptions[0] if not.
+ *
+ * @param userText         The raw user message (should already be sanitised — max 500 chars, newlines stripped).
+ * @param availableOptions The exact option strings Gemini must choose between.
+ */
+export function buildConfirmReplyPrompt(userText: string, availableOptions: string[]): string {
+  // JSON.stringify produces a fully-escaped string (handles backslashes, control chars,
+  // Unicode, quotes). Slice off the surrounding " chars since we embed inline.
+  const safeText = JSON.stringify(userText.slice(0, 500).replace(/[\n\r]/g, ' ')).slice(1, -1)
+  const optionList = availableOptions.map((o, i) => `${i + 1}. "${o}"`).join('\n')
+
+  return `You are mapping a user's free-text reply to one of the available options for a social media analysis pipeline.
+
+USER REPLY: "${safeText}"
+
+AVAILABLE OPTIONS:
+${optionList}
+
+Pick the option the user most likely means. If they say "yes", "go", "ok", "start", "sure", or similar, choose option 1 (the default proceed option).
+
+Return JSON only: { "selectedOption": "<exact option string from the list above>" }`
 }
