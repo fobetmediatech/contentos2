@@ -35,7 +35,7 @@ function formatFollowers(n: number): string {
 function LocationBadge({ confidence }: { confidence: DiscoveryResult['locationConfidence'] }) {
   if (confidence === 'confirmed') {
     return (
-      <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+      <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-[#1A2E1A] text-[#4DB88A] border border-[#2A4A2A]">
         <MapPin size={10} />
         Confirmed
       </span>
@@ -43,7 +43,7 @@ function LocationBadge({ confidence }: { confidence: DiscoveryResult['locationCo
   }
   if (confidence === 'likely') {
     return (
-      <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border border-amber-400 text-amber-700">
+      <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-transparent text-[#C4862A] border border-[#C4862A]/60">
         <MapPin size={10} />
         Likely
       </span>
