@@ -24,10 +24,12 @@ import { InlineReelResults } from '../components/InlineReelResults'
 import { COMPETITOR_CATEGORIES, DISCOVERY_CATEGORIES } from '../shared/utils/categories'
 import { MIN_LOCATION_RESULTS } from '../hooks/useLocationDiscovery'
 
-const EXAMPLE_PROMPTS = [
-  'Indian food bloggers in Mumbai',
-  'Fitness creators focused on women',
-  'Personal finance influencers in Delhi',
+// Tool chips shown in the empty state — one per independent tool, so all three
+// are discoverable at a glance. Tapping prefills the input with a representative prompt.
+const TOOL_CHIPS: { tool: string; example: string; hint: string }[] = [
+  { tool: 'Find competitors', example: 'Top fitness creators like @nike.training', hint: 'See who is winning in a niche' },
+  { tool: 'Discover by city', example: 'Food bloggers in Mumbai', hint: 'Find creators based in a location' },
+  { tool: 'Break down hooks', example: "Analyze @garyvee's reel hooks", hint: 'Reverse-engineer viral hook patterns' },
 ]
 
 export function ChatPage() {
@@ -63,7 +65,7 @@ export function ChatPage() {
   const { isReady } = useKeysStore()
   const { sendMessage, confirmSeeds, isConfirmingPending, isConfirmingLocked } = useConversation()
   const { answerClarification, isPending: clarificationPending } = useCompetitorAnalysis()
-  const { startAnalysis: startReelAnalysis, creatorStates, synthesisStatus, synthesis, synthesisError } = useReelAnalysis()
+  const { startAnalysis: startReelAnalysis, activeHandles, creatorStates, synthesisStatus, synthesis, synthesisError, reset: resetReel } = useReelAnalysis()
 
   const [inputText, setInputText] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -73,10 +75,12 @@ export function ChatPage() {
   // Selection state — shared across competitor + discovery results
   const [selectedHandles, setSelectedHandles] = useState<string[]>([])
   const [selectionWarning, setSelectionWarning] = useState<string | null>(null)
-  // Handles currently being reel-analyzed (set when user clicks Analyze)
-  const [reelHandles, setReelHandles] = useState<string[]>([])
 
   const ready = isReady()
+  // Reel run state (derived from the reel store). A run is "running" until synthesis
+  // reaches a terminal state; "done" once synthesis succeeds or fails.
+  const isReelRunning = activeHandles.length > 0 && synthesisStatus !== 'done' && synthesisStatus !== 'failed'
+  const isReelDone = activeHandles.length > 0 && (synthesisStatus === 'done' || synthesisStatus === 'failed')
   const isInPipeline = ['running', 'clarifying', 'done', 'error'].includes(status) ||
     ['running', 'done', 'error'].includes(discoveryStatus)
   const canSend =
@@ -84,7 +88,8 @@ export function ChatPage() {
     inputText.trim().length > 0 &&
     ready &&
     !isConfirmingPending &&
-    !isConfirmingLocked
+    !isConfirmingLocked &&
+    !isReelRunning
 
   // Initialise chat state on mount
   useEffect(() => {
@@ -144,7 +149,7 @@ export function ChatPage() {
   // Scroll to bottom whenever messages or pipeline state changes
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [conversationMessages, status, discoveryStatus, currentStep, activePipeline.step, reelHandles, creatorStates, synthesisStatus])
+  }, [conversationMessages, status, discoveryStatus, currentStep, activePipeline.step, activeHandles, creatorStates, synthesisStatus])
 
   const resetTextareaHeight = () => {
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
@@ -174,9 +179,9 @@ export function ChatPage() {
   const handleStartOver = () => {
     reset()
     resetDiscovery()
+    resetReel()
     startChat()
     setSelectedHandles([])
-    setReelHandles([])
   }
 
   const handleToggleSelect = (handle: string) => {
@@ -194,8 +199,7 @@ export function ChatPage() {
   const handleAnalyzeReels = () => {
     const handles = [...selectedHandles]
     setSelectedHandles([])
-    setReelHandles(handles)
-    startReelAnalysis(handles)
+    startReelAnalysis(handles)  // sets activeHandles in the reel store
   }
 
   // Derived booleans
@@ -231,8 +235,6 @@ export function ChatPage() {
   const topDiscovery = discoveryResults.filter((r) => r.category === 'top').sort((a, b) => a.rank - b.rank)
   const trendingDiscovery = discoveryResults.filter((r) => r.category === 'trending').sort((a, b) => a.rank - b.rank)
 
-  const isReelDone = reelHandles.length > 0 && (synthesisStatus === 'done' || synthesisStatus === 'failed')
-
   return (
     <div className="h-full flex flex-col bg-chai">
       {/* Keys-missing warning banner */}
@@ -263,24 +265,26 @@ export function ChatPage() {
               <Bot size={22} className="text-[#E07B3A]" />
             </div>
             <h2 className="font-serif italic text-2xl text-primary mb-1.5 tracking-tight">
-              What do you want to analyze?
+              What do you want to research?
             </h2>
-            <p className="text-sm text-secondary text-center max-w-xs leading-relaxed">
-              Describe a niche, creator space, or location and I'll discover relevant accounts for competitor analysis.
+            <p className="text-sm text-secondary text-center max-w-sm leading-relaxed">
+              Three tools, one chat — find competitors, discover creators by city, or break down what makes reels go viral. Just describe it.
             </p>
-            <div className="mt-6 flex flex-col gap-2 w-full max-w-xs">
-              {EXAMPLE_PROMPTS.map((prompt) => (
+            <div className="mt-6 flex flex-col gap-2 w-full max-w-sm">
+              {TOOL_CHIPS.map(({ tool, example, hint }) => (
                 <button
-                  key={prompt}
+                  key={tool}
                   onClick={() => {
                     if (!ready) return
-                    setInputText(prompt)
+                    setInputText(example)
                     textareaRef.current?.focus()
                   }}
                   disabled={!ready}
-                  className="px-3 py-2 text-xs text-left text-secondary bg-surface border border-[rgba(245,237,214,0.08)] rounded-lg hover:border-[#E07B3A] hover:text-[#F4A97B] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="group px-3.5 py-2.5 text-left bg-surface border border-[rgba(245,237,214,0.08)] rounded-xl hover:border-[#E07B3A] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  {prompt}
+                  <span className="block text-xs font-semibold text-[#F4A97B] mb-0.5">{tool}</span>
+                  <span className="block text-sm text-secondary group-hover:text-primary transition-colors">"{example}"</span>
+                  <span className="block text-[11px] text-muted mt-0.5">{hint}</span>
                 </button>
               ))}
             </div>
@@ -398,7 +402,7 @@ export function ChatPage() {
                             profile={profileMap.get(c.username)}
                             cohortAvgER={cohortAvgER}
                             isSelected={selectedHandles.includes(c.username)}
-                            onSelect={reelHandles.length === 0 ? handleToggleSelect : undefined}
+                            onSelect={activeHandles.length === 0 ? handleToggleSelect : undefined}
                           />
                         ))}
                       </div>
@@ -417,7 +421,7 @@ export function ChatPage() {
                             profile={profileMap.get(c.username)}
                             cohortAvgER={cohortAvgER}
                             isSelected={selectedHandles.includes(c.username)}
-                            onSelect={reelHandles.length === 0 ? handleToggleSelect : undefined}
+                            onSelect={activeHandles.length === 0 ? handleToggleSelect : undefined}
                           />
                         ))}
                       </div>
@@ -425,7 +429,7 @@ export function ChatPage() {
                   )}
 
                   {/* Selection CTA */}
-                  {selectedHandles.length > 0 && reelHandles.length === 0 && (
+                  {selectedHandles.length > 0 && activeHandles.length === 0 && (
                     <div className="flex items-center gap-2 pt-1">
                       <button
                         onClick={() => setSelectedHandles([])}
@@ -499,7 +503,7 @@ export function ChatPage() {
                             profile={discoveryProfileMap.get(r.username)}
                             cohortAvgER={discoveryAvgER}
                             isSelected={selectedHandles.includes(r.username)}
-                            onSelect={reelHandles.length === 0 ? handleToggleSelect : undefined}
+                            onSelect={activeHandles.length === 0 ? handleToggleSelect : undefined}
                           />
                         ))}
                       </div>
@@ -518,7 +522,7 @@ export function ChatPage() {
                             profile={discoveryProfileMap.get(r.username)}
                             cohortAvgER={discoveryAvgER}
                             isSelected={selectedHandles.includes(r.username)}
-                            onSelect={reelHandles.length === 0 ? handleToggleSelect : undefined}
+                            onSelect={activeHandles.length === 0 ? handleToggleSelect : undefined}
                           />
                         ))}
                       </div>
@@ -526,7 +530,7 @@ export function ChatPage() {
                   )}
 
                   {/* Selection CTA */}
-                  {selectedHandles.length > 0 && reelHandles.length === 0 && (
+                  {selectedHandles.length > 0 && activeHandles.length === 0 && (
                     <div className="flex items-center gap-2 pt-1">
                       <button
                         onClick={() => setSelectedHandles([])}
@@ -548,7 +552,7 @@ export function ChatPage() {
               )}
 
               {/* ── Inline reel analysis ──────────────────────────────── */}
-              {reelHandles.length > 0 && (
+              {activeHandles.length > 0 && (
                 <>
                   {/* Header bubble */}
                   <div className="flex items-start gap-2">
@@ -558,13 +562,13 @@ export function ChatPage() {
                     <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(245,237,214,0.08)] text-sm leading-relaxed max-w-[80%]">
                       <span className="font-semibold text-primary">Analyzing reels</span>
                       <p className="text-secondary mt-0.5">
-                        Scraping and analyzing reels for {reelHandles.map(h => `@${h}`).join(', ')} — this takes {reelHandles.length * 2}–{reelHandles.length * 3} min.
+                        Scraping and analyzing reels for {activeHandles.map(h => `@${h}`).join(', ')} — this takes {activeHandles.length * 2}–{activeHandles.length * 3} min.
                       </p>
                     </div>
                   </div>
 
                   <InlineReelResults
-                    handles={reelHandles}
+                    handles={activeHandles}
                     creatorStates={creatorStates}
                     synthesisStatus={synthesisStatus}
                     synthesis={synthesis}
@@ -599,7 +603,9 @@ export function ChatPage() {
               onKeyDown={handleKeyDown}
               onInput={handleTextareaInput}
               placeholder={
-                isInPipeline
+                isReelRunning
+                  ? 'Analyzing reels — this takes a few minutes…'
+                  : isInPipeline
                   ? 'Analysis in progress…'
                   : status === 'discovering'
                   ? 'Searching for accounts…'
@@ -614,7 +620,8 @@ export function ChatPage() {
               disabled={
                 (status !== 'chatting' && status !== 'confirming' && !activePipeline.followUpAllowed) ||
                 isConfirmingPending ||
-                isConfirmingLocked
+                isConfirmingLocked ||
+                isReelRunning
               }
               aria-label="Message input"
               className={`w-full px-3 py-2.5 text-sm bg-[#1A1410] text-primary border rounded-xl focus:outline-none focus:ring-1 focus:ring-[#E07B3A] focus:border-[#E07B3A] resize-none disabled:opacity-40 disabled:cursor-not-allowed leading-relaxed placeholder:text-muted ${

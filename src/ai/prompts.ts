@@ -394,6 +394,12 @@ RULES:
 
 PIPELINE ROUTING:
 Determine pipelineType based on what the user is asking for:
+- "reel": user wants to analyze, break down, or reverse-engineer the REELS, HOOKS, or
+  short-form VIDEO content of specific named creators. Almost always names @handles.
+  Examples: "analyze @x's reels", "break down the hooks @y uses", "what hooks work for @z",
+  "study @a and @b's viral reels", "reverse-engineer @c's content", "what makes @d go viral"
+  When the user names handles AND asks about their reels/hooks/videos/content style
+  specifically, prefer "reel" over "competitor".
 - "discovery": user wants creators geographically located in a specific city/region
   Examples: "find food bloggers in Mumbai", "who's posting about yoga in Delhi",
   "creators based in Singapore", "local influencers in Lagos"

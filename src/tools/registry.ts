@@ -12,8 +12,11 @@
 
 import { STEP_LABELS } from '../store/analysisStore'
 import { DISCOVERY_STEP_LABELS } from '../store/discoveryStore'
-import { PROCEED_LABEL, DISCOVERY_REDIRECT_TO_COMPETITOR } from '../lib/constants'
+import { PROCEED_LABEL, DISCOVERY_REDIRECT_TO_COMPETITOR, REEL_ANALYZE_LABEL } from '../lib/constants'
 import type { PipelineToolDescriptor, ResolvedIntent } from './types'
+
+/** Steps shown in the reel/hook analysis progress (rendered inline by InlineReelResults). */
+const reelSteps: string[] = ['Scraping reels', 'Analyzing hooks', 'Synthesizing patterns']
 
 const competitorSteps: string[] = Object.values(STEP_LABELS)
 // Only steps 1-5 in the static registry — step 6 ("Expanding search") is
@@ -58,5 +61,19 @@ export const PIPELINE_REGISTRY: Record<string, PipelineToolDescriptor> = {
     },
     confirmOptions: () => [PROCEED_LABEL, DISCOVERY_REDIRECT_TO_COMPETITOR],
     resultsPath: '/discover/results',
+  },
+
+  reel: {
+    id: 'reel',
+    name: 'Reel Hook Analysis',
+    steps: reelSteps,
+    confirmMessage: (intent: ResolvedIntent) => {
+      const handles = ('knownHandles' in intent ? (intent.knownHandles ?? []) : [])
+      const shown = handles.slice(0, 4).map((h) => '@' + h).join(', ')
+      return `Break down the hook patterns in recent reels for ${shown || 'these creators'}? I'll analyze the top ~10 reels each — about 2–3 min per creator.`
+    },
+    confirmOptions: () => [REEL_ANALYZE_LABEL],
+    // Reel results render inline in the chat (no dedicated results route).
+    resultsPath: '/',
   },
 }

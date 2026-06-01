@@ -35,6 +35,7 @@ import { useDiscoveryStore } from '../store/discoveryStore'
 import { useKeysStore } from '../store/keysStore'
 import { useCompetitorAnalysis } from './useCompetitorAnalysis'
 import { useLocationDiscovery } from './useLocationDiscovery'
+import { useReelAnalysis } from './useReelAnalysis'
 import { parseIntent } from '../ai/intentParser'
 import { generateHashtags } from '../lib/hashtagGenerator'
 import { scrapeHashtagUsernames } from '../lib/apifyClient'
@@ -132,6 +133,10 @@ export function useConversation() {
   const { geminiKey, pickKey } = useKeysStore()
   const { analyze } = useCompetitorAnalysis()
   const { discover } = useLocationDiscovery()
+  // Reel analysis is triggerable from here (NL-routed) the same way analyze()/discover()
+  // are. Safe to mount alongside ChatPage's instance — synthesis is explicit, not an
+  // effect, so it never double-fires (see useReelAnalysis).
+  const { startAnalysis: startReelAnalysis } = useReelAnalysis()
 
   // T21: clarification turn counter — resets each mount, never stored in Zustand
   const [clarificationTurns, setClarificationTurns] = useState(0)
@@ -632,9 +637,46 @@ export function useConversation() {
 
       const descriptor = PIPELINE_REGISTRY[pipelineType]
 
-      if (descriptor && pipelineType !== 'competitor') {
-        // Non-competitor pipelines: show confirm message from registry, require a location if missing
-        if (pipelineType === 'discovery' && !location) {
+      // Reference handles — used by both the reel and competitor paths. Prefer
+      // Gemini's knownHandles; fall back to a deterministic @handle regex (Gemini
+      // extraction is unreliable with thinkingBudget=0).
+      const geminiHandles = ('knownHandles' in intent ? (intent.knownHandles ?? []) : [])
+        .filter((h): h is string => typeof h === 'string' && /^[a-zA-Z0-9._]{1,30}$/.test(h))
+      const clientHandles = [...safeText.matchAll(/@([a-zA-Z0-9._]+)/g)]
+        .map(m => m[1].toLowerCase())
+        .filter(h => h.length <= 30)               // Instagram max handle length is 30 chars
+        .filter((h, i, arr) => arr.indexOf(h) === i) // dedup
+        .slice(0, 5)
+      const knownHandles = geminiHandles.length > 0 ? geminiHandles : clientHandles
+
+      // ── Reel / hook analysis ───────────────────────────────────────────────
+      // Needs specific creators to study. If none were named, ask for handles.
+      if (pipelineType === 'reel') {
+        if (knownHandles.length === 0) {
+          store.addMessage({
+            role: 'assistant',
+            content: "Which creators' reels should I break down? Share their @handles (e.g. @username, @username2).",
+            type: 'text',
+          })
+          store.setStatus('chatting')
+          return
+        }
+        store.setDiscoveredSeeds(knownHandles)
+        store.setStatus('confirming')
+        const shown = knownHandles.slice(0, 4).map(h => '@' + h).join(', ')
+        store.addMessage({
+          role: 'assistant',
+          content: `Break down the hook patterns in recent reels for ${shown}${knownHandles.length > 4 ? ` + ${knownHandles.length - 4} more` : ''}? I'll analyze the top ~10 reels each — about 2–3 min per creator.`,
+          type: 'options',
+          options: descriptor.confirmOptions(intent),
+        })
+        return
+      }
+
+      // ── Location discovery ─────────────────────────────────────────────────
+      if (descriptor && pipelineType === 'discovery') {
+        // Require a city before firing the geographic pipeline.
+        if (!location) {
           store.addMessage({
             role: 'assistant',
             content: `I can find **${niche}** creators in a specific city. Which city should I search in?`,
@@ -643,8 +685,6 @@ export function useConversation() {
           store.setStatus('chatting')
           return
         }
-
-        // Confirm before firing the pipeline
         store.setStatus('confirming')
         store.addMessage({
           role: 'assistant',
@@ -655,23 +695,9 @@ export function useConversation() {
         return
       }
 
-      // Competitor pipeline (default)
-      // If the user already provided reference handles, skip hashtag discovery entirely —
+      // ── Competitor pipeline (default) ──────────────────────────────────────
+      // If the user already named reference handles, skip hashtag discovery and
       // go straight to confirming with their handles as seeds.
-      //
-      // Gemini extraction via responseSchema is unreliable when thinkingBudget=0.
-      // Extract @handles client-side as a guaranteed fallback — regex is deterministic
-      // and doesn't depend on model reasoning capability.
-      const geminiHandles = ('knownHandles' in intent ? (intent.knownHandles ?? []) : [])
-        .filter((h): h is string => typeof h === 'string' && /^[a-zA-Z0-9._]{1,30}$/.test(h))
-      // Only match @-prefixed handles here. Bare handle lists (no @) are caught
-      // earlier by the Step 0 fast path before Gemini runs.
-      const clientHandles = [...safeText.matchAll(/@([a-zA-Z0-9._]+)/g)]
-        .map(m => m[1].toLowerCase())
-        .filter(h => h.length <= 30)               // Instagram max handle length is 30 chars
-        .filter((h, i, arr) => arr.indexOf(h) === i) // dedup
-        .slice(0, 5)
-      const knownHandles = geminiHandles.length > 0 ? geminiHandles : clientHandles
       if (knownHandles.length > 0) {
         store.setDiscoveredSeeds(knownHandles)
         store.setStatus('confirming')
@@ -732,6 +758,30 @@ export function useConversation() {
     const niche = 'niche' in intent ? intent.niche : ''
     const location = 'location' in intent ? (intent.location ?? '') : ''
     const pipelineType = 'pipelineType' in intent ? (intent.pipelineType ?? 'competitor') : 'competitor'
+
+    // ── Reel / hook analysis confirmation ───────────────────────────────────
+    if (pipelineType === 'reel') {
+      if (discoveredSeeds.length === 0) {
+        store.addMessage({
+          role: 'assistant',
+          content: 'Session expired — tell me which creators to analyze to start over.',
+          type: 'text',
+        })
+        store.setStatus('chatting')
+        return
+      }
+      const shown = discoveredSeeds.slice(0, 4).map(h => '@' + h).join(', ')
+      store.addMessage({
+        role: 'assistant',
+        content: `On it — breaking down reels for ${shown}${discoveredSeeds.length > 4 ? ` + ${discoveredSeeds.length - 4} more` : ''}…`,
+        type: 'text',
+      })
+      // Reel results render inline via the reel store (activeHandles). Return chat
+      // to idle so the input stays usable; the run owns its own AbortController.
+      store.setStatus('chatting')
+      void startReelAnalysis(discoveredSeeds)
+      return
+    }
 
     // ── Discovery pipeline confirmation ─────────────────────────────────────
     if (pipelineType === 'discovery') {

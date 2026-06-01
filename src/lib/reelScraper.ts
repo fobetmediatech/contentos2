@@ -115,13 +115,13 @@ export async function scrapeTopReels(
     const input = buildReelScraperInput(handle, 30)
 
     // Start the actor run
-    const { runId, datasetId } = await startRun(ACTORS.REEL_SCRAPER, input, apiKey)
+    const { runId, datasetId } = await startRun(ACTORS.REEL_SCRAPER, input, apiKey, signal)
 
     // Poll until SUCCEEDED — 3 min timeout for apify~instagram-scraper cold starts
     await pollRun(runId, apiKey, signal, 180_000)
 
     // Fetch the raw dataset
-    const rawPosts = await fetchDataset<RawPost>(datasetId, apiKey)
+    const rawPosts = await fetchDataset<RawPost>(datasetId, apiKey, signal)
 
     // Filter to reels only, map to ReelData, sort by views desc, take top n
     const reels = filterAndSortReels(rawPosts, n)
