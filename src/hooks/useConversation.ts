@@ -617,8 +617,39 @@ export function useConversation() {
         return
       }
 
-      // Competitor pipeline (default) — scrape seeds then confirm direction
-      await runCompetitorDiscovery(niche, location, geminiKey, apifyKey)
+      // Competitor pipeline (default)
+      // If the user already provided reference handles, skip hashtag discovery entirely —
+      // go straight to confirming with their handles as seeds.
+      //
+      // Gemini extraction via responseSchema is unreliable when thinkingBudget=0.
+      // Extract @handles client-side as a guaranteed fallback — regex is deterministic
+      // and doesn't depend on model reasoning capability.
+      const geminiHandles = ('knownHandles' in intent ? (intent.knownHandles ?? []) : [])
+        .filter((h): h is string => typeof h === 'string' && /^[a-zA-Z0-9._]{1,50}$/.test(h))
+      const clientHandles = [...safeText.matchAll(/@([a-zA-Z0-9._]+)/g)]
+        .map(m => m[1].toLowerCase())
+        .filter(h => h.length <= 50)               // match Gemini validation cap
+        .filter((h, i, arr) => arr.indexOf(h) === i) // dedup
+        .slice(0, 5)
+      const knownHandles = geminiHandles.length > 0 ? geminiHandles : clientHandles
+      if (knownHandles.length > 0) {
+        store.setDiscoveredSeeds(knownHandles)
+        store.setStatus('confirming')
+        store.addMessage({
+          role: 'assistant',
+          content: `Got **${knownHandles.length} reference account${knownHandles.length > 1 ? 's' : ''}**: ${knownHandles.slice(0, 4).map(h => '@' + h).join(', ')}${knownHandles.length > 4 ? ` + ${knownHandles.length - 4} more` : ''}. Which direction should I focus on?`,
+          timestamp: Date.now(),
+          type: 'options',
+          options: [
+            PROCEED_LABEL,
+            'Micro-influencers (under 100K followers)',
+            'Macro creators (100K+ followers)',
+            'Include businesses and brands',
+          ],
+        })
+      } else {
+        await runCompetitorDiscovery(niche, location, geminiKey, apifyKey)
+      }
     } finally {
       isSendingRef.current = false
     }
