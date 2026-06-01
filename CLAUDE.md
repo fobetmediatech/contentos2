@@ -61,6 +61,74 @@ NEVER use `mcp__claude-in-chrome__*` tools.
 - `/gstack-upgrade` — upgrade gstack
 - `/learn` — learn / capture lessons
 
+## Project overview
+
+**Content OS 2.0** — a browser-based Instagram research tool. No backend. All API keys stored in `localStorage`. Two pipelines:
+
+1. **Competitor Analysis** — scrape reference accounts → extract `relatedProfiles` → Gemini ranking → top/trending cards
+2. **Location Discovery** — city + niche → hashtag generation → profile scrape → location filter → AI-ranked creator cards
+
+Entry point: `ChatPage` — conversational interface that routes to either pipeline based on Gemini intent classification.
+
+## Commands
+
+```bash
+npm run dev          # Start Vite dev server
+npm run build        # TypeScript check + Vite build
+npm run test         # Run 365 unit tests (vitest)
+npm run test:watch   # Watch mode
+npm run lint         # ESLint
+npm run test:discovery  # Integration test for discovery pipeline (needs real API keys)
+```
+
+## Project structure
+
+```
+src/
+  pages/
+    ChatPage.tsx              # Primary entry point — conversational UX
+    DiscoveryResultsPage.tsx  # Location discovery results
+    ResultsPage.tsx           # Competitor analysis results
+    SettingsPage.tsx          # API key management
+  hooks/
+    useConversation.ts        # Chat orchestration state machine
+    useActivePipeline.ts      # Reads PIPELINE_REGISTRY, computes active pipeline state
+    useCompetitorAnalysis.ts  # TanStack Query mutation for competitor pipeline
+    useLocationDiscovery.ts   # TanStack Query mutation for discovery pipeline
+  ai/
+    intentParser.ts           # Gemini intent classification (pipeline routing)
+    gemini.ts                 # Gemini REST API caller (no SDK)
+    prompts.ts                # Prompt builders for all Gemini calls
+  lib/
+    apifyCore.ts              # Shared Apify primitives (startRun, pollRun, fetchDataset)
+    apifyClient.ts            # Competitor pipeline scraper (3-round with hashtag expansion)
+    discoveryClient.ts        # Discovery pipeline (hashtag → scrape → location filter)
+    hashtagGenerator.ts       # Gemini micro-call for location-aware hashtags
+    locationFilter.ts         # Bio-text city matching with alias map
+    transformers.ts           # Apify raw → NormalizedProfile
+    keyRotator.ts             # Round-robin Apify key selection with cooldown
+    storage.ts                # Cross-runtime storage adapter (browser / Node)
+    constants.ts              # Shared string constants
+  tools/
+    registry.ts               # PIPELINE_REGISTRY — confirmMessage + confirmOptions per pipeline
+    types.ts                  # Shared TypeScript types
+  store/
+    analysisStore.ts          # Zustand store — competitor analysis state
+    discoveryStore.ts         # Zustand store — discovery state
+    keysStore.ts              # Zustand store — API keys (persisted)
+  components/
+    AppLayout.tsx             # Top nav bar + Outlet
+    ChatMessage.tsx           # Chat bubble with optional options
+    ChatOptions.tsx           # Confirm option buttons with label prop
+    ClarificationCard.tsx     # Inline clarification prompt
+    DiscoveryCard.tsx         # Creator card for discovery results
+    CompetitorCard.tsx        # Competitor card for analysis results
+    ProgressSteps.tsx         # Inline progress step indicator
+  shared/
+    utils/categories.ts       # COMPETITOR_CATEGORIES + DISCOVERY_CATEGORIES
+    utils/export.ts           # CSV + clipboard export formatters
+```
+
 ## Skill routing
 
 When the user's request matches an available skill, invoke it via the Skill tool. When in doubt, invoke the skill.
