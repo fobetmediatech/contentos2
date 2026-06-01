@@ -21,6 +21,7 @@
 export const ACTORS = {
   PROFILE_SCRAPER: 'apify~instagram-profile-scraper',
   HASHTAG_SCRAPER: 'apify~instagram-hashtag-scraper',
+  REEL_SCRAPER: 'apify~instagram-scraper',
 } as const
 
 /**
@@ -31,6 +32,20 @@ export function buildProfileScraperInput(usernames: string[]): Record<string, un
   return {
     usernames: usernames.map((u) => u.replace(/^@/, '')),
     resultsLimit: 1, // one result per username (profile data)
+  }
+}
+
+/**
+ * Build the input payload for the Reel Scraper actor.
+ *
+ * @param handle  Instagram handle (with or without @)
+ * @param limit   Max number of posts/reels to retrieve
+ */
+export function buildReelScraperInput(handle: string, limit: number): Record<string, unknown> {
+  return {
+    directUrls: [`https://www.instagram.com/${handle.replace(/^@/, '')}/`],
+    resultsType: 'posts',
+    resultsLimit: limit,
   }
 }
 
