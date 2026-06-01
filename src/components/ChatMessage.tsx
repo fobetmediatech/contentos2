@@ -58,11 +58,13 @@ export function ChatMessage({ message, onOptionSelect, optionsDisabled }: ChatMe
           {renderContent(message.content)}
         </div>
         {/* T16: pill layout for options */}
+        {/* AD1: "Quick picks:" label shown when confirming state is active (!optionsDisabled) */}
         {message.type === 'options' && message.options && onOptionSelect && (
           <ChatOptions
             options={message.options}
             onSelect={onOptionSelect}
             disabled={optionsDisabled}
+            label={optionsDisabled ? undefined : 'Quick picks:'}
           />
         )}
       </div>

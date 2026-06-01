@@ -14,11 +14,23 @@ interface ChatOptionsProps {
   onSelect: (option: string) => void
   /** Disables all buttons once a selection has been made (prevents double-click). */
   disabled?: boolean
+  /**
+   * AD1: Optional label shown above the buttons.
+   * Pass "Quick picks:" when the confirming state is active so users understand
+   * the buttons and typed input are equivalent entry points.
+   */
+  label?: string
 }
 
-export function ChatOptions({ options, onSelect, disabled }: ChatOptionsProps) {
+export function ChatOptions({ options, onSelect, disabled, label }: ChatOptionsProps) {
   return (
-    <div className="flex flex-wrap gap-2 mt-1">
+    <div className="flex flex-col gap-1.5 mt-1">
+      {label && (
+        <p className="text-[11px] font-medium text-slate-400 tracking-wide uppercase select-none">
+          {label}
+        </p>
+      )}
+      <div className="flex flex-wrap gap-2">
       {options.map((option) => {
         const isProceed = option === PROCEED_LABEL
         return (
@@ -36,6 +48,7 @@ export function ChatOptions({ options, onSelect, disabled }: ChatOptionsProps) {
           </button>
         )
       })}
+      </div>
     </div>
   )
 }

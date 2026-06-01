@@ -145,6 +145,12 @@ export function useConversation() {
   // re-renders the disabled state. A ref is read synchronously; state is not.
   const isConfirmingPendingRef = useRef(false)
 
+  // AD5: retry counter — tracks consecutive failures in the confirming path.
+  // After 2 failures the textarea is locked so the user is nudged back to the buttons.
+  // Resets when the user successfully resolves the confirming state or leaves it.
+  const [confirmErrorCount, setConfirmErrorCount] = useState(0)
+  const confirmErrorCountRef = useRef(0)
+
   // T20: AbortController ref for discovery — cleaned up on unmount
   const discoveryAbortRef = useRef<AbortController | null>(null)
 
@@ -403,13 +409,24 @@ export function useConversation() {
           timestamp: Date.now(),
           type: 'text',
         })
+        // AD5: successful resolution — reset the error counter
+        confirmErrorCountRef.current = 0
+        setConfirmErrorCount(0)
         confirmSeeds(mappedOption)
       } catch {
+        // AD5: increment error counter; after 2 failures, lock the textarea and
+        // nudge the user to use the buttons instead.
+        const newCount = confirmErrorCountRef.current + 1
+        confirmErrorCountRef.current = newCount
+        setConfirmErrorCount(newCount)
+        const content = newCount >= 2
+          ? "Let's keep it simple — just pick one of the options above."
+          : "I'm not sure which direction you mean — try describing it differently, or pick one of the options."
         store.addMessage({
           role: 'assistant',
-          content: "I'm not sure which direction you mean — use one of the options, or describe what you want more specifically.",
+          content,
           timestamp: Date.now(),
-          type: 'text',
+          type: newCount >= 2 ? 'error' : 'text',
         })
         // Stay in confirming so the user can still click a button
         store.setStatus('confirming')
@@ -686,5 +703,17 @@ export function useConversation() {
     // useEffect in ChatPage watches status === 'running' → navigates to /progress
   }
 
-  return { sendMessage, confirmSeeds, isConfirmingPending }
+  // AD5: textarea is locked after 2+ consecutive confirming failures.
+  // Reset happens on successful resolution (in sendMessage) or via confirmSeeds (button click).
+  const isConfirmingLocked = confirmErrorCount >= 2
+
+  // Reset error count when the user confirms via button so the counter doesn't carry
+  // over if they re-enter the confirming state in a new conversation.
+  const confirmSeedsWithReset = (option: string) => {
+    confirmErrorCountRef.current = 0
+    setConfirmErrorCount(0)
+    confirmSeeds(option)
+  }
+
+  return { sendMessage, confirmSeeds: confirmSeedsWithReset, isConfirmingPending, isConfirmingLocked }
 }

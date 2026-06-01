@@ -58,7 +58,7 @@ export function ChatPage() {
   const activePipeline = useActivePipeline()
 
   const { isReady } = useKeysStore()
-  const { sendMessage, confirmSeeds, isConfirmingPending } = useConversation()
+  const { sendMessage, confirmSeeds, isConfirmingPending, isConfirmingLocked } = useConversation()
   const { answerClarification, isPending: clarificationPending } = useCompetitorAnalysis()
 
   const [inputText, setInputText] = useState('')
@@ -77,7 +77,8 @@ export function ChatPage() {
     (status === 'chatting' || status === 'confirming' || activePipeline.followUpAllowed) &&
     inputText.trim().length > 0 &&
     ready &&
-    !isConfirmingPending
+    !isConfirmingPending &&
+    !isConfirmingLocked
 
   // T7 + T23: initialise chat state on mount
   useEffect(() => {
@@ -120,6 +121,13 @@ export function ChatPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [discoveryStatus, resetDiscovery])
+
+  // AD10: auto-focus textarea when entering confirming state so users can type immediately
+  useEffect(() => {
+    if (status === 'confirming') {
+      textareaRef.current?.focus()
+    }
+  }, [status])
 
   // Scroll to bottom whenever messages change or pipeline state changes
   useEffect(() => {
@@ -376,6 +384,8 @@ export function ChatPage() {
                   ? 'Analysis in progress…'
                   : status === 'discovering'
                   ? 'Searching for accounts…'
+                  : status === 'confirming' && isConfirmingLocked
+                  ? 'Pick one of the options above ↑'
                   : status === 'confirming'
                   ? 'Or describe what you want…'
                   : 'Describe a niche, location, or paste handles…'
@@ -386,7 +396,8 @@ export function ChatPage() {
               // Also disabled while isConfirmingPending to prevent double-submit during Gemini mapping.
               disabled={
                 (status !== 'chatting' && status !== 'confirming' && !activePipeline.followUpAllowed) ||
-                isConfirmingPending
+                isConfirmingPending ||
+                isConfirmingLocked
               }
               aria-label="Message input"
               className={`w-full px-3 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none disabled:bg-slate-50 disabled:text-slate-400 leading-relaxed ${

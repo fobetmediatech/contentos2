@@ -140,10 +140,10 @@ React UI is written only after both binary gates have passed. Build pages in thi
 
 Captured during `/ship` review (2026-06-01). Deferred from PLAN.md per plan completion audit.
 
-- [ ] **AD1 — "Quick picks:" label above confirm buttons** · Add a subtle label above the `<ChatOptions>` buttons when `status === 'confirming'` so users understand the buttons and typed input are equivalent entry points. **Priority:** P1. Effort: XS (~5 min).
-- [ ] **AD5 — Retry counter + escalation message** · Track failed `sendMessage` attempts in confirming state. After 2 failures, lock the textarea and show "Let's keep it simple — just pick one of the options." to guide the user back to the button UI. **Priority:** P1. Effort: S (~20 min).
-- [ ] **AD10 — Auto-focus textarea on confirming entry** · Add a `useEffect` that focuses the textarea when `status` transitions to `'confirming'` so users can type immediately without clicking. **Priority:** P1. Effort: XS (~5 min).
-- [ ] **Integration tests for confirming path** · `useConversation.sendMessage` during confirming: (1) calls `callGeminiConfirmReply` then `confirmSeeds`; (2) empty text is a no-op; (3) `isConfirmingPending` resets to `false` in the error path. Requires React hook test harness (RTL or vitest + jsdom). **Priority:** P1. Effort: M (~45 min).
+- [x] **AD1 — "Quick picks:" label above confirm buttons** · `ChatOptions` accepts a `label` prop; `ChatMessage` passes `"Quick picks:"` when `!optionsDisabled`. **Completed:** v0.3.0 (2026-06-01)
+- [x] **AD5 — Retry counter + escalation message** · `useConversation` tracks `confirmErrorCount`. After 2 failures message escalates to "Let's keep it simple…" (error type), `isConfirmingLocked` exposed; `ChatPage` locks textarea + updates placeholder. Counter resets on button click. **Completed:** v0.3.0 (2026-06-01)
+- [x] **AD10 — Auto-focus textarea on confirming entry** · `useEffect` in `ChatPage` watches `status` and calls `textareaRef.current?.focus()` on transition to `'confirming'`. **Completed:** v0.3.0 (2026-06-01)
+- [x] **Integration tests for confirming path** · `src/hooks/useConversation.confirming.test.ts` — 7 tests (RTL + jsdom): empty text no-op, heuristic match bypasses Gemini, Gemini fallback called, `isConfirmingPending` reset in finally, AD5 first/second failure escalation, button-click counter reset. **Completed:** v0.3.0 (2026-06-01)
 
 ---
 
