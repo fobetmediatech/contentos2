@@ -89,7 +89,20 @@ export async function callGeminiWithSchema<T>(
     thinkingBudget?: number               // when set, adds thinkingConfig
     signal?: AbortSignal
   },
-  _attempt = 0,
+): Promise<T> {
+  return _callGeminiWithRetry<T>(apiKey, prompt, schema, options, 0)
+}
+
+/**
+ * Internal retry helper — not exported. Carries the attempt counter privately
+ * so callers never see or pass it.
+ */
+async function _callGeminiWithRetry<T>(
+  apiKey: string,
+  prompt: string,
+  schema: Record<string, unknown>,
+  options: Parameters<typeof callGeminiWithSchema>[3],
+  attempt: number,
 ): Promise<T> {
   const {
     temperature = 0.3,
@@ -128,10 +141,10 @@ export async function callGeminiWithSchema<T>(
     const status = body.error?.status ?? ''
 
     if (res.status === 429 || status === 'RESOURCE_EXHAUSTED') {
-      if (_attempt < 3) {
-        const backoff = Math.pow(2, _attempt) * 1000 // 1s, 2s, 4s
+      if (attempt < 3) {
+        const backoff = Math.pow(2, attempt) * 1000 // 1s, 2s, 4s
         await sleep(backoff)
-        return callGeminiWithSchema<T>(apiKey, prompt, schema, options, _attempt + 1)
+        return _callGeminiWithRetry<T>(apiKey, prompt, schema, options, attempt + 1)
       }
       throw new GeminiError('RATE_LIMITED', 'Gemini API rate limit exceeded after 3 retries.', false)
     }
