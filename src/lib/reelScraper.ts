@@ -65,6 +65,25 @@ function toReelData(raw: RawPost): ReelData {
   }
 }
 
+// ----- Pure filter/sort helper (exported for unit testing) -----
+
+/**
+ * Filter, sort, and slice raw Apify posts into ReelData[].
+ *
+ * Filters to productType === 'clips' AND videoViewCount > 0,
+ * sorts by videoViewCount descending, returns top Math.min(n, results.length).
+ *
+ * Returns [] when no posts pass the filter (caller decides whether to throw).
+ */
+export function filterAndSortReels(rawPosts: unknown[], n: number): ReelData[] {
+  const posts = rawPosts as RawPost[]
+  const allReels = posts
+    .filter((p) => p.productType === 'clips' && (p.videoViewCount ?? 0) > 0)
+    .map(toReelData)
+    .sort((a, b) => b.videoViewCount - a.videoViewCount)
+  return allReels.slice(0, Math.min(n, allReels.length))
+}
+
 // ----- Main export -----
 
 /**
@@ -105,12 +124,7 @@ export async function scrapeTopReels(
     const rawPosts = await fetchDataset<RawPost>(datasetId, apiKey)
 
     // Filter to reels only, map to ReelData, sort by views desc, take top n
-    const allReels = rawPosts
-      .filter((p) => p.productType === 'clips' && (p.videoViewCount ?? 0) > 0)
-      .map(toReelData)
-      .sort((a, b) => b.videoViewCount - a.videoViewCount)
-
-    const reels = allReels.slice(0, Math.min(n, allReels.length))
+    const reels = filterAndSortReels(rawPosts, n)
 
     if (reels.length === 0) {
       throw new NoReelsError(handle)
