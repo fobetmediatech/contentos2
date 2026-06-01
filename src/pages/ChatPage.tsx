@@ -80,11 +80,20 @@ export function ChatPage() {
     !isConfirmingPending &&
     !isConfirmingLocked
 
-  // T7 + T23: initialise chat state on mount
+  // T7 + T23: initialise chat state on mount.
+  // Also handles stale pipeline states (discovering/confirming/running/clarifying)
+  // left behind when the user navigated away mid-run — reset so the UI isn't stuck.
   useEffect(() => {
     if (status === 'idle') {
       startChat()
-    } else if (status === 'done' || status === 'error') {
+    } else if (
+      status === 'done' ||
+      status === 'error' ||
+      status === 'discovering' ||
+      status === 'confirming' ||
+      status === 'running' ||
+      status === 'clarifying'
+    ) {
       reset()
       startChat()
     }

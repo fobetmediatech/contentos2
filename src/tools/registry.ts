@@ -24,10 +24,10 @@ export const PIPELINE_REGISTRY: Record<string, PipelineToolDescriptor> = {
     name: 'Competitor Analysis',
     steps: competitorSteps,
     /**
-     * Competitor confirm message is unused at the pipeline level — the
-     * runCompetitorDiscovery() flow in useConversation builds its own
-     * message once seeds are scraped. Provided for completeness and
-     * future refactors.
+     * Unused at runtime — the competitor confirming message is built in
+     * useConversation.ts after runCompetitorDiscovery() returns (not here).
+     * Kept for interface completeness; use this field if the competitor
+     * pipeline is ever refactored to use the registry confirm path.
      */
     confirmMessage: (intent: ResolvedIntent) => {
       const niche = 'niche' in intent ? intent.niche : ''

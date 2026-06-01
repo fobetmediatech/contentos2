@@ -40,7 +40,7 @@ import { generateHashtags } from '../lib/hashtagGenerator'
 import { scrapeHashtagUsernames } from '../lib/apifyClient'
 import { GeminiError, callGeminiFollowUp, callGeminiConfirmReply } from '../ai/gemini'
 import { ApifyError } from '../lib/apifyCore'
-import { PROCEED_LABEL, DISCOVERY_REDIRECT_TO_COMPETITOR } from '../lib/constants'
+import { PROCEED_LABEL, DISCOVERY_REDIRECT_TO_COMPETITOR, GEMINI_KEY_MISSING_MSG } from '../lib/constants'
 import { PIPELINE_REGISTRY } from '../tools/registry'
 import type { ParsedIntent } from '../ai/intentParser'
 import type { ResolvedIntent } from '../tools/types'
@@ -67,7 +67,7 @@ export function detectPipelineSwitch(text: string, currentPipeline: string): boo
   }
   if (currentPipeline === 'discovery') {
     // Trigger a switch to competitor when the user explicitly asks for competitive analysis.
-    // Removes standalone `\banalysis\b` (matches "thanks for the analysis!").
+    // \banalysis\b is excluded — "thanks for the analysis!" is not a redirect intent.
     // Bounds who.*winning wildcard to prevent runaway matching.
     return /\bcompetitor\b|\bglobal\w*|\bdominates?\b|\bsimilar to\b|\bwho.{0,30}winning\b/.test(lower)
   }
@@ -89,10 +89,10 @@ export function heuristicConfirmMatch(text: string, options: string[]): string |
   // Specific options FIRST — checked before generic affirmatives to avoid false
   // positives on phrases like "I'm fine with micro" or "start with brands".
 
-  // Redirect: "competitors globally", "global analysis", "who dominates" etc.
-  // Use \bcompetitors?\b and global\w* to catch plurals/adverbs like "globally".
+  // Redirect: "competitors globally", "globally", "who dominates" etc.
+  // \banalysis\b intentionally excluded — "thanks for the analysis!" would trigger a false redirect.
   const redirectOpt = options.find((o) => o === DISCOVERY_REDIRECT_TO_COMPETITOR)
-  if (redirectOpt && /\bcompetitors?\b|\bglobal\w*|\bdominates?\b|\banalysis\b/.test(lower)) return redirectOpt
+  if (redirectOpt && /\bcompetitors?\b|\bglobal\w*|\bdominates?\b/.test(lower)) return redirectOpt
 
   // Micro: "micro", "small", "under" — NOT "100k" alone (ambiguous with macro).
   const microOpt = options.find((o) => /micro/i.test(o))
@@ -339,7 +339,7 @@ export function useConversation() {
         if (!geminiKey?.trim()) {
           store.addMessage({
             role: 'assistant',
-            content: 'Gemini API key missing. Add it in Settings.',
+            content: GEMINI_KEY_MISSING_MSG,
             timestamp: Date.now(),
             type: 'error',
           })
@@ -374,6 +374,12 @@ export function useConversation() {
         // the pipeline was never fully resolved — drop back to chatting so the user
         // can re-state their request with a full query.
         if (!parsedIntent || ('needsClarification' in parsedIntent && parsedIntent.needsClarification)) {
+          store.addMessage({
+            role: 'assistant',
+            content: 'Something went wrong with your request — please try again.',
+            timestamp: Date.now(),
+            type: 'error',
+          })
           store.setStatus('chatting')
           return
         }
@@ -451,7 +457,7 @@ export function useConversation() {
         if (!geminiKey?.trim()) {
           store.addMessage({
             role: 'assistant',
-            content: 'Gemini API key missing. Add it in Settings.',
+            content: GEMINI_KEY_MISSING_MSG,
             timestamp: Date.now(),
             type: 'error',
           })
