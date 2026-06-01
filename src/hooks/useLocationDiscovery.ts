@@ -7,11 +7,13 @@
  *   Step 3: Profile-scrape candidate handles (cap: 60)
  *   Step 4: Location filter → narrow to city-signal profiles
  *   Step 5: AI analysis → 10 ranked DiscoveryResult cards
+ *   Step 6: (conditional) Expanding search — second hashtag batch when < MIN_LOCATION_RESULTS pass filter
  *
  * Safety patterns (mirrored from useCompetitorAnalysis.ts):
  *   - Hallucination filter: cross-reference Gemini usernames against scraped handle set
  *   - Zero-result retry: retry analyzeDiscovery without city/niche context on 0 results
  *   - 150s AbortController timeout
+ *   - Expansion graceful degradation: expansion failure returns first-pass results, not an error
  */
 
 import { useMutation } from '@tanstack/react-query'
@@ -26,9 +28,11 @@ import { ApifyError } from '../lib/apifyCore'
 import { GeminiError } from '../ai/gemini'
 
 const TIMEOUT_MS = 150_000
+// Minimum post-filter results before triggering a second hashtag batch
+export const MIN_LOCATION_RESULTS = 4
 
 export function useLocationDiscovery() {
-  const { startDiscovery, setStep, setResults, setError, reset } = useDiscoveryStore()
+  const { startDiscovery, setStep, setStepProgressDetail, setResults, setError, reset } = useDiscoveryStore()
   const { geminiKey, pickKey } = useKeysStore()
 
   const mutation = useMutation({
@@ -73,15 +77,65 @@ export function useLocationDiscovery() {
         setStep(3)
         setStep(4)
 
-        // Bail early if no candidates at all
-        if (filterResult.filtered.length === 0) {
+        // ── Quality gate: post-filter expansion ────────────────────────────────
+        // If < MIN_LOCATION_RESULTS profiles passed the location filter and the
+        // AbortController still has budget, generate a second hashtag batch
+        // (excluding already-tried hashtags) and merge results.
+        // Expansion failure degrades gracefully — first-pass results are preserved.
+        let finalFiltered = filterResult.filtered
+        let finalCandidates = candidateProfiles
+        let didExpand = false
+
+        if (filterResult.filtered.length < MIN_LOCATION_RESULTS && !controller.signal.aborted) {
+          setStep(6)
+          setStepProgressDetail(
+            `Found only ${filterResult.filtered.length} creator${filterResult.filtered.length !== 1 ? 's' : ''} in ${safeCity} — trying new hashtags…`
+          )
+
+          try {
+            const { hashtags: expandedHashtags } = await generateHashtags(
+              geminiKey,
+              safeCity,
+              safeNiche,
+              'deep',          // always deep for expansion — more hashtags, different angle
+              controller.signal,
+              scrapedHashtags, // exclude already-tried hashtags (sanitized inside generateHashtags)
+            )
+
+            if (expandedHashtags.length > 0 && !controller.signal.aborted) {
+              const expansion = await runLocationDiscovery(
+                expandedHashtags,
+                safeCity,
+                apifyKey,
+                params.depth,
+                controller.signal,
+              )
+              const existingUsernames = new Set(finalFiltered.map(p => p.username.toLowerCase()))
+              const newFiltered = expansion.filterResult.filtered.filter(
+                p => !existingUsernames.has(p.username.toLowerCase())
+              )
+              const newCandidates = expansion.candidateProfiles.filter(
+                p => !existingUsernames.has(p.username.toLowerCase())
+              )
+              finalFiltered = [...finalFiltered, ...newFiltered]
+              finalCandidates = [...finalCandidates, ...newCandidates]
+              didExpand = true
+            }
+          } catch (_expansionErr) {
+            // Expansion failed — continue with first-pass results rather than throwing
+          }
+        }
+        // ── End quality gate ───────────────────────────────────────────────────
+
+        // Bail early if still no candidates after expansion
+        if (finalFiltered.length === 0) {
           throw new Error(
             `We found no creators in ${safeCity} for "${safeNiche}". Try a broader city or niche.`,
           )
         }
 
-        // Build hallucination filter set from scraped profile usernames
-        const knownHandles = new Set(candidateProfiles.map((p) => p.username.toLowerCase()))
+        // Build hallucination filter set from ALL candidate profiles (including expansion)
+        const knownHandles = new Set(finalCandidates.map((p) => p.username.toLowerCase()))
 
         // Step 5: AI analysis — pass pool composition so Gemini has grounded context
         setStep(5)
@@ -89,7 +143,7 @@ export function useLocationDiscovery() {
           geminiKey,
           safeCity,
           safeNiche,
-          filterResult.filtered,
+          finalFiltered,
           controller.signal,
           creatorCount,
           businessCount,
@@ -98,12 +152,11 @@ export function useLocationDiscovery() {
         // Zero-result guard: if Gemini returned nothing, retry without city/niche context
         // (removes Gemini's geographic/niche framing so it ranks by engagement alone)
         if (output.results.length === 0) {
-          console.warn('[discovery] zero results from AI — retrying without city/niche context')
           output = await analyzeDiscovery(
             geminiKey,
             '',  // remove city context
             '',  // remove niche context
-            candidateProfiles,  // use ALL candidates, not just filtered
+            finalCandidates,  // use ALL candidates (including expansion), not just filtered
             controller.signal,
             creatorCount,
             businessCount,
@@ -126,7 +179,7 @@ export function useLocationDiscovery() {
         }
         output = { ...output, results: applyConfidenceFilter(output.results) }
 
-        setResults(output, candidateProfiles, filterResult.relaxed, scrapedHashtags)
+        setResults(output, finalCandidates, filterResult.relaxed, scrapedHashtags, didExpand)
         return output
 
       } catch (err) {

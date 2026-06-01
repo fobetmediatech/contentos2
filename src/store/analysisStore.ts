@@ -84,6 +84,8 @@ export interface AnalysisState {
   candidateCount: number
   /** Live progress detail shown during the Apify wait (e.g. "Found 47 candidate accounts"). */
   stepProgressDetail: string
+  /** True when the competitor pipeline found < 8 candidates (sparse niche indicator). */
+  didExpand: boolean
 
   /** Conversation history for the chat UI. Capped at 50 messages to prevent unbounded growth. */
   conversationMessages: ChatMessage[]
@@ -102,6 +104,7 @@ export interface AnalysisState {
   setResults: (output: AnalysisOutput, inputProfiles: NormalizedProfile[], candidateCount: number) => void
   setError: (message: string) => void
   setStepProgressDetail: (detail: string) => void
+  setDidExpand: (value: boolean) => void
   reset: () => void
 
   // Conversational actions
@@ -125,6 +128,7 @@ const initialState = {
   error: null,
   candidateCount: 0,
   stepProgressDetail: '',
+  didExpand: false,
   // Conversational fields — T22: included in initialState for proper reset()
   conversationMessages: [] as ChatMessage[],
   discoveredSeeds: [] as string[],
@@ -156,6 +160,8 @@ export const useAnalysisStore = create<AnalysisState>()((set) => ({
     }),
 
   setStepProgressDetail: (detail) => set({ stepProgressDetail: detail }),
+
+  setDidExpand: (value) => set({ didExpand: value }),
 
   setError: (message) => set({ status: 'error', error: message }),
 

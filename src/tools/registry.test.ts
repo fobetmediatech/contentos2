@@ -91,11 +91,14 @@ describe('PIPELINE_REGISTRY — discovery entry', () => {
     expect(entry.resultsPath).toBe('/discover/results')
   })
 
-  it('steps array matches DISCOVERY_STEP_LABELS values in order', () => {
-    expect(entry.steps).toEqual(Object.values(DISCOVERY_STEP_LABELS))
+  it('steps array contains steps 1-5 only (step 6 is dynamic, added by useActivePipeline)', () => {
+    const expectedSteps = Object.entries(DISCOVERY_STEP_LABELS)
+      .filter(([k]) => Number(k) <= 5)
+      .map(([, v]) => v)
+    expect(entry.steps).toEqual(expectedSteps)
   })
 
-  it('steps array has 5 entries', () => {
+  it('steps array has 5 entries (step 6 is conditional)', () => {
     expect(entry.steps).toHaveLength(5)
   })
 

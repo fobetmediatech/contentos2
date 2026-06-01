@@ -18,16 +18,16 @@
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, Bot, Send, CheckCircle, MapPin } from 'lucide-react'
+import { AlertTriangle, Bot, Send, CheckCircle } from 'lucide-react'
 import { useAnalysisStore } from '../store/analysisStore'
 import { useDiscoveryStore } from '../store/discoveryStore'
 import { useKeysStore } from '../store/keysStore'
 import { useConversation } from '../hooks/useConversation'
 import { useCompetitorAnalysis } from '../hooks/useCompetitorAnalysis'
 import { useActivePipeline } from '../hooks/useActivePipeline'
-import { ChatMessage, TypingIndicator } from '../components/ChatMessage'
-import { ProgressSteps } from '../components/ProgressSteps'
+import { ChatMessage, ProgressBubble, TypingIndicator } from '../components/ChatMessage'
 import { ClarificationCard } from '../components/ClarificationCard'
+import { MIN_LOCATION_RESULTS } from '../hooks/useLocationDiscovery'
 
 const EXAMPLE_PROMPTS = [
   'Indian food bloggers in Mumbai',
@@ -46,6 +46,7 @@ export function ChatPage() {
     competitors,
     niche,
     stepProgressDetail,
+    didExpand: analysisDidExpand,
     error: analysisError,
     startChat,
     reset,
@@ -55,6 +56,7 @@ export function ChatPage() {
 
   const discoveryStatus = useDiscoveryStore((s) => s.status)
   const discoveryError = useDiscoveryStore((s) => s.error)
+  const discoveryDidExpand = useDiscoveryStore((s) => s.didExpand)
   const resetDiscovery = useDiscoveryStore((s) => s.reset)
   const activePipeline = useActivePipeline()
 
@@ -243,10 +245,9 @@ export function ChatPage() {
             </div>
           </div>
         ) : (
-          // T17: messages + inline pipeline content pushed to bottom
-          <div className="min-h-full flex flex-col px-4 pt-4 pb-2">
-            <div className="flex-1" aria-hidden="true" />
-
+          // Messages flow top-to-bottom (no spacer) so previous messages stay
+          // visible when new content is appended during a pipeline run.
+          <div className="px-4 pt-4 pb-6">
             {/* T14: accessible message log */}
             <div
               role="log"
@@ -259,8 +260,6 @@ export function ChatPage() {
                   key={`${message.timestamp}-${i}`}
                   message={message}
                   onOptionSelect={confirmSeeds}
-                  // Buttons are disabled when not in confirming state, or while
-                  // we are awaiting Gemini's mapping of a typed reply (AD2).
                   optionsDisabled={status !== 'confirming' || isConfirmingPending}
                 />
               ))}
@@ -273,101 +272,122 @@ export function ChatPage() {
 
               {/* ── Inline competitor analysis progress ──────────────────── */}
               {(isAnalysisRunning || isAnalysisClarifying) && (
-                <div className="w-full max-w-2xl mx-auto py-2">
-                  <p className="text-xs text-slate-500 text-center mb-4">
-                    {isAnalysisClarifying
-                      ? 'Help me rank the right accounts for your client.'
-                      : stepProgressDetail
-                      ? `${stepProgressDetail}…`
-                      : 'Analyzing competitors — this takes up to 2 minutes…'}
-                  </p>
-                  <ProgressSteps
+                <>
+                  <ProgressBubble
                     currentStep={isAnalysisClarifying ? 5 : currentStep}
+                    label={
+                      isAnalysisClarifying
+                        ? 'Help me rank the right accounts for your client.'
+                        : stepProgressDetail
+                        ? `${stepProgressDetail}…`
+                        : 'Analyzing competitors — this takes up to 2 minutes…'
+                    }
                   />
                   {isAnalysisClarifying && pendingDiscovery && (
-                    <ClarificationCard
-                      question={pendingDiscovery.clarificationQuestion}
-                      candidateCount={pendingDiscovery.candidateProfiles.length}
-                      onAnswer={answerClarification}
-                      disabled={clarificationPending}
-                    />
+                    <div className="flex items-start gap-2">
+                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center mt-0.5">
+                        <Bot size={14} className="text-indigo-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <ClarificationCard
+                          question={pendingDiscovery.clarificationQuestion}
+                          candidateCount={pendingDiscovery.candidateProfiles.length}
+                          onAnswer={answerClarification}
+                          disabled={clarificationPending}
+                        />
+                      </div>
+                    </div>
                   )}
-                </div>
+                </>
               )}
 
               {/* ── Inline location discovery progress ───────────────────── */}
               {isDiscoveryRunning && (
-                <div className="w-full max-w-2xl mx-auto py-2">
-                  <div className="flex items-center justify-center gap-2 mb-4">
-                    <MapPin size={14} className="text-teal-600" />
-                    <p className="text-xs text-slate-500">
-                      {activePipeline.progressLabel}
-                    </p>
-                  </div>
-                  <ProgressSteps currentStep={activePipeline.step} steps={activePipeline.stepLabels} />
-                </div>
+                <ProgressBubble
+                  currentStep={activePipeline.step}
+                  steps={activePipeline.stepLabels}
+                  label={activePipeline.progressLabel ?? undefined}
+                />
               )}
 
               {/* ── Competitor analysis done ──────────────────────────────── */}
               {isAnalysisDone && (
-                <div className="w-full max-w-2xl mx-auto mt-2 rounded-xl border border-green-200 bg-green-50 p-5">
-                  <div className="flex items-start gap-3">
-                    <CheckCircle size={20} className="text-green-600 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-slate-900">
-                        Analysis complete — found {competitors.length} competitor{competitors.length !== 1 ? 's' : ''}
-                        {niche ? ` in the ${niche} space` : ''}
-                      </p>
-                      <p className="text-xs text-slate-500 mt-0.5">
+                <div className="flex items-start gap-2">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center mt-0.5">
+                    <Bot size={14} className="text-indigo-600" />
+                  </div>
+                  <div className="flex flex-col gap-2 max-w-[80%]">
+                    <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-white border border-slate-200 text-sm leading-relaxed">
+                      <div className="flex items-center gap-2 mb-1">
+                        <CheckCircle size={14} className="text-green-600 flex-shrink-0" />
+                        <span className="font-semibold text-slate-900">Analysis complete</span>
+                      </div>
+                      <p className="text-slate-600">
+                        Found {competitors.length} competitor{competitors.length !== 1 ? 's' : ''}
+                        {niche ? ` in the ${niche} space` : ''}.
                         Ranked by engagement, location fit, and partnership readiness.
                       </p>
+                      {analysisDidExpand && (
+                        <p className="text-xs text-amber-700 mt-1.5">
+                          This niche had sparse Instagram presence — results may be limited. Try a different reference account for a broader pool.
+                        </p>
+                      )}
                     </div>
-                  </div>
-                  <div className="flex gap-2 mt-4">
-                    <button
-                      onClick={() => navigate('/results')}
-                      className="flex-1 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                    >
-                      View full report →
-                    </button>
-                    <button
-                      onClick={handleStartOver}
-                      className="px-4 py-2 text-sm text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-                    >
-                      Start over
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => navigate('/results')}
+                        className="flex-1 py-2 text-sm font-medium bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors"
+                      >
+                        View full report →
+                      </button>
+                      <button
+                        onClick={handleStartOver}
+                        className="px-4 py-2 text-sm text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+                      >
+                        Start over
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
 
               {/* ── Location discovery done ───────────────────────────────── */}
               {isDiscoveryDone && activePipeline.discoveryResults && (
-                <div className="w-full max-w-2xl mx-auto mt-2 rounded-xl border border-teal-200 bg-teal-50 p-5">
-                  <div className="flex items-start gap-3">
-                    <CheckCircle size={20} className="text-teal-600 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-slate-900">
+                <div className="flex items-start gap-2">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center mt-0.5">
+                    <Bot size={14} className="text-indigo-600" />
+                  </div>
+                  <div className="flex flex-col gap-2 max-w-[80%]">
+                    <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-white border border-slate-200 text-sm leading-relaxed">
+                      <div className="flex items-center gap-2 mb-1">
+                        <CheckCircle size={14} className="text-teal-600 flex-shrink-0" />
+                        <span className="font-semibold text-slate-900">Discovery complete</span>
+                      </div>
+                      <p className="text-slate-600">
                         Found {activePipeline.discoveryResults.length} creator{activePipeline.discoveryResults.length !== 1 ? 's' : ''}
-                        {activePipeline.progressLabel ? ` — ${activePipeline.progressLabel.replace('Discovering creators in ', '').replace('…', '')}` : ''}
-                      </p>
-                      <p className="text-xs text-slate-500 mt-0.5">
+                        {activePipeline.progressLabel ? ` in ${activePipeline.progressLabel.replace('Discovering creators in ', '').replace('…', '')}` : ''}.
                         Filtered for location signals and partnership readiness.
                       </p>
+                      {discoveryDidExpand && (
+                        <p className="text-xs text-amber-700 mt-1.5">
+                          Expanded search with a second hashtag batch — initial pass found fewer than {MIN_LOCATION_RESULTS} creators in this city.
+                        </p>
+                      )}
                     </div>
-                  </div>
-                  <div className="flex gap-2 mt-4">
-                    <button
-                      onClick={() => navigate(activePipeline.resultsPath)}
-                      className="flex-1 py-2 text-sm font-medium bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
-                    >
-                      View full report →
-                    </button>
-                    <button
-                      onClick={handleStartOver}
-                      className="px-4 py-2 text-sm text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-                    >
-                      Start over
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => navigate(activePipeline.resultsPath)}
+                        className="flex-1 py-2 text-sm font-medium bg-teal-600 text-white rounded-xl hover:bg-teal-700 transition-colors"
+                      >
+                        View full report →
+                      </button>
+                      <button
+                        onClick={handleStartOver}
+                        className="px-4 py-2 text-sm text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+                      >
+                        Start over
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}

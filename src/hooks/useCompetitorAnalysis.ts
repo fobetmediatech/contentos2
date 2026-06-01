@@ -30,10 +30,11 @@ import { ApifyError } from '../lib/apifyClient'
 import { GeminiError } from '../ai/gemini'
 
 const TIMEOUT_MS = 150_000
+const MIN_COMPETITOR_RESULTS = 8
 
 export function useCompetitorAnalysis() {
   const store = useAnalysisStore()
-  const { startAnalysis, setStep, setResults, setError, reset, setClarification, setStepProgressDetail, answerClarification: storeAnswerClarification } = store
+  const { startAnalysis, setStep, setResults, setError, reset, setClarification, setStepProgressDetail, setDidExpand, answerClarification: storeAnswerClarification } = store
   const { geminiKey, pickKey } = useKeysStore()
 
   // ── Phase 1: Discovery + clarification question generation ────────────────
@@ -60,7 +61,13 @@ export function useCompetitorAnalysis() {
         )
 
         if (candidateProfiles.length > 0) {
-          setStepProgressDetail(`Found ${candidateProfiles.length} candidate accounts`)
+          const isSparse = candidateProfiles.length < MIN_COMPETITOR_RESULTS
+          setStepProgressDetail(
+            isSparse
+              ? `Found only ${candidateProfiles.length} profiles — this niche may be sparse on Instagram`
+              : `Found ${candidateProfiles.length} candidate accounts`
+          )
+          if (isSparse) setDidExpand(true)
         }
         setStep(4)
 

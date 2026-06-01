@@ -87,8 +87,20 @@ async function callGeminiForHashtags(
   niche: string,
   count: number,
   signal?: AbortSignal,
+  excludeHashtags?: string[],
 ): Promise<string[]> {
   const citySlug = city.replace(/\s+/g, '')
+
+  // Sanitize exclusion list before prompt injection — strip non-word chars, cap length
+  const exclusionClause = excludeHashtags && excludeHashtags.length > 0
+    ? `\nDo NOT repeat any of these hashtags (already tried): ${
+        excludeHashtags
+          .map(h => h.replace(/[^\w]/g, '').slice(0, 30))
+          .filter(Boolean)
+          .join(', ')
+      }. Generate ${count} DIFFERENT hashtags targeting a different angle (e.g. nearby area, alternate spelling, related sub-niche).\n`
+    : ''
+
   const prompt = `Generate ${count} Instagram hashtags for finding ${niche} content creators based in ${city}. Mix two types:
 
 1. CONTENT hashtags — tags creators add to their own posts: ${citySlug}Food, ${citySlug}Foodie, ${citySlug}Eats, ${citySlug}StreetFood
@@ -97,7 +109,7 @@ async function callGeminiForHashtags(
 Include at least 2 creator self-ID hashtags — these directly surface creator account handles because vloggers and bloggers tag every post with them to build their audience.
 
 DO NOT generate collab-seeking hashtags used by businesses (e.g. "FoodVloggerWanted", "InfluencerNeeded", "PRCollab") — those are posted by brands, not creators.
-
+${exclusionClause}
 Good examples for food in Indore: "IndoreFood", "IndoreFoodVlogger", "IndoreFoodBlogger", "IndoreFoodie", "IndoreEats", "IndoreStreetFood"
 Good examples for fitness in Mumbai: "MumbaiFitness", "MumbaiFitnessVlogger", "MumbaiFitnessBlogger", "MumbaiGym", "FitMumbai"
 
@@ -168,11 +180,13 @@ export interface HashtagResult {
  *
  * Tries Gemini first; falls back to template rules on any error.
  *
- * @param geminiKey  Gemini API key (may be empty — triggers fallback immediately)
- * @param city       City name (e.g. "Mumbai"). Sanitized before injection.
- * @param niche      Content niche (e.g. "food"). Sanitized before injection.
- * @param depth      'standard' = 5 hashtags, 'deep' = 8 hashtags
- * @param signal     AbortController signal
+ * @param geminiKey       Gemini API key (may be empty — triggers fallback immediately)
+ * @param city            City name (e.g. "Mumbai"). Sanitized before injection.
+ * @param niche           Content niche (e.g. "food"). Sanitized before injection.
+ * @param depth           'standard' = 5 hashtags, 'deep' = 8 hashtags
+ * @param signal          AbortController signal
+ * @param excludeHashtags Hashtags already tried — Gemini is instructed to avoid them.
+ *                        Sanitized inside this function before prompt injection.
  */
 export async function generateHashtags(
   geminiKey: string,
@@ -180,6 +194,7 @@ export async function generateHashtags(
   niche: string,
   depth: 'standard' | 'deep' = 'standard',
   signal?: AbortSignal,
+  excludeHashtags?: string[],
 ): Promise<HashtagResult> {
   // Sanitize inputs before any external call
   const safeCity = sanitize(city, 50)
@@ -193,7 +208,7 @@ export async function generateHashtags(
   // Try Gemini — fall back to rules on any error
   if (geminiKey?.trim()) {
     try {
-      const hashtags = await callGeminiForHashtags(geminiKey, safeCity, safeNiche, count, signal)
+      const hashtags = await callGeminiForHashtags(geminiKey, safeCity, safeNiche, count, signal, excludeHashtags)
       console.log(`[hashtagGenerator] Gemini returned ${hashtags.length} hashtags:`, hashtags)
       return { hashtags, fromAI: true }
     } catch (err) {

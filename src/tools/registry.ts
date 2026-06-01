@@ -16,7 +16,11 @@ import { PROCEED_LABEL, DISCOVERY_REDIRECT_TO_COMPETITOR } from '../lib/constant
 import type { PipelineToolDescriptor, ResolvedIntent } from './types'
 
 const competitorSteps: string[] = Object.values(STEP_LABELS)
-const discoverySteps: string[] = Object.values(DISCOVERY_STEP_LABELS)
+// Only steps 1-5 in the static registry — step 6 ("Expanding search") is
+// conditionally added at runtime by useActivePipeline when the quality gate fires.
+const discoverySteps: string[] = Object.entries(DISCOVERY_STEP_LABELS)
+  .filter(([k]) => Number(k) <= 5)
+  .map(([, v]) => v)
 
 export const PIPELINE_REGISTRY: Record<string, PipelineToolDescriptor> = {
   competitor: {

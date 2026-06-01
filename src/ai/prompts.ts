@@ -407,12 +407,18 @@ Determine pipelineType based on what the user is asking for:
 - routingConfidence: "high" if the pipelineType is unambiguous from the message;
   "medium" if you had to make a judgment call or the message could fit either pipeline.
 
+HANDLE EXTRACTION EXAMPLES:
+- "like @foodie.creator and @chefmike" → knownHandles: ["foodie.creator", "chefmike"]
+- "similar to thesortedgirl, pritika.loonia" → knownHandles: ["thesortedgirl", "pritika.loonia"]
+- "reference accounts: damini.creator" → knownHandles: ["damini.creator"]
+- words after "like", "similar to", "reference", "such as", "including" are likely handles — extract them even without @
+
 OUTPUT FORMAT (valid JSON only, no markdown):
 {
   "needsClarification": false,
   "niche": "food creators",
   "location": "Mumbai",
-  "knownHandles": [],
+  "knownHandles": ["foodie.creator", "chefmike"],
   "depth": "standard",
   "clientName": null,
   "pipelineType": "competitor",

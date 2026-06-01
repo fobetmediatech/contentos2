@@ -14,7 +14,7 @@
  */
 
 import { useAnalysisStore } from '../store/analysisStore'
-import { useDiscoveryStore } from '../store/discoveryStore'
+import { useDiscoveryStore, DISCOVERY_STEP_LABELS } from '../store/discoveryStore'
 import { PIPELINE_REGISTRY } from '../tools/registry'
 import type { DiscoveryResult } from '../ai/prompts'
 import type { AnalysisStatus } from '../store/analysisStore'
@@ -64,6 +64,7 @@ export interface PipelineInputValues {
   discoveryStep: number
   discoveryCity: string | null
   discoveryResults: DiscoveryResult[]
+  discoveryStepProgressDetail: string | null
 }
 
 /**
@@ -100,7 +101,15 @@ export function computeActivePipeline(v: PipelineInputValues): ActivePipelineSta
     const isRunning = v.discoveryStatus === 'running'
     const isDone = v.discoveryStatus === 'done'
 
-    const progressLabel = v.discoveryCity
+    // Step 6 ("Expanding search") is only included when the quality gate fires.
+    // Non-expansion runs always render as a 5-step bar so they don't look incomplete.
+    const dynamicStepLabels = v.discoveryStep >= 6
+      ? Object.values(DISCOVERY_STEP_LABELS)   // all 6 labels
+      : descriptor.steps                        // static 5-step registry
+
+    const progressLabel = v.discoveryStep === 6 && v.discoveryStepProgressDetail
+      ? v.discoveryStepProgressDetail
+      : v.discoveryCity
       ? `Discovering creators in ${v.discoveryCity}…`
       : 'Running location discovery…'
 
@@ -109,7 +118,7 @@ export function computeActivePipeline(v: PipelineInputValues): ActivePipelineSta
       isRunning,
       isDone,
       step: v.discoveryStep,
-      stepLabels: descriptor.steps,
+      stepLabels: dynamicStepLabels,
       progressLabel,
       discoveryResults: isDone && v.discoveryResults.length > 0 ? v.discoveryResults : null,
       resultsPath: descriptor.resultsPath,
@@ -131,6 +140,7 @@ export function useActivePipeline(): ActivePipelineState {
   const discoveryStep = useDiscoveryStore((s) => s.currentStep)
   const discoveryCity = useDiscoveryStore((s) => s.params?.city ?? null)
   const discoveryResults = useDiscoveryStore((s) => s.results)
+  const discoveryStepProgressDetail = useDiscoveryStore((s) => s.stepProgressDetail)
 
   return computeActivePipeline({
     analysisStatus,
@@ -140,5 +150,6 @@ export function useActivePipeline(): ActivePipelineState {
     discoveryStep,
     discoveryCity,
     discoveryResults,
+    discoveryStepProgressDetail,
   })
 }

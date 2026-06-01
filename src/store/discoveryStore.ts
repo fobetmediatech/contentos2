@@ -10,14 +10,15 @@ import type { DiscoveryResult, DiscoveryOutput } from '../ai/prompts'
 
 // ----- Steps -----
 
-export type DiscoveryStep = 1 | 2 | 3 | 4 | 5
+export type DiscoveryStep = 1 | 2 | 3 | 4 | 5 | 6
 
-export const DISCOVERY_STEP_LABELS: Record<DiscoveryStep, string> = {
+export const DISCOVERY_STEP_LABELS: Record<number, string> = {
   1: 'Generating location hashtags',
   2: 'Scraping location-tagged posts',
   3: 'Fetching creator profiles',
   4: 'Filtering by location signals',
   5: 'Generating AI insights',
+  6: 'Expanding search',   // only rendered when quality gate triggers
 }
 
 // ----- Params -----
@@ -48,15 +49,21 @@ export interface DiscoveryState {
   /** Hashtags that were actually scraped */
   sourceHashtags: string[]
   error: string | null
+  /** Detail text shown in the progress bubble during expansion (step 6) */
+  stepProgressDetail: string | null
+  /** True when the quality gate triggered and a second pass ran */
+  didExpand: boolean
 
   // Actions
   startDiscovery: (params: DiscoveryParams) => void
   setStep: (step: DiscoveryStep) => void
+  setStepProgressDetail: (detail: string | null) => void
   setResults: (
     output: DiscoveryOutput,
     candidateProfiles: NormalizedProfile[],
     locationFilterRelaxed: boolean,
     sourceHashtags: string[],
+    didExpand?: boolean,
   ) => void
   setError: (message: string) => void
   reset: () => void
@@ -72,6 +79,8 @@ const initialState = {
   locationFilterRelaxed: false,
   sourceHashtags: [],
   error: null,
+  stepProgressDetail: null as string | null,
+  didExpand: false,
 }
 
 export const useDiscoveryStore = create<DiscoveryState>()((set) => ({
@@ -82,7 +91,9 @@ export const useDiscoveryStore = create<DiscoveryState>()((set) => ({
 
   setStep: (step) => set({ currentStep: step }),
 
-  setResults: (output, candidateProfiles, locationFilterRelaxed, sourceHashtags) =>
+  setStepProgressDetail: (detail) => set({ stepProgressDetail: detail }),
+
+  setResults: (output, candidateProfiles, locationFilterRelaxed, sourceHashtags, didExpand = false) =>
     set({
       status: 'done',
       results: output.results,
@@ -90,6 +101,8 @@ export const useDiscoveryStore = create<DiscoveryState>()((set) => ({
       candidateProfiles,
       locationFilterRelaxed,
       sourceHashtags,
+      didExpand,
+      stepProgressDetail: null, // clear expansion detail so done-card shows city correctly
     }),
 
   setError: (message) => set({ status: 'error', error: message, currentStep: 1 }),

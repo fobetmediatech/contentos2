@@ -42,6 +42,7 @@ function base(): PipelineInputValues {
     discoveryStep: 1,
     discoveryCity: null,
     discoveryResults: [],
+    discoveryStepProgressDetail: null,
   }
 }
 
@@ -185,8 +186,11 @@ describe('computeActivePipeline — discovery running', () => {
     expect(computeActivePipeline(v()).step).toBe(2)
   })
 
-  it('stepLabels matches DISCOVERY_STEP_LABELS values', () => {
-    expect(computeActivePipeline(v()).stepLabels).toEqual(Object.values(DISCOVERY_STEP_LABELS))
+  it('stepLabels contains steps 1-5 (step 6 not included when discoveryStep < 6)', () => {
+    const expectedLabels = Object.entries(DISCOVERY_STEP_LABELS)
+      .filter(([k]) => Number(k) <= 5)
+      .map(([, v]) => v)
+    expect(computeActivePipeline(v()).stepLabels).toEqual(expectedLabels)
   })
 
   it('progressLabel includes the city', () => {
