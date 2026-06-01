@@ -5,11 +5,11 @@ import { getKeyExpiry } from '../lib/keyRotator'
 
 function CooldownBadge({ apiKey }: { apiKey: string }) {
   const expiry = getKeyExpiry(apiKey)
-  if (!expiry) return <span className="text-xs text-green-600 font-medium flex items-center gap-1"><CheckCircle2 size={12} />Active</span>
+  if (!expiry) return <span className="text-xs text-success font-medium flex items-center gap-1 font-mono"><CheckCircle2 size={12} />Active</span>
 
   const remaining = Math.ceil((expiry - Date.now()) / 60000)
   return (
-    <span className="text-xs text-amber-600 font-medium flex items-center gap-1">
+    <span className="text-xs text-warning font-medium flex items-center gap-1 font-mono">
       <Clock size={12} />
       Cooldown: {remaining}m
     </span>
@@ -73,8 +73,8 @@ export function SettingsPage() {
   return (
     <div className="max-w-2xl">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-900">Settings</h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <h1 className="font-serif italic text-3xl text-primary tracking-tight">Settings</h1>
+        <p className="mt-1.5 text-sm text-secondary">
           Configure your API keys. All keys are stored locally in your browser — never sent to any server.
         </p>
       </div>
@@ -82,9 +82,9 @@ export function SettingsPage() {
       {/* Save status banner */}
       {saveStatus !== 'idle' && (
         <div className={`mb-6 px-4 py-3 rounded-lg text-sm flex items-center gap-2 ${
-          saveStatus === 'saved' ? 'bg-green-50 text-green-800 border border-green-200' :
-          saveStatus === 'error' ? 'bg-red-50 text-red-800 border border-red-200' :
-          'bg-slate-50 text-slate-600 border border-slate-200'
+          saveStatus === 'saved' ? 'bg-[rgba(76,175,125,0.1)] text-success border border-[rgba(76,175,125,0.2)]' :
+          saveStatus === 'error' ? 'bg-[rgba(224,92,92,0.1)] text-danger border border-[rgba(224,92,92,0.2)]' :
+          'bg-surface-raised text-secondary border border-[rgba(245,237,214,0.08)]'
         }`}>
           {saveStatus === 'saved' && <CheckCircle2 size={15} />}
           {saveStatus === 'error' && <AlertCircle size={15} />}
@@ -94,15 +94,15 @@ export function SettingsPage() {
 
       {/* Gemini API Key */}
       <section className="mb-8">
-        <h2 className="text-sm font-semibold text-slate-700 mb-3">Gemini API Key</h2>
-        <p className="text-xs text-slate-500 mb-3">
+        <h2 className="text-xs font-mono font-medium text-muted uppercase tracking-wider mb-3">Gemini API Key</h2>
+        <p className="text-xs text-secondary mb-3">
           Used for AI competitor classification and rationale generation.
           Get your key at{' '}
           <a
             href="https://aistudio.google.com/apikey"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-indigo-600 hover:underline"
+            className="text-[#F4A97B] hover:underline"
           >
             aistudio.google.com
           </a>
@@ -114,12 +114,12 @@ export function SettingsPage() {
             value={geminiKey}
             onChange={(e) => setGeminiKey(e.target.value)}
             placeholder="AIza..."
-            className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono"
+            className="flex-1 px-3 py-2 text-sm bg-[#1A1410] text-primary border border-[rgba(245,237,214,0.12)] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#E07B3A] focus:border-[#E07B3A] font-mono placeholder:text-muted"
           />
           <button
             onClick={handleSaveGemini}
             disabled={!geminiKey.trim() || saveStatus === 'saving'}
-            className="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="px-4 py-2 text-sm font-medium bg-[#E07B3A] text-white rounded-lg hover:bg-[#C4612A] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {saveStatus === 'saving' ? 'Validating...' : 'Validate'}
           </button>
@@ -129,10 +129,10 @@ export function SettingsPage() {
       {/* Apify API Keys */}
       <section>
         <div className="flex items-baseline justify-between mb-3">
-          <h2 className="text-sm font-semibold text-slate-700">Apify API Keys</h2>
-          <span className="text-xs text-slate-400">{apifyKeys.length}/10 keys</span>
+          <h2 className="text-xs font-mono font-medium text-muted uppercase tracking-wider">Apify API Keys</h2>
+          <span className="text-xs font-mono text-muted">{apifyKeys.length}/10 keys</span>
         </div>
-        <p className="text-xs text-slate-500 mb-4">
+        <p className="text-xs text-secondary mb-4">
           Used to scrape Instagram profiles. Add multiple keys to rotate and avoid rate limits.
           Each key goes into a 15-minute cooldown after a rate-limit hit.
           Get keys at{' '}
@@ -140,7 +140,7 @@ export function SettingsPage() {
             href="https://console.apify.com/account/integrations"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-indigo-600 hover:underline"
+            className="text-[#F4A97B] hover:underline"
           >
             console.apify.com
           </a>
@@ -153,15 +153,15 @@ export function SettingsPage() {
             {apifyKeys.map((key, idx) => (
               <div
                 key={idx}
-                className="flex items-center gap-3 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg"
+                className="flex items-center gap-3 px-3 py-2.5 bg-surface border border-[rgba(245,237,214,0.08)] rounded-lg"
               >
-                <code className="flex-1 text-xs text-slate-700 font-mono truncate">
+                <code className="flex-1 text-xs text-secondary font-mono truncate">
                   {key.slice(0, 12)}{'·'.repeat(8)}{key.slice(-6)}
                 </code>
                 <CooldownBadge apiKey={key} />
                 <button
                   onClick={() => removeApifyKey(idx)}
-                  className="text-slate-400 hover:text-red-500 transition-colors flex-shrink-0"
+                  className="text-muted hover:text-danger transition-colors flex-shrink-0"
                   aria-label="Remove key"
                 >
                   <Trash2 size={14} />
@@ -180,12 +180,12 @@ export function SettingsPage() {
               onChange={(e) => setNewApifyKey(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAddApifyKey()}
               placeholder="apify_api_..."
-              className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono"
+              className="flex-1 px-3 py-2 text-sm bg-[#1A1410] text-primary border border-[rgba(245,237,214,0.12)] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#E07B3A] focus:border-[#E07B3A] font-mono placeholder:text-muted"
             />
             <button
               onClick={handleAddApifyKey}
               disabled={!newApifyKey.trim() || saveStatus === 'saving'}
-              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-[#E07B3A] text-white rounded-lg hover:bg-[#C4612A] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <Plus size={14} />
               Add & validate

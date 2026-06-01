@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Copy, Download, RotateCcw, Check } from 'lucide-react'
 import { useAnalysisStore } from '../store/analysisStore'
@@ -9,15 +9,19 @@ import { formatForClipboard, generateCSV, downloadCSV, copyToClipboard } from '.
 
 export function ResultsPage() {
   const navigate = useNavigate()
-  const { competitors, inputProfiles, niche, summary, params, reset } = useAnalysisStore()
+  const { competitors, inputProfiles, niche, summary, candidateCount, params, reset } = useAnalysisStore()
   useKeysStore()
   const [copied, setCopied] = useState(false)
 
-  // Redirect to home if no results
-  if (competitors.length === 0) {
-    navigate('/')
-    return null
-  }
+  // Redirect to home if no results — must be in useEffect, not render (React 18 rule)
+  useEffect(() => {
+    if (competitors.length === 0) {
+      navigate('/')
+    }
+  }, [competitors.length, navigate])
+
+  // Don't render content while redirect is pending
+  if (competitors.length === 0) return null
 
   const topCompetitors = competitors.filter((c) => c.category === 'top').sort((a, b) => a.rank - b.rank)
   const trendingCompetitors = competitors.filter((c) => c.category === 'trending').sort((a, b) => a.rank - b.rank)
@@ -74,15 +78,18 @@ export function ResultsPage() {
       <div className="mb-8 flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Competitor Analysis</h1>
-          {niche && (
+          {(niche || sourceHandles.length > 0) && (
             <p className="mt-1 text-sm text-slate-500">
-              Niche: <span className="font-medium text-slate-700">{niche}</span>
-              {' · '}
-              Source: {sourceHandles.map((h) => '@' + h).join(', ')}
+              {candidateCount > 0 && (
+                <>
+                  Analyzed{' '}
+                  <span className="font-medium text-slate-700">{candidateCount} candidate accounts</span>
+                  {sourceHandles.length > 0 && <> from {sourceHandles.map((h) => '@' + h).join(', ')}</>}
+                  {' · '}
+                </>
+              )}
+              <span className="font-medium text-slate-700">{competitors.length} matches</span> after filtering
             </p>
-          )}
-          {summary && (
-            <p className="mt-2 text-sm text-slate-600 max-w-2xl">{summary}</p>
           )}
         </div>
         <button
@@ -93,6 +100,13 @@ export function ResultsPage() {
           New Analysis
         </button>
       </div>
+
+      {/* Summary card — shown before competitor cards for quick client-ready insight */}
+      {summary && (
+        <div className="mb-8 p-4 bg-indigo-50 border border-indigo-100 rounded-xl">
+          <p className="text-sm font-medium text-indigo-900 leading-relaxed">{summary}</p>
+        </div>
+      )}
 
       {/* Top 5 section */}
       {topCompetitors.length > 0 && (

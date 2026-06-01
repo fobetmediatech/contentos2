@@ -1,11 +1,15 @@
 /**
  * Export utilities for the results page sticky bar.
  * UC2: Copy to Clipboard (formatted text) + Export CSV.
+ *
+ * Contains two export sets:
+ *   - Competitor analysis: formatForClipboard, generateCSV
+ *   - Location discovery: formatDiscoveryForClipboard, generateDiscoveryCSV
  */
 
-import type { CompetitorAnalysisResult } from '../../ai/prompts'
+import type { CompetitorAnalysisResult, DiscoveryResult } from '../../ai/prompts'
 import type { NormalizedProfile } from '../../lib/transformers'
-import { COMPETITOR_CATEGORIES } from './categories'
+import { COMPETITOR_CATEGORIES, DISCOVERY_CATEGORIES } from './categories'
 
 interface ExportData {
   competitors: CompetitorAnalysisResult[]
@@ -93,8 +97,12 @@ export function downloadCSV(csv: string, filename: string): void {
   const link = document.createElement('a')
   link.href = url
   link.download = filename
+  // Attach to DOM before clicking — required by Firefox for downloads to trigger
+  document.body.appendChild(link)
   link.click()
-  URL.revokeObjectURL(url)
+  document.body.removeChild(link)
+  // Delay revoke so browser has time to initiate the download
+  setTimeout(() => URL.revokeObjectURL(url), 100)
 }
 
 /**
@@ -119,4 +127,111 @@ function formatFollowers(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`
   return String(n)
+}
+
+// ──────────────────────────────────────────────────────────
+// Discovery export functions
+// ──────────────────────────────────────────────────────────
+
+interface DiscoveryExportData {
+  results: DiscoveryResult[]
+  profiles: NormalizedProfile[]
+  city: string
+  niche: string
+  clientName?: string
+}
+
+interface DiscoveryCSVData extends DiscoveryExportData {
+  sourceHashtags: string[]
+}
+
+/**
+ * Format discovery results as plain text for clipboard ("Copy for Slides").
+ */
+export function formatDiscoveryForClipboard(data: DiscoveryExportData): string {
+  const { results, profiles, city, niche, clientName } = data
+  const profileMap = new Map(profiles.map((p) => [p.username, p]))
+
+  const topItems = results.filter((r) => r.category === 'top').sort((a, b) => a.rank - b.rank)
+  const trendingItems = results.filter((r) => r.category === 'trending').sort((a, b) => a.rank - b.rank)
+
+  const formatItem = (r: DiscoveryResult, index: number): string => {
+    const profile = profileMap.get(r.username)
+    const er = profile?.engagementRate?.toFixed(2) ?? 'N/A'
+    const followers = profile ? formatFollowers(profile.followersCount) : 'N/A'
+    const locationIcon = r.locationConfidence === 'confirmed' ? '📍' : r.locationConfidence === 'likely' ? '📌' : '❓'
+    return [
+      `${index + 1}. @${r.username} ${locationIcon}`,
+      `   Followers: ${followers} | ER: ${er}%`,
+      `   Specialties: ${r.specialties.join(', ')}`,
+      `   ${r.rationale}`,
+    ].join('\n')
+  }
+
+  const lines: string[] = [
+    `Location Discovery Report — ${city} ${niche}`,
+    clientName ? `Client: ${clientName}` : '',
+    '',
+    `── ${DISCOVERY_CATEGORIES.top.sectionLabel} ──`,
+    ...topItems.map((r, i) => formatItem(r, i)),
+    '',
+    `── ${DISCOVERY_CATEGORIES.trending.sectionLabel} ──`,
+    ...trendingItems.map((r, i) => formatItem(r, i)),
+  ].filter((l) => l !== undefined)
+
+  return lines.join('\n')
+}
+
+/**
+ * Generate a CSV string for discovery results download.
+ * Columns: rank, category, username, followers, er_percent, verified,
+ *          specialties, content_focus, partnership_ready, location_confidence,
+ *          rationale, city, niche, source_hashtags
+ */
+function csvCell(value: string | number | boolean): string {
+  const s = String(value)
+  // Prefix formula-starting characters to prevent spreadsheet injection
+  const safe = s.startsWith('=') || s.startsWith('+') || s.startsWith('-') || s.startsWith('@')
+    ? `'${s}`
+    : s
+  return `"${safe.replace(/"/g, '""')}"`
+}
+
+export function generateDiscoveryCSV(data: DiscoveryCSVData): string {
+  const { results, profiles, city, niche, sourceHashtags } = data
+  const profileMap = new Map(profiles.map((p) => [p.username, p]))
+
+  const headers = [
+    'rank', 'category', 'username', 'full_name', 'followers', 'engagement_rate',
+    'verified', 'specialties', 'content_focus', 'partnership_ready',
+    'location_confidence', 'rationale', 'city', 'niche', 'source_hashtags',
+  ]
+
+  const rows = results
+    .sort((a, b) => {
+      if (a.category !== b.category) return a.category === 'top' ? -1 : 1
+      return a.rank - b.rank
+    })
+    .map((r) => {
+      const profile = profileMap.get(r.username)
+      return [
+        r.rank,
+        csvCell(r.category),
+        csvCell(r.username),
+        csvCell(profile?.fullName ?? ''),
+        profile?.followersCount ?? '',
+        profile?.engagementRate?.toFixed(2) ?? '',
+        profile?.verified ? 'yes' : 'no',
+        csvCell(r.specialties.join(' | ')),
+        csvCell(r.contentFocus),
+        r.partnershipReady ? 'yes' : 'no',
+        csvCell(r.locationConfidence),
+        csvCell(r.rationale),
+        csvCell(city),
+        csvCell(niche),
+        csvCell(sourceHashtags.join(';')),
+      ].join(',')
+    })
+
+  return [headers.join(','), ...rows].join('\n')
 }

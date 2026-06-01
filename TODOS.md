@@ -136,6 +136,26 @@ React UI is written only after both binary gates have passed. Build pages in thi
 
 ---
 
+## 🟠 P1 Deferred — Conversational UX Polish
+
+Captured during `/ship` review (2026-06-01). Deferred from PLAN.md per plan completion audit.
+
+- [x] **AD1 — "Quick picks:" label above confirm buttons** · `ChatOptions` accepts a `label` prop; `ChatMessage` passes `"Quick picks:"` when `!optionsDisabled`. **Completed:** v0.3.0 (2026-06-01)
+- [x] **AD5 — Retry counter + escalation message** · `useConversation` tracks `confirmErrorCount`. After 2 failures message escalates to "Let's keep it simple…" (error type), `isConfirmingLocked` exposed; `ChatPage` locks textarea + updates placeholder. Counter resets on button click. **Completed:** v0.3.0 (2026-06-01)
+- [x] **AD10 — Auto-focus textarea on confirming entry** · `useEffect` in `ChatPage` watches `status` and calls `textareaRef.current?.focus()` on transition to `'confirming'`. **Completed:** v0.3.0 (2026-06-01)
+- [x] **Integration tests for confirming path** · `src/hooks/useConversation.confirming.test.ts` — 7 tests (RTL + jsdom): empty text no-op, heuristic match bypasses Gemini, Gemini fallback called, `isConfirmingPending` reset in finally, AD5 first/second failure escalation, button-click counter reset. **Completed:** v0.3.0 (2026-06-01)
+
+---
+
+## 🟡 P2 Deferred — Discovery Polish
+
+Captured during `/ship` review (2026-05-29). Not blocking current PR.
+
+- [ ] **D1.6 — Discovery progress steps 3+4 flash instantly** · Steps 3 ("Profile scrape") and 4 ("Location filter") fire back-to-back after `runLocationDiscovery()` returns, so users see them flash without a pause. Fix: advance step markers inside the pipeline callbacks (progress events) rather than after the promise resolves. Effort: S (~20 min).
+- [ ] **D1.7 — `useCompetitorAnalysis` double-instance in ProgressPage** · `ProgressPage` creates a second `useMutation` instance via `useCompetitorAnalysis()` (for `answerClarification` + `isPending`) separate from the instance created in `InputPage`. TQ mutations are instance-scoped — the two instances don't share state, so `isPending` in ProgressPage reflects the ProgressPage mutation instance (always false) rather than the InputPage one. Fix: lift the mutation to a shared React context or derive `isPending` from `analysisStore.status === 'running'`. Effort: M (~45 min).
+
+---
+
 ## 🔮 Backlog — Post-Niche-Signal Approach A
 
 These items are approved for a future iteration, after the niche-signal enrichment (Approach A) ships and baseline quality is confirmed.
@@ -185,3 +205,20 @@ TE4 (keysStore) → TD1 (tokens) → TD2 (AppLayout) → SettingsPage → InputP
 ---
 
 _38 tasks total (12 CEO-phase + 2 pre-L1 gates + 11 design-phase + 13 eng-phase). All User Challenges closed. Plan approved 2026-05-26._
+
+---
+
+## Future: Client Handoff
+
+- [ ] **UI rendering tests** — Add React Testing Library tests for `ResultsPage` provenance line (`candidateCount` interpolation) and confirming message format. Deferred: internal pre-call tool; manual QA is sufficient until the tool is handed off to clients. Context: store tests (T6 in UX Transparency Layer) cover data path but not JSX rendering. Prerequisite: React Testing Library + mock store setup (~1h one-time). Triggered by: `plan-eng-review` D7 / outside voice finding.
+
+---
+
+## Reel Analysis — Deferred (added by /plan-eng-review 2026-06-01)
+
+- [ ] **REEL-CACHE-1** · `localStorage` cache keyed by `{handle}-{date}` with 24h TTL for reel analysis results.
+  - **Why:** Without caching, every page refresh re-runs all Apify scrapes (90-180s per creator) and all Gemini calls (50 calls per 5-creator run = 10+ min total). A 24h cache turns a repeat visit into an instant load.
+  - **How:** On `ReelAnalysisPage` mount, check `localStorage.getItem('reel-analysis-{handle}-{YYYY-MM-DD}')` before firing Apify. If hit, inject into store directly and skip scrape + Gemini analysis. On completion, write `ReelData[]` + `ReelAnalysis[]` to the same key with a timestamp.
+  - **Scope:** `reelScraper.ts` for the cache read/write wrapper; `ReelAnalysisPage.tsx` for cache-aware mount logic.
+  - **Blocked by:** v1 feature shipped.
+  - **Priority:** High — cost and time per run make caching the highest-leverage follow-up.
