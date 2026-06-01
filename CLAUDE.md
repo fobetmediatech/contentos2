@@ -75,7 +75,7 @@ Entry point: `ChatPage` — conversational interface that routes to either pipel
 ```bash
 npm run dev          # Start Vite dev server
 npm run build        # TypeScript check + Vite build
-npm run test         # Run 377 unit tests (vitest)
+npm run test         # Run 420 unit tests (vitest)
 npm run test:watch   # Watch mode
 npm run lint         # ESLint
 npm run test:discovery  # Integration test for discovery pipeline (needs real API keys)
