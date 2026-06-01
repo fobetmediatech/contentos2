@@ -110,7 +110,7 @@ export interface AnalysisState {
   // Conversational actions
   startChat: () => void
   setStatus: (status: AnalysisStatus) => void
-  addMessage: (message: ChatMessage) => void
+  addMessage: (message: Omit<ChatMessage, 'timestamp'> & { timestamp?: number }) => void
   setDiscoveredSeeds: (seeds: string[]) => void
   setParsedIntent: (intent: ParsedIntent | null) => void
 }
@@ -176,7 +176,7 @@ export const useAnalysisStore = create<AnalysisState>()((set) => ({
     set((state) => ({
       conversationMessages: [
         ...state.conversationMessages,
-        message,
+        { ...message, timestamp: message.timestamp ?? Date.now() },
       ].slice(-50),  // cap at 50 messages
     })),
 

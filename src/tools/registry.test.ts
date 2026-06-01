@@ -24,6 +24,7 @@ const competitorIntent: ResolvedIntent = {
   depth: 'standard',
   clientName: undefined,
   pipelineType: 'competitor',
+  routingConfidence: 'high',
 }
 
 // Discovery intent fixture
@@ -35,6 +36,7 @@ const discoveryIntent: ResolvedIntent = {
   depth: 'standard',
   clientName: undefined,
   pipelineType: 'discovery',
+  routingConfidence: 'high',
 }
 
 describe('PIPELINE_REGISTRY — competitor entry', () => {

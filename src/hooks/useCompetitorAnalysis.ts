@@ -93,7 +93,7 @@ export function useCompetitorAnalysis() {
         console.error('[analysis:discover] failed:', err)
         const message = buildErrorMessage(err, controller, apifyKey, pickKey)
         setError(message)
-        throw new Error(message)
+        throw new Error(message, { cause: err })
       } finally {
         clearTimeout(timeout)
       }
@@ -160,7 +160,7 @@ export function useCompetitorAnalysis() {
         console.error('[analysis:analyze] failed:', err)
         const message = buildErrorMessage(err, controller, null, () => null)
         setError(message)
-        throw new Error(message)
+        throw new Error(message, { cause: err })
       } finally {
         clearTimeout(timeout)
       }
@@ -199,6 +199,30 @@ export function useCompetitorAnalysis() {
 
 // ── Error message builder ──────────────────────────────────────────────────
 
+// SECURITY (C2/H11): fixed, friendly messages keyed by error code. Raw error.message
+// is never shown to the user — Apify bodies can echo request internals/handles.
+const APIFY_FRIENDLY: Record<string, string> = {
+  RUN_START_FAILED: 'Scraping failed to start — try again or check your Apify key.',
+  POLL_FAILED: 'Lost connection to Apify while scraping — try again.',
+  RUN_FAILED: 'The scrape failed on Apify — try again with different handles.',
+  RUN_TIMEOUT: 'Scraping took too long on Apify — try again with fewer handles.',
+  RUN_ABORTED: 'The scrape was stopped — try again.',
+  POLL_TIMEOUT: 'Scraping took too long — try again with fewer handles.',
+  DATASET_FETCH_FAILED: "Couldn't fetch results from Apify — try again.",
+  ABORTED: 'Scraping was cancelled.',
+}
+
+const GEMINI_FRIENDLY: Record<string, string> = {
+  AUTH_ERROR: 'Gemini API key is invalid or missing — update it in Settings.',
+  RATE_LIMITED: 'Gemini rate limit hit — wait a few seconds and try again.',
+  SAFETY_BLOCK: 'The AI declined this request — try different inputs.',
+  INVALID_PROMPT: 'AI analysis failed on the input — try again.',
+  PARSE_ERROR: 'The AI returned an unexpected response — try again.',
+  INTERNAL_ERROR: 'Gemini had an internal error — try again in a moment.',
+  UNAVAILABLE: 'Gemini is temporarily unavailable — try again shortly.',
+  UNKNOWN: 'AI analysis failed — try again.',
+}
+
 function buildErrorMessage(
   err: unknown,
   controller: AbortController,
@@ -215,10 +239,12 @@ function buildErrorMessage(
         pickKey() ? 'Retrying with next key — please try again.' : 'All keys are in cooldown.'
       }`
     }
-    return `Scraping error (${err.code}): ${err.message}`
+    // SECURITY (C2): map error code → fixed friendly string. Never forward
+    // err.message — it can carry the raw Apify response body.
+    return APIFY_FRIENDLY[err.code] ?? 'Scraping failed — try again or check your Apify key.'
   }
   if (err instanceof GeminiError) {
-    return `AI error (${err.code}): ${err.message}`
+    return GEMINI_FRIENDLY[err.code] ?? 'AI analysis failed — try again.'
   }
   if (err instanceof TypeError && (err.message === 'Failed to fetch' || err.message.includes('fetch'))) {
     return `Network blocked — could not reach Apify API. If you're using Brave browser, click the Brave shield icon in the address bar and turn off "Block trackers & ads" for localhost, then try again.`

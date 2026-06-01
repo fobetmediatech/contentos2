@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { startRun, pollRun, fetchDataset, ApifyError, POLL_INTERVAL_MS } from './apifyCore'
+import { startRun, pollRun, fetchDataset } from './apifyCore'
 
 // Speed up poll tests by making POLL_INTERVAL_MS effectively 0 in the test environment.
 // We mock sleep directly to avoid real timers.

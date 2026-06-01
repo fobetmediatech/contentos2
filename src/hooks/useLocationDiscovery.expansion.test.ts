@@ -104,9 +104,11 @@ function makeProfile(username: string, city = 'Mumbai'): NormalizedProfile {
     profilePicUrl: '',
     verified: false,
     isBusinessAccount: false,
-    private: false,
-    latestPosts: [],
-    relatedProfiles: [],
+    avgLikes: 1000,
+    avgComments: 50,
+    engagementRate: 2.1,
+    relatedHandles: [],
+    topHashtags: [],
   }
 }
 
@@ -114,7 +116,7 @@ function makeFilterResult(profiles: NormalizedProfile[]): FilterResult {
   return {
     filtered: profiles,
     relaxed: false,
-    sourceHashtags: ['MumbaiFood'],
+    passedCount: profiles.length,
   }
 }
 

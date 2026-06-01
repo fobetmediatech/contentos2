@@ -17,6 +17,19 @@ const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta'
 // History: gemini-1.5-flash (retired) → gemini-2.0-flash (retired) → gemini-2.5-flash (current)
 const MODEL = import.meta.env.VITE_GEMINI_MODEL ?? 'gemini-2.5-flash'
 
+/**
+ * Shared request headers for every Gemini REST call.
+ *
+ * SECURITY: the API key is sent via the `x-goog-api-key` header, NOT the
+ * `?key=` query param. URLs leak into browser history, the devtools Network
+ * tab, disk cache, extension hooks, and proxy/referrer logs — and in a
+ * browser-only app the user's own key is the only secret. Headers don't leak
+ * that way. Gemini supports both; we use the header everywhere.
+ */
+export function geminiHeaders(apiKey: string): Record<string, string> {
+  return { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey }
+}
+
 // ----- Error class -----
 
 export type GeminiErrorCode =
@@ -111,7 +124,7 @@ async function _callGeminiWithRetry<T>(
     signal,
   } = options ?? {}
 
-  const url = `${GEMINI_BASE}/models/${MODEL}:generateContent?key=${apiKey}`
+  const url = `${GEMINI_BASE}/models/${MODEL}:generateContent`
 
   const generationConfig: Record<string, unknown> = {
     temperature,
@@ -126,7 +139,7 @@ async function _callGeminiWithRetry<T>(
 
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: geminiHeaders(apiKey),
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig,
@@ -450,11 +463,11 @@ export async function callGeminiFollowUp(
   const systemContext = buildFollowUpContext(summary, accountSummaries)
   const fullPrompt = `${systemContext}\n\nUser: ${userMessage}`
 
-  const url = `${GEMINI_BASE}/models/${MODEL}:generateContent?key=${geminiKey}`
+  const url = `${GEMINI_BASE}/models/${MODEL}:generateContent`
 
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: geminiHeaders(geminiKey),
     body: JSON.stringify({
       contents: [{ parts: [{ text: fullPrompt }] }],
       generationConfig: {

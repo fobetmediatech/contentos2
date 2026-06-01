@@ -145,7 +145,9 @@ describe('analysisStore — setParsedIntent', () => {
       location: 'Mumbai',
       knownHandles: [],
       depth: 'standard' as const,
+      clientName: undefined,
       pipelineType: 'competitor' as const,
+      routingConfidence: 'high' as const,
     }
     useAnalysisStore.getState().setParsedIntent(intent)
     expect(useAnalysisStore.getState().parsedIntent).toEqual(intent)

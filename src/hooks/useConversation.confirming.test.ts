@@ -18,7 +18,7 @@
  *   6. AD5: successful resolution resets the error counter
  */
 
-import { describe, it, expect, vi, beforeEach, type MockedFunction } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useConversation } from './useConversation'
 import * as geminiModule from '../ai/gemini'

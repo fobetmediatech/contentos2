@@ -126,7 +126,7 @@ export function useLocationDiscovery() {
               scrapedHashtags = [...scrapedHashtags, ...expansion.scrapedHashtags]
               didExpand = true
             }
-          } catch (_expansionErr) {
+          } catch {
             // Expansion failed — continue with first-pass results rather than throwing
           }
         }
@@ -213,7 +213,7 @@ export function useLocationDiscovery() {
         }
 
         setError(message)
-        throw new Error(message)
+        throw new Error(message, { cause: err })
       } finally {
         clearTimeout(timeout)
       }

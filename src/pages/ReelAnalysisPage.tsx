@@ -52,39 +52,10 @@ export function ReelAnalysisPage() {
   const analysisStarted = useRef(false)
   const handlesRef = useRef<string[]>([])
 
-  // Mount: reset store, read handles, redirect if empty, kick off analysis
-  useEffect(() => {
-    reset()
-    const handlesParam = searchParams.get('handles') ?? ''
-    const handles = handlesParam.split(',').map(h => h.trim()).filter(Boolean)
-
-    if (handles.length === 0) {
-      navigate('/discover/results', { replace: true })
-      return
-    }
-
-    if (analysisStarted.current) return
-    analysisStarted.current = true
-    handlesRef.current = handles
-
-    runAnalysis(handles)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // empty deps — runs once on mount
-
   // ---------------------------------------------------------------------------
-  // runAnalysis
+  // runAnalysis — declared before the mount effect that invokes it so the
+  // effect captures the live function (satisfies react-hooks/immutability).
   // ---------------------------------------------------------------------------
-
-  async function runAnalysis(handles: string[]) {
-    // Initialize all creators as 'scraping'
-    handles.forEach(handle => {
-      setCreatorState(handle, { handle, status: 'scraping', reels: [], analyses: {} })
-    })
-
-    // Run all creator pipelines in parallel
-    // (Apify runs are serialized internally via reelScraper's own pLimit(1))
-    await Promise.allSettled(handles.map(handle => runCreatorPipeline(handle)))
-  }
 
   async function runCreatorPipeline(handle: string) {
     try {
@@ -112,6 +83,36 @@ export function ReelAnalysisPage() {
       }
     }
   }
+
+  async function runAnalysis(handles: string[]) {
+    // Initialize all creators as 'scraping'
+    handles.forEach(handle => {
+      setCreatorState(handle, { handle, status: 'scraping', reels: [], analyses: {} })
+    })
+
+    // Run all creator pipelines in parallel
+    // (Apify runs are serialized internally via reelScraper's own pLimit(1))
+    await Promise.allSettled(handles.map(handle => runCreatorPipeline(handle)))
+  }
+
+  // Mount: reset store, read handles, redirect if empty, kick off analysis
+  useEffect(() => {
+    reset()
+    const handlesParam = searchParams.get('handles') ?? ''
+    const handles = handlesParam.split(',').map(h => h.trim()).filter(Boolean)
+
+    if (handles.length === 0) {
+      navigate('/', { replace: true })
+      return
+    }
+
+    if (analysisStarted.current) return
+    analysisStarted.current = true
+    handlesRef.current = handles
+
+    runAnalysis(handles)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // empty deps — runs once on mount
 
   // ---------------------------------------------------------------------------
   // Synthesis trigger — fires once all creators reach a terminal state

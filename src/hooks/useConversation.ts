@@ -203,7 +203,6 @@ export function useConversation() {
         store.addMessage({
           role: 'assistant',
           content: "Still searching — this is taking a bit longer than usual. Hang tight…",
-          timestamp: Date.now(),
           type: 'text',
         })
       }
@@ -223,7 +222,6 @@ export function useConversation() {
         store.addMessage({
           role: 'assistant',
           content: `Couldn't find accounts automatically for "${niche}"${location ? ` in ${location}` : ''}. Do you know any handles in this niche I can start from?`,
-          timestamp: Date.now(),
           type: 'text',
         })
         store.setStatus('chatting')
@@ -239,7 +237,6 @@ export function useConversation() {
       store.addMessage({
         role: 'assistant',
         content: `Found **${seeds.length} ${niche} accounts** via hashtag search: ${seeds.slice(0, 4).map(s => '@' + s).join(', ')}${seeds.length > 4 ? ` + ${seeds.length - 4} more` : ''}. Which direction should I focus on?`,
-        timestamp: Date.now(),
         type: 'options',
         options: [
           PROCEED_LABEL,
@@ -260,7 +257,7 @@ export function useConversation() {
         message = 'Search timed out after 90 seconds. Try again.'
       }
 
-      store.addMessage({ role: 'assistant', content: message, timestamp: Date.now(), type: 'error' })
+      store.addMessage({ role: 'assistant', content: message, type: 'error' })
       store.setStatus('chatting')
     } finally {
       // Always clear both timers — whether the discovery succeeded, failed, or was aborted.
@@ -334,13 +331,12 @@ export function useConversation() {
       isConfirmingPendingRef.current = true
       try {
         const safeText = text.replace(/[\n\r]/g, ' ').trim().slice(0, 500)
-        store.addMessage({ role: 'user', content: safeText, timestamp: Date.now(), type: 'text' })
+        store.addMessage({ role: 'user', content: safeText, type: 'text' })
 
         if (!geminiKey?.trim()) {
           store.addMessage({
             role: 'assistant',
             content: GEMINI_KEY_MISSING_MSG,
-            timestamp: Date.now(),
             type: 'error',
           })
           return
@@ -357,7 +353,6 @@ export function useConversation() {
           store.addMessage({
             role: 'assistant',
             content: 'Switching pipelines…',
-            timestamp: Date.now(),
             type: 'text',
           })
           // CRITICAL: clear guards BEFORE recursive call or the inner sendMessage
@@ -377,7 +372,6 @@ export function useConversation() {
           store.addMessage({
             role: 'assistant',
             content: 'Something went wrong with your request — please try again.',
-            timestamp: Date.now(),
             type: 'error',
           })
           store.setStatus('chatting')
@@ -393,7 +387,6 @@ export function useConversation() {
           store.addMessage({
             role: 'assistant',
             content: `Got it — running with "${heuristicMatch}"…`,
-            timestamp: Date.now(),
             type: 'text',
           })
           confirmSeeds(heuristicMatch)
@@ -412,7 +405,6 @@ export function useConversation() {
         store.addMessage({
           role: 'assistant',
           content: `Got it — running with "${mappedOption}"…`,
-          timestamp: Date.now(),
           type: 'text',
         })
         // AD5: successful resolution — reset the error counter
@@ -431,7 +423,6 @@ export function useConversation() {
         store.addMessage({
           role: 'assistant',
           content,
-          timestamp: Date.now(),
           type: newCount >= 2 ? 'error' : 'text',
         })
         // Stay in confirming so the user can still click a button
@@ -452,13 +443,12 @@ export function useConversation() {
       isSendingRef.current = true
       try {
         const safeText = text.replace(/[\n\r]/g, ' ').trim().slice(0, 500)
-        store.addMessage({ role: 'user', content: safeText, timestamp: Date.now(), type: 'text' })
+        store.addMessage({ role: 'user', content: safeText, type: 'text' })
 
         if (!geminiKey?.trim()) {
           store.addMessage({
             role: 'assistant',
             content: GEMINI_KEY_MISSING_MSG,
-            timestamp: Date.now(),
             type: 'error',
           })
           return
@@ -474,14 +464,14 @@ export function useConversation() {
           const summary = buildPipelineSummary()
           const accountSummaries = buildFollowUpAccountSummaries()
           const reply = await callGeminiFollowUp(geminiKey, summary, safeText, followUpController.signal, accountSummaries)
-          store.addMessage({ role: 'assistant', content: reply, timestamp: Date.now(), type: 'text' })
+          store.addMessage({ role: 'assistant', content: reply, type: 'text' })
         } catch (err) {
           let content = 'Something went wrong — try again.'
           if (err instanceof GeminiError) {
             if (err.code === 'AUTH_ERROR') content = 'Gemini API key is invalid or missing. Go to Settings to update it.'
             else if (err.code === 'RATE_LIMITED') content = 'Gemini rate limit hit — wait a few seconds and try again.'
           }
-          store.addMessage({ role: 'assistant', content, timestamp: Date.now(), type: 'error' })
+          store.addMessage({ role: 'assistant', content, type: 'error' })
         }
       } finally {
         isSendingRef.current = false
@@ -499,14 +489,13 @@ export function useConversation() {
       const safeText = text.replace(/[\n\r]/g, ' ').trim().slice(0, 500)
 
       // Append user message to conversation
-      store.addMessage({ role: 'user', content: safeText, timestamp: Date.now(), type: 'text' })
+      store.addMessage({ role: 'user', content: safeText, type: 'text' })
 
       const apifyKey = pickKey()
       if (!apifyKey) {
         store.addMessage({
           role: 'assistant',
           content: 'No Apify keys available. Add one in Settings.',
-          timestamp: Date.now(),
           type: 'error',
         })
         return
@@ -516,10 +505,62 @@ export function useConversation() {
         store.addMessage({
           role: 'assistant',
           content: 'Gemini API key missing. Add it in Settings.',
-          timestamp: Date.now(),
           type: 'error',
         })
         return
+      }
+
+      // Step 0: handles-only fast path — detect bare comma/space-separated usernames
+      // WITHOUT @ signs and bypass Gemini entirely.
+      //
+      // Gemini can't infer a niche from raw usernames alone (no context), so it
+      // returns needsClarification:true. If clarificationTurns is already 1, the
+      // user hits the fallback and gets stuck. This pre-check breaks that loop.
+      //
+      // Only fires when:
+      //   - No @ signs (messages with @ go through the existing Gemini path which handles them well)
+      //   - All tokens match Instagram handle format
+      //   - No common English words (rules out prose sentences)
+      //   - Has commas OR at least one token has dots/underscores/digits (confirms list intent)
+      const HANDLE_TOKEN_RE = /^[a-zA-Z0-9._]{3,30}$/
+      const COMMON_WORDS = new Set([
+        'the', 'and', 'for', 'are', 'you', 'can', 'this', 'that', 'from', 'not',
+        'with', 'find', 'show', 'want', 'like', 'more', 'some', 'any', 'all',
+        'get', 'has', 'its', 'was', 'how', 'who', 'what', 'when', 'help',
+        'similar', 'analyze', 'search', 'look', 'creators', 'accounts', 'brands',
+        'influencers', 'bloggers', 'niche', 'best', 'top', 'good', 'great',
+      ])
+      if (!safeText.includes('@')) {
+        const rawTokens = safeText.split(/[\s,]+/).map(t => t.trim()).filter(Boolean)
+        const isHandlesOnly =
+          rawTokens.length >= 1 &&
+          rawTokens.length <= 5 &&
+          rawTokens.every(t => HANDLE_TOKEN_RE.test(t)) &&
+          !rawTokens.some(t => COMMON_WORDS.has(t.toLowerCase())) &&
+          // Confirm list intent: commas present OR a token has handle-special chars
+          (safeText.includes(',') || rawTokens.some(t => /[._\d]/.test(t)))
+
+        if (isHandlesOnly) {
+          // Deduplicate case-insensitively before storing
+          const seen = new Set<string>()
+          const directHandles = rawTokens
+            .map(h => h.toLowerCase())
+            .filter(h => !seen.has(h) && seen.add(h))
+          store.setDiscoveredSeeds(directHandles)
+          store.setStatus('confirming')
+          store.addMessage({
+            role: 'assistant',
+            content: `Got **${directHandles.length} reference account${directHandles.length > 1 ? 's' : ''}**: ${directHandles.map(h => '@' + h).join(', ')}. Which direction should I focus on?`,
+            type: 'options',
+            options: [
+              PROCEED_LABEL,
+              'Micro-influencers (under 100K followers)',
+              'Macro creators (100K+ followers)',
+              'Include businesses and brands',
+            ],
+          })
+          return
+        }
       }
 
       // Step 1: parse intent
@@ -551,7 +592,6 @@ export function useConversation() {
         store.addMessage({
           role: 'assistant',
           content: errorContent,
-          timestamp: Date.now(),
           type: 'error',
         })
         store.setStatus('chatting')
@@ -565,17 +605,17 @@ export function useConversation() {
           store.addMessage({
             role: 'assistant',
             content: intent.question,
-            timestamp: Date.now(),
             type: 'text',
           })
           store.setStatus('chatting')
           return
         }
-        // Second ambiguous response — force a handle-based fallback
+        // Second ambiguous response — force a handle-based fallback.
+        // Reset clarificationTurns so the user can try again after providing handles.
+        setClarificationTurns(0)
         store.addMessage({
           role: 'assistant',
           content: "Having trouble understanding. Name a handle you want to analyze, and I'll find similar accounts.",
-          timestamp: Date.now(),
           type: 'text',
         })
         store.setStatus('chatting')
@@ -598,7 +638,6 @@ export function useConversation() {
           store.addMessage({
             role: 'assistant',
             content: `I can find **${niche}** creators in a specific city. Which city should I search in?`,
-            timestamp: Date.now(),
             type: 'text',
           })
           store.setStatus('chatting')
@@ -610,7 +649,6 @@ export function useConversation() {
         store.addMessage({
           role: 'assistant',
           content: descriptor.confirmMessage(intent),
-          timestamp: Date.now(),
           type: 'options',
           options: descriptor.confirmOptions(intent),
         })
@@ -626,6 +664,8 @@ export function useConversation() {
       // and doesn't depend on model reasoning capability.
       const geminiHandles = ('knownHandles' in intent ? (intent.knownHandles ?? []) : [])
         .filter((h): h is string => typeof h === 'string' && /^[a-zA-Z0-9._]{1,30}$/.test(h))
+      // Only match @-prefixed handles here. Bare handle lists (no @) are caught
+      // earlier by the Step 0 fast path before Gemini runs.
       const clientHandles = [...safeText.matchAll(/@([a-zA-Z0-9._]+)/g)]
         .map(m => m[1].toLowerCase())
         .filter(h => h.length <= 30)               // Instagram max handle length is 30 chars
@@ -638,7 +678,6 @@ export function useConversation() {
         store.addMessage({
           role: 'assistant',
           content: `Got **${knownHandles.length} reference account${knownHandles.length > 1 ? 's' : ''}**: ${knownHandles.slice(0, 4).map(h => '@' + h).join(', ')}${knownHandles.length > 4 ? ` + ${knownHandles.length - 4} more` : ''}. Which direction should I focus on?`,
-          timestamp: Date.now(),
           type: 'options',
           options: [
             PROCEED_LABEL,
@@ -683,7 +722,6 @@ export function useConversation() {
       store.addMessage({
         role: 'assistant',
         content: 'Session expired. Start a new conversation to try again.',
-        timestamp: Date.now(),
         type: 'text',
       })
       store.setStatus('chatting')
@@ -704,7 +742,6 @@ export function useConversation() {
           store.addMessage({
             role: 'assistant',
             content: 'API keys missing. Check Settings and try again.',
-            timestamp: Date.now(),
             type: 'error',
           })
           store.setStatus('chatting')

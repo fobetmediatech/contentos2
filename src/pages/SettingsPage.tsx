@@ -1,13 +1,21 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Plus, Trash2, Clock, CheckCircle2, AlertCircle } from 'lucide-react'
 import { useKeysStore } from '../store/keysStore'
 import { getKeyExpiry } from '../lib/keyRotator'
 
 function CooldownBadge({ apiKey }: { apiKey: string }) {
+  // Lift the current time into state, refreshed on an interval, so the
+  // cooldown countdown stays pure during render (no Date.now() call in render).
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 30000)
+    return () => clearInterval(id)
+  }, [])
+
   const expiry = getKeyExpiry(apiKey)
   if (!expiry) return <span className="text-xs text-success font-medium flex items-center gap-1 font-mono"><CheckCircle2 size={12} />Active</span>
 
-  const remaining = Math.ceil((expiry - Date.now()) / 60000)
+  const remaining = Math.ceil((expiry - nowMs) / 60000)
   return (
     <span className="text-xs text-warning font-medium flex items-center gap-1 font-mono">
       <Clock size={12} />
@@ -26,9 +34,11 @@ export function SettingsPage() {
     if (!geminiKey.trim()) return
     setSaveStatus('saving')
     try {
-      // Validate by calling Gemini models list endpoint
+      // Validate by calling Gemini models list endpoint.
+      // SECURITY: key goes in the x-goog-api-key header, never the URL (see geminiHeaders).
       const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models?key=${geminiKey}`,
+        'https://generativelanguage.googleapis.com/v1beta/models',
+        { headers: { 'x-goog-api-key': geminiKey } },
       )
       if (res.ok) {
         setSaveStatus('saved')

@@ -15,7 +15,7 @@
 
 import { z } from 'zod'
 import { buildIntentPrompt } from './prompts'
-import { GeminiError } from './gemini'
+import { GeminiError, geminiHeaders } from './gemini'
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta'
 const MODEL = import.meta.env.VITE_GEMINI_MODEL ?? 'gemini-2.5-flash'
@@ -78,11 +78,11 @@ async function fetchIntent(
   prompt: string,
   signal?: AbortSignal,
 ): Promise<unknown> {
-  const url = `${GEMINI_BASE}/models/${MODEL}:generateContent?key=${geminiKey}`
+  const url = `${GEMINI_BASE}/models/${MODEL}:generateContent`
 
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: geminiHeaders(geminiKey),
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {

@@ -13,6 +13,8 @@
  *   - Allow only word chars, spaces, commas, hyphens
  */
 
+import { geminiHeaders } from '../ai/gemini'
+
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta'
 const MODEL = import.meta.env.VITE_GEMINI_MODEL ?? 'gemini-2.5-flash'
 
@@ -24,7 +26,7 @@ const HASHTAG_COUNT: Record<'standard' | 'deep', number> = {
 
 // ----- Input sanitization -----
 
-const SAFE_PATTERN = /[^\w\s,\-]/g  // allow word chars, spaces, commas, hyphens
+const SAFE_PATTERN = /[^\w\s,-]/g  // allow word chars, spaces, commas, hyphens
 
 export function sanitize(input: string, maxLen: number): string {
   return input
@@ -115,11 +117,11 @@ Good examples for fitness in Mumbai: "MumbaiFitness", "MumbaiFitnessVlogger", "M
 
 Return ONLY a JSON array of strings. No # prefix. No explanation. No markdown.`
 
-  const url = `${GEMINI_BASE}/models/${MODEL}:generateContent?key=${geminiKey}`
+  const url = `${GEMINI_BASE}/models/${MODEL}:generateContent`
 
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: geminiHeaders(geminiKey),
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {

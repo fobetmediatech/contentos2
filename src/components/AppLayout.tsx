@@ -12,7 +12,7 @@ interface AppLayoutProps {
 export function AppLayout({ noPadding = false }: AppLayoutProps) {
   const location = useLocation()
   const isSettings = location.pathname === '/settings'
-  const isChat = location.pathname === '/' || location.pathname === '/progress' || location.pathname === '/results' || location.pathname.startsWith('/discover')
+  const isChat = location.pathname === '/'
 
   return (
     <div className={`${noPadding ? 'h-[100dvh] flex flex-col overflow-hidden' : 'min-h-screen'} bg-chai`}>

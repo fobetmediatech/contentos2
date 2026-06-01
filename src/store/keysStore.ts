@@ -77,11 +77,15 @@ if (typeof window !== 'undefined') {
     if (event.key === 'keys-store') {
       try {
         const newState = JSON.parse(event.newValue ?? '{}')
-        const { geminiKey, apifyKeys } = newState.state ?? {}
-        useKeysStore.setState({
-          geminiKey: geminiKey ?? '',
-          apifyKeys: apifyKeys ?? [],
-        })
+        const incoming = newState?.state
+        if (!incoming || typeof incoming !== 'object') return
+        // H9: patch ONLY the fields actually present in the payload. A partial or
+        // mid-migration write from another tab must never wipe this tab's keys —
+        // the old `?? '' / ?? []` reset the user to "logged out" on any odd write.
+        const patch: Partial<Pick<KeysState, 'geminiKey' | 'apifyKeys'>> = {}
+        if (typeof incoming.geminiKey === 'string') patch.geminiKey = incoming.geminiKey
+        if (Array.isArray(incoming.apifyKeys)) patch.apifyKeys = incoming.apifyKeys
+        if (Object.keys(patch).length > 0) useKeysStore.setState(patch)
       } catch {
         // Ignore malformed storage events
       }
