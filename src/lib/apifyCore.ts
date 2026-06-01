@@ -100,8 +100,9 @@ export async function pollRun(
   runId: string,
   apiKey: string,
   signal?: AbortSignal,
+  maxPollMs?: number,
 ): Promise<string> {
-  const deadline = Date.now() + MAX_POLL_MS
+  const deadline = Date.now() + (maxPollMs ?? MAX_POLL_MS)
   let datasetId = ''
 
   while (Date.now() < deadline) {
