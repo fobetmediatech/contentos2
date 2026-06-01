@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [0.3.0] — 2026-06-01
+## [0.3.0.0] — 2026-06-01
 
 ### Added
 
@@ -31,10 +31,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Security: sanitize scraped Apify usernames before Gemini prompt injection; `buildConfirmReplyPrompt` uses `JSON.stringify` escaping (handles backslashes, control chars)
 - Regex hardening: `detectPipelineSwitch` no longer uses unbounded `find.*creator` wildcard (false positive on "find the right macro creator"); `\banalysis\b` removed from discovery→competitor trigger (false positive on "thanks for the analysis!")
 - Zombie AbortController: follow-up path now cancels the previous in-flight request before starting a new one
+- Stuck UI on back-navigation: mount effect now resets `discovering`/`confirming`/`running`/`clarifying` states left behind when navigating away mid-pipeline
+- Silent no-op in confirming path: null/clarification `parsedIntent` guard now shows an error message instead of silently dropping back to chatting
+- DRY: extracted `GEMINI_KEY_MISSING_MSG` constant to `constants.ts` (three occurrences unified)
 
 ### Tests
 
-- 358 unit tests across 17 test files (up from 61 at v0.1.0)
+- 365 unit tests across 17 test files (up from 61 at v0.1.0)
 - `conversationalUX.test.ts` — 52 tests for `detectPipelineSwitch` and `heuristicConfirmMatch` including regression tests for the CRITICAL ORDER constraint (specific options before generic affirmatives)
 - `useActivePipeline.test.ts` — 45 tests for pipeline state computation, precedence, and `progressLabel` fallbacks
 - `registry.test.ts` — 23 tests for `PIPELINE_REGISTRY` shape and invariants

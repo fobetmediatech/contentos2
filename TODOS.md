@@ -205,3 +205,9 @@ TE4 (keysStore) → TD1 (tokens) → TD2 (AppLayout) → SettingsPage → InputP
 ---
 
 _38 tasks total (12 CEO-phase + 2 pre-L1 gates + 11 design-phase + 13 eng-phase). All User Challenges closed. Plan approved 2026-05-26._
+
+---
+
+## Future: Client Handoff
+
+- [ ] **UI rendering tests** — Add React Testing Library tests for `ResultsPage` provenance line (`candidateCount` interpolation) and confirming message format. Deferred: internal pre-call tool; manual QA is sufficient until the tool is handed off to clients. Context: store tests (T6 in UX Transparency Layer) cover data path but not JSX rendering. Prerequisite: React Testing Library + mock store setup (~1h one-time). Triggered by: `plan-eng-review` D7 / outside voice finding.
