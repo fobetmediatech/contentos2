@@ -24,22 +24,22 @@ interface ClarificationCardProps {
 
 export function ClarificationCard({ question, candidateCount, onAnswer, disabled }: ClarificationCardProps) {
   return (
-    <div className="w-full rounded-xl border border-indigo-200 bg-indigo-50 p-5">
+    <div className="w-full rounded-xl border border-[rgba(224,123,58,0.2)] bg-[rgba(224,123,58,0.06)] p-5">
       {/* Header */}
       <div className="flex items-center gap-3 mb-4">
-        <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
-          <Search size={18} className="text-indigo-600" />
+        <div className="w-9 h-9 rounded-full bg-[rgba(224,123,58,0.12)] flex items-center justify-center flex-shrink-0">
+          <Search size={18} className="text-[#E07B3A]" />
         </div>
         <div>
-          <p className="text-xs font-medium text-indigo-500 uppercase tracking-wide">One quick check</p>
-          <p className="text-sm text-indigo-800">
-            Found <span className="font-semibold">{candidateCount}</span> candidate accounts
+          <p className="text-xs font-medium text-[#E07B3A] uppercase tracking-wide font-mono">One quick check</p>
+          <p className="text-sm text-secondary">
+            Found <span className="font-semibold text-primary">{candidateCount}</span> candidate accounts
           </p>
         </div>
       </div>
 
       {/* Question */}
-      <p className="text-base font-semibold text-slate-900 mb-4">{question.question}</p>
+      <p className="text-base font-semibold text-primary mb-4">{question.question}</p>
 
       {/* Options */}
       <div className="flex flex-col gap-2">
@@ -48,7 +48,7 @@ export function ClarificationCard({ question, candidateCount, onAnswer, disabled
             key={option}
             onClick={() => onAnswer(option)}
             disabled={disabled}
-            className="w-full text-left px-4 py-3 rounded-lg bg-white border border-slate-200 text-sm text-slate-800 font-medium hover:border-indigo-400 hover:bg-indigo-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full text-left px-4 py-3 rounded-lg bg-surface border border-[rgba(245,237,214,0.08)] text-sm text-primary font-medium hover:border-[#E07B3A] hover:bg-[rgba(224,123,58,0.06)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {option}
           </button>
@@ -58,7 +58,7 @@ export function ClarificationCard({ question, candidateCount, onAnswer, disabled
         <button
           onClick={() => onAnswer('')}
           disabled={disabled}
-          className="w-full text-left px-4 py-3 rounded-lg bg-transparent border border-slate-200 border-dashed text-sm text-slate-500 hover:text-slate-700 hover:border-slate-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full text-left px-4 py-3 rounded-lg bg-transparent border border-[rgba(245,237,214,0.08)] border-dashed text-sm text-muted hover:text-secondary hover:border-[rgba(245,237,214,0.15)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {PROCEED_LABEL}
         </button>

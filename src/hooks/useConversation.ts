@@ -294,8 +294,8 @@ export function useConversation() {
   const buildFollowUpAccountSummaries = (): Array<{ username: string; followers: number; er: number }> | undefined => {
     if (store.status === 'done' && store.competitors.length > 0) {
       return store.competitors.map((c) => {
-        const profile = store.candidateProfiles.find(
-          (p) => p.username.toLowerCase() === c.username.toLowerCase(),
+        const profile = store.inputProfiles.find(
+          (p: { username: string }) => p.username.toLowerCase() === c.username.toLowerCase(),
         )
         return {
           username: c.username,

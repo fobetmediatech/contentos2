@@ -15,16 +15,16 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
   const isChat = location.pathname === '/' || location.pathname === '/progress' || location.pathname === '/results' || location.pathname.startsWith('/discover')
 
   return (
-    <div className={`${noPadding ? 'h-[100dvh] flex flex-col overflow-hidden' : 'min-h-screen'} bg-slate-50`}>
+    <div className={`${noPadding ? 'h-[100dvh] flex flex-col overflow-hidden' : 'min-h-screen'} bg-chai`}>
       {/* Top navigation bar */}
-      <header className="sticky top-0 z-10 bg-white border-b border-slate-200 shadow-sm flex-shrink-0">
+      <header className="sticky top-0 z-10 bg-surface border-b border-[rgba(245,237,214,0.08)] flex-shrink-0">
         <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
-          {/* Brand */}
+          {/* Brand — Instrument Serif italic */}
           <Link
             to="/"
-            className="text-base font-semibold text-slate-900 hover:text-indigo-600 transition-colors"
+            className="font-serif italic text-lg text-primary hover:text-[#F4A97B] transition-colors tracking-tight"
           >
-            Content OS 2.0
+            Content OS
           </Link>
 
           {/* Nav links */}
@@ -33,8 +33,8 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
               to="/"
               className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md transition-colors ${
                 isChat
-                  ? 'bg-slate-100 text-slate-900 font-medium'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  ? 'bg-surface-raised text-primary font-medium'
+                  : 'text-secondary hover:text-primary hover:bg-surface-raised'
               }`}
             >
               <MessageSquare size={14} />
@@ -45,8 +45,8 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
               to="/settings"
               className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md transition-colors ${
                 isSettings
-                  ? 'bg-slate-100 text-slate-900 font-medium'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  ? 'bg-surface-raised text-primary font-medium'
+                  : 'text-secondary hover:text-primary hover:bg-surface-raised'
               }`}
             >
               <Settings size={15} />

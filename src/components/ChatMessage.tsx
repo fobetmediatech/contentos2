@@ -30,12 +30,12 @@ export function ChatMessage({ message, onOptionSelect, optionsDisabled }: ChatMe
   if (isUser) {
     return (
       <div className="flex items-end justify-end gap-2">
-        <div className="max-w-[75%] px-4 py-2.5 rounded-2xl rounded-br-sm bg-indigo-600 text-white text-sm leading-relaxed">
+        <div className="max-w-[75%] px-4 py-2.5 rounded-2xl rounded-br-sm bg-[#E07B3A] text-white text-sm leading-relaxed">
           {message.content}
         </div>
         {/* T15: User icon circle */}
-        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center">
-          <User size={14} className="text-slate-500" />
+        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-surface-raised flex items-center justify-center">
+          <User size={14} className="text-secondary" />
         </div>
       </div>
     )
@@ -44,15 +44,15 @@ export function ChatMessage({ message, onOptionSelect, optionsDisabled }: ChatMe
   return (
     <div className="flex items-end gap-2">
       {/* T15: Bot icon circle */}
-      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
-        <Bot size={14} className="text-indigo-600" />
+      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(224,123,58,0.12)] flex items-center justify-center">
+        <Bot size={14} className="text-[#E07B3A]" />
       </div>
       <div className="flex flex-col gap-2 max-w-[80%]">
         <div
           className={`px-4 py-2.5 rounded-2xl rounded-bl-sm text-sm leading-relaxed ${
             isError
-              ? 'bg-red-50 border border-red-200 text-red-800'  // T13: error variant
-              : 'bg-white border border-slate-200 text-slate-800'
+              ? 'bg-[rgba(224,92,92,0.1)] border border-[rgba(224,92,92,0.2)] text-danger'
+              : 'bg-surface border border-[rgba(245,237,214,0.08)] text-primary'
           }`}
         >
           {/* Render bold markdown (**text**) in messages */}
@@ -80,14 +80,14 @@ export function ChatMessage({ message, onOptionSelect, optionsDisabled }: ChatMe
 export function TypingIndicator() {
   return (
     <div className="flex items-end gap-2">
-      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
-        <Bot size={14} className="text-indigo-600" />
+      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(224,123,58,0.12)] flex items-center justify-center">
+        <Bot size={14} className="text-[#E07B3A]" />
       </div>
-      <div className="px-4 py-3 rounded-2xl rounded-bl-sm bg-white border border-slate-200">
+      <div className="px-4 py-3 rounded-2xl rounded-bl-sm bg-surface border border-[rgba(245,237,214,0.08)]">
         <div className="flex gap-1 items-center h-4">
-          <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:-0.3s]" />
-          <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:-0.15s]" />
-          <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" />
+          <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce [animation-delay:-0.3s]" />
+          <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce [animation-delay:-0.15s]" />
+          <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce" />
         </div>
       </div>
     </div>
@@ -117,16 +117,16 @@ export function ProgressBubble({ label, currentStep, steps }: ProgressBubbleProp
 
   return (
     <div className="flex items-start gap-2">
-      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center mt-0.5">
-        <Bot size={14} className="text-indigo-600" />
+      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(224,123,58,0.12)] flex items-center justify-center mt-0.5">
+        <Bot size={14} className="text-[#E07B3A]" />
       </div>
       <div className="flex flex-col gap-2 min-w-[220px] max-w-[80%]">
         {label && (
-          <div className="px-4 py-2.5 rounded-2xl rounded-tl-sm bg-white border border-slate-200 text-sm text-slate-600 leading-relaxed">
+          <div className="px-4 py-2.5 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(245,237,214,0.08)] text-sm text-secondary leading-relaxed">
             {label}
           </div>
         )}
-        <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-white border border-slate-200 flex flex-col gap-2.5">
+        <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(245,237,214,0.08)] flex flex-col gap-2.5">
           {stepIndices.map((step) => {
             const isDone = step < currentStep
             const isActive = step === currentStep
@@ -138,10 +138,10 @@ export function ProgressBubble({ label, currentStep, steps }: ProgressBubbleProp
                 <div
                   className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-semibold ${
                     isDone
-                      ? 'bg-green-100 text-green-700'
+                      ? 'bg-[rgba(76,175,125,0.15)] text-success'
                       : isActive
-                      ? 'bg-indigo-600 text-white'
-                      : 'bg-slate-100 text-slate-400'
+                      ? 'bg-[#E07B3A] text-white'
+                      : 'bg-surface-raised text-muted'
                   }`}
                 >
                   {isDone ? (
@@ -154,7 +154,7 @@ export function ProgressBubble({ label, currentStep, steps }: ProgressBubbleProp
                 </div>
                 <span
                   className={`text-sm ${
-                    isActive ? 'text-slate-900 font-medium' : isDone ? 'text-slate-500' : 'text-slate-400'
+                    isActive ? 'text-primary font-medium' : isDone ? 'text-secondary' : 'text-muted'
                   }`}
                 >
                   {allLabels[step] ?? `Step ${step}`}

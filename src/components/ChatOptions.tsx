@@ -26,7 +26,7 @@ export function ChatOptions({ options, onSelect, disabled, label }: ChatOptionsP
   return (
     <div className="flex flex-col gap-1.5 mt-1">
       {label && (
-        <p className="text-[11px] font-medium text-slate-400 tracking-wide uppercase select-none">
+        <p className="text-[11px] font-mono font-medium text-muted tracking-wide uppercase select-none">
           {label}
         </p>
       )}
@@ -40,8 +40,8 @@ export function ChatOptions({ options, onSelect, disabled, label }: ChatOptionsP
             disabled={disabled}
             className={`px-3 py-1.5 rounded-full border text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
               isProceed
-                ? 'border-dashed border-slate-300 text-slate-500 hover:border-slate-400 hover:text-slate-700'
-                : 'border-slate-200 text-slate-700 bg-white hover:border-indigo-400 hover:bg-indigo-50 hover:text-indigo-700'
+                ? 'border-dashed border-[rgba(245,237,214,0.12)] text-muted hover:border-[rgba(245,237,214,0.2)] hover:text-secondary'
+                : 'border-[rgba(245,237,214,0.10)] text-secondary bg-surface-raised hover:border-[#E07B3A] hover:text-[#F4A97B]'
             }`}
           >
             {option}
