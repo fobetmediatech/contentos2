@@ -246,7 +246,7 @@ export function DiscoveryResultsPage() {
                 onClick={() => navigate('/reel-analysis?handles=' + selectedHandles.join(','))}
                 className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-[#E07B3A] text-[#1A1410] rounded-lg hover:bg-[#C96A2A] transition-colors"
               >
-                Analyze {selectionCount} creator{selectionCount !== 1 ? 's' : ''} (~{selectionCount * 2}–{selectionCount * 3}m)
+                Analyze {selectionCount} creator{selectionCount !== 1 ? 's' : ''} (~{selectionCount * 2}–{selectionCount * 3} min)
               </button>
             </div>
           </div>
