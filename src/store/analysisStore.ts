@@ -80,6 +80,10 @@ export interface AnalysisState {
   niche: string
   summary: string
   error: string | null
+  /** Total candidate accounts scraped by Apify (persisted from pendingDiscovery at setResults time). */
+  candidateCount: number
+  /** Live progress detail shown during the Apify wait (e.g. "Found 47 candidate accounts"). */
+  stepProgressDetail: string
 
   /** Conversation history for the chat UI. Capped at 50 messages to prevent unbounded growth. */
   conversationMessages: ChatMessage[]
@@ -95,8 +99,9 @@ export interface AnalysisState {
   setClarification: (data: PendingDiscovery) => void
   /** Stores the user's clarification answer and transitions back to 'running'. */
   answerClarification: (answer: string) => void
-  setResults: (output: AnalysisOutput, inputProfiles: NormalizedProfile[]) => void
+  setResults: (output: AnalysisOutput, inputProfiles: NormalizedProfile[], candidateCount: number) => void
   setError: (message: string) => void
+  setStepProgressDetail: (detail: string) => void
   reset: () => void
 
   // Conversational actions
@@ -118,6 +123,8 @@ const initialState = {
   niche: '',
   summary: '',
   error: null,
+  candidateCount: 0,
+  stepProgressDetail: '',
   // Conversational fields — T22: included in initialState for proper reset()
   conversationMessages: [] as ChatMessage[],
   discoveredSeeds: [] as string[],
@@ -138,14 +145,17 @@ export const useAnalysisStore = create<AnalysisState>()((set) => ({
   answerClarification: (answer) =>
     set({ status: 'running', clarificationAnswer: answer }),
 
-  setResults: (output, inputProfiles) =>
+  setResults: (output, inputProfiles, candidateCount) =>
     set({
       status: 'done',
       competitors: output.competitors,
       niche: output.niche,
       summary: output.summary,
       inputProfiles,
+      candidateCount,
     }),
+
+  setStepProgressDetail: (detail) => set({ stepProgressDetail: detail }),
 
   setError: (message) => set({ status: 'error', error: message }),
 

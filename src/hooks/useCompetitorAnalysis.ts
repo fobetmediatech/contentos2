@@ -33,7 +33,7 @@ const TIMEOUT_MS = 150_000
 
 export function useCompetitorAnalysis() {
   const store = useAnalysisStore()
-  const { startAnalysis, setStep, setResults, setError, reset, setClarification, answerClarification: storeAnswerClarification } = store
+  const { startAnalysis, setStep, setResults, setError, reset, setClarification, setStepProgressDetail, answerClarification: storeAnswerClarification } = store
   const { geminiKey, pickKey } = useKeysStore()
 
   // ── Phase 1: Discovery + clarification question generation ────────────────
@@ -59,6 +59,9 @@ export function useCompetitorAnalysis() {
           params.depth,
         )
 
+        if (candidateProfiles.length > 0) {
+          setStepProgressDetail(`Found ${candidateProfiles.length} candidate accounts`)
+        }
         setStep(4)
 
         // Generate the clarification question from the first 20 candidates.
@@ -143,7 +146,7 @@ export function useCompetitorAnalysis() {
           )
         }
 
-        setResults(output, inputProfiles)
+        setResults(output, inputProfiles, candidateProfiles.length)
         return output
 
       } catch (err) {

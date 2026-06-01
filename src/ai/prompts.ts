@@ -170,7 +170,7 @@ OUTPUT FORMAT (respond with valid JSON only, no markdown):
 {
   "derivedNiche": "<specific sub-niche derived from the reference accounts, e.g. 'entrepreneurship & startup content' — NOT the raw keyword>",
   "niche": "<2–4 word description of the niche, e.g. 'personal productivity creators' or 'marketing education'>",
-  "summary": "<2 sentences: what this niche looks like on Instagram and what competitive dynamics you observed>",
+  "summary": "<2 sentences. Lead with the most important competitive insight (who dominates, what the ER range looks like, whether the space is consolidated or fragmented). Second sentence: what this means for brand partnerships in this niche.>",
   "competitors": [
     {
       "username": "<handle without @>",

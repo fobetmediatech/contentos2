@@ -45,6 +45,7 @@ export function ChatPage() {
     pendingDiscovery,
     competitors,
     niche,
+    stepProgressDetail,
     error: analysisError,
     startChat,
     reset,
@@ -276,7 +277,9 @@ export function ChatPage() {
                   <p className="text-xs text-slate-500 text-center mb-4">
                     {isAnalysisClarifying
                       ? 'Help me rank the right accounts for your client.'
-                      : "Analyzing competitors — this takes up to 2 minutes…"}
+                      : stepProgressDetail
+                      ? `${stepProgressDetail}…`
+                      : 'Analyzing competitors — this takes up to 2 minutes…'}
                   </p>
                   <ProgressSteps
                     currentStep={isAnalysisClarifying ? 5 : currentStep}
