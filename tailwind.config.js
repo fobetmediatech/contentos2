@@ -31,6 +31,11 @@ export default {
         DEFAULT: 'rgba(245, 237, 214, 0.08)',
         strong: 'rgba(245, 237, 214, 0.15)',
       },
+      borderRadius: {
+        sm: '0.375rem',   /* 6px — matches --radius-sm */
+        DEFAULT: '0.625rem', /* 10px — matches --radius */
+        lg: '0.875rem',   /* 14px — matches --radius-lg */
+      },
     },
   },
   plugins: [],

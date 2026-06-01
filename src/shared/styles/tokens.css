@@ -6,7 +6,7 @@
   /* ── Surfaces ─────────────────────────────────────────────────────── */
   --color-bg: #1A1410;              /* chai warm near-black */
   --color-surface: #2C2218;         /* card base */
-  --color-surface-subtle: #3D3025; /* raised / hover state */
+  --color-surface-raised: #3D3025; /* raised / hover state */
   --color-surface-elevated: #4A3C2E;
   --color-border: rgba(245, 237, 214, 0.08);
   --color-border-strong: rgba(245, 237, 214, 0.15);

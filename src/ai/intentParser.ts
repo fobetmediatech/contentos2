@@ -245,7 +245,7 @@ export async function parseIntent(
   try {
     const retryRaw = await callGeminiForIntent(
       geminiKey,
-      `${userMessage}\n\n[Note: previous response failed validation: ${result.error.message}. Please fix and respond with valid JSON only.]`,
+      `${userMessage}\n\n[Note: previous response failed schema validation. Issues: ${result.error.issues.map(i => `${i.path.join('.')}: ${i.code}`).join('; ')}. Please fix and respond with valid JSON only.]`,
       signal,
     )
     const retryResult = ParsedIntentSchema.safeParse(retryRaw)

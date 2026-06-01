@@ -66,13 +66,14 @@ export function useLocationDiscovery() {
 
         // Step 3 + 4: Profile scrape → creator enrichment → location filter (inside runLocationDiscovery)
         // We advance step markers manually as the pipeline progresses.
-        const { candidateProfiles, filterResult, scrapedHashtags, creatorCount, businessCount } = await runLocationDiscovery(
+        const { candidateProfiles, filterResult, scrapedHashtags: firstPassHashtags, creatorCount, businessCount } = await runLocationDiscovery(
           hashtags,
           safeCity,
           apifyKey,
           params.depth,
           controller.signal,
         )
+        let scrapedHashtags = firstPassHashtags
 
         setStep(3)
         setStep(4)
@@ -110,7 +111,10 @@ export function useLocationDiscovery() {
                 params.depth,
                 controller.signal,
               )
-              const existingUsernames = new Set(finalFiltered.map(p => p.username.toLowerCase()))
+              // Dedup against finalCandidates (full pool), not finalFiltered (filtered subset).
+              // Using finalFiltered would re-add profiles that were scraped but didn't pass
+              // the location filter, causing the same handle to appear twice in the Gemini input.
+              const existingUsernames = new Set(finalCandidates.map(p => p.username.toLowerCase()))
               const newFiltered = expansion.filterResult.filtered.filter(
                 p => !existingUsernames.has(p.username.toLowerCase())
               )
@@ -119,6 +123,7 @@ export function useLocationDiscovery() {
               )
               finalFiltered = [...finalFiltered, ...newFiltered]
               finalCandidates = [...finalCandidates, ...newCandidates]
+              scrapedHashtags = [...scrapedHashtags, ...expansion.scrapedHashtags]
               didExpand = true
             }
           } catch (_expansionErr) {
@@ -169,8 +174,10 @@ export function useLocationDiscovery() {
           results: output.results.filter((r) => knownHandles.has(r.username.toLowerCase())),
         }
 
-        // locationConfidence post-filter: drop 'unknown' results only if ≥5 high-confidence remain.
-        // On the retry path this threshold fires less often (smaller, last-resort pool) — intentional.
+        // locationConfidence post-filter: drop 'unknown' results only if ≥10 high-confidence remain.
+        // When < 10 high-confidence results exist we preserve all results (including unknowns) to
+        // avoid dropping below the 10-result target. On the non-expansion path with exactly 10
+        // results and 1 unknown, the filter intentionally does not fire.
         const applyConfidenceFilter = (results: DiscoveryResult[]) => {
           const highConf = results.filter((r) => r.locationConfidence !== 'unknown')
           // Only trim 'unknown' results when 10+ high-confidence results exist —
@@ -195,7 +202,7 @@ export function useLocationDiscovery() {
               pickKey() ? 'Retrying with next key — please try again.' : 'All keys are in cooldown.'
             }`
           } else {
-            message = `Scraping error (${err.code}): ${err.message}`
+            message = `Scraping error — try again or check your Apify key.`
           }
         } else if (err instanceof GeminiError) {
           message = `AI error (${err.code}): ${err.message}`

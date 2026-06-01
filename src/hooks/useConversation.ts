@@ -625,10 +625,10 @@ export function useConversation() {
       // Extract @handles client-side as a guaranteed fallback — regex is deterministic
       // and doesn't depend on model reasoning capability.
       const geminiHandles = ('knownHandles' in intent ? (intent.knownHandles ?? []) : [])
-        .filter((h): h is string => typeof h === 'string' && /^[a-zA-Z0-9._]{1,50}$/.test(h))
+        .filter((h): h is string => typeof h === 'string' && /^[a-zA-Z0-9._]{1,30}$/.test(h))
       const clientHandles = [...safeText.matchAll(/@([a-zA-Z0-9._]+)/g)]
         .map(m => m[1].toLowerCase())
-        .filter(h => h.length <= 50)               // match Gemini validation cap
+        .filter(h => h.length <= 30)               // Instagram max handle length is 30 chars
         .filter((h, i, arr) => arr.indexOf(h) === i) // dedup
         .slice(0, 5)
       const knownHandles = geminiHandles.length > 0 ? geminiHandles : clientHandles

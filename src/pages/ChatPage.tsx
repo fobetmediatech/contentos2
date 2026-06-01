@@ -57,6 +57,7 @@ export function ChatPage() {
   const discoveryStatus = useDiscoveryStore((s) => s.status)
   const discoveryError = useDiscoveryStore((s) => s.error)
   const discoveryDidExpand = useDiscoveryStore((s) => s.didExpand)
+  const discoveryCity = useDiscoveryStore((s) => s.params?.city ?? '')
   const resetDiscovery = useDiscoveryStore((s) => s.reset)
   const activePipeline = useActivePipeline()
 
@@ -313,8 +314,8 @@ export function ChatPage() {
               {/* ── Competitor analysis done ──────────────────────────────── */}
               {isAnalysisDone && (
                 <div className="flex items-start gap-2">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center mt-0.5">
-                    <Bot size={14} className="text-indigo-600" />
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(224,123,58,0.12)] flex items-center justify-center mt-0.5">
+                    <Bot size={14} className="text-[#E07B3A]" />
                   </div>
                   <div className="flex flex-col gap-2 max-w-[80%]">
                     <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(245,237,214,0.08)] text-sm leading-relaxed">
@@ -354,8 +355,8 @@ export function ChatPage() {
               {/* ── Location discovery done ───────────────────────────────── */}
               {isDiscoveryDone && activePipeline.discoveryResults && (
                 <div className="flex items-start gap-2">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center mt-0.5">
-                    <Bot size={14} className="text-indigo-600" />
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(224,123,58,0.12)] flex items-center justify-center mt-0.5">
+                    <Bot size={14} className="text-[#E07B3A]" />
                   </div>
                   <div className="flex flex-col gap-2 max-w-[80%]">
                     <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(245,237,214,0.08)] text-sm leading-relaxed">
@@ -365,7 +366,7 @@ export function ChatPage() {
                       </div>
                       <p className="text-secondary">
                         Found {activePipeline.discoveryResults.length} creator{activePipeline.discoveryResults.length !== 1 ? 's' : ''}
-                        {activePipeline.progressLabel ? ` in ${activePipeline.progressLabel.replace('Discovering creators in ', '').replace('…', '')}` : ''}.
+                        {discoveryCity ? ` in ${discoveryCity}` : ''}.
                         Filtered for location signals and partnership readiness.
                       </p>
                       {discoveryDidExpand && (

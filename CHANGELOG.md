@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.3.0.3] — 2026-06-01
+
+### Fixed
+
+- **Chai Dark design violation** — completion cards (analysis done, discovery done) in `ChatPage` were still using `bg-indigo-100 text-indigo-600` for the bot icon. Now correctly uses `bg-[rgba(224,123,58,0.12)] text-[#E07B3A]` matching every other bot icon in the file.
+- **CSS token name mismatch** — `--color-surface-subtle` renamed to `--color-surface-raised` in `tokens.css` to match the name in `tailwind.config.js` and `DESIGN.md`. Previously any component writing `var(--color-surface-raised)` in inline styles would resolve to undefined.
+- **Apify error message privacy** — `useLocationDiscovery` was forwarding raw `ApifyError.message` to the chat UI, which can contain run IDs and actor URLs. Now shows a generic message consistent with the competitor pipeline path.
+- **Expansion candidate dedup** — dedup set was built from `finalFiltered` (location-filtered subset) rather than `finalCandidates` (full pool). Profiles scraped in the first pass that didn't pass the location filter would be re-added by the expansion pass, sending duplicate handles to Gemini ranking.
+- **Expansion hashtag attribution** — expansion-pass `scrapedHashtags` are now merged into `scrapedHashtags` before `setResults`, so `discoveryStore.sourceHashtags` reflects the full set of hashtags used across both passes.
+- **Discovery done-card city extraction** — replaced fragile `progressLabel.replace('Discovering creators in ', '')` string parsing with a direct `useDiscoveryStore(s => s.params?.city)` selector. City name now renders correctly when `progressLabel` is set to an expansion detail string.
+- **Zod validation retry prompt injection** — the retry prompt for intent parsing was interpolating `result.error.message`, which can contain echoed user content when Gemini produces malformed JSON. Now uses only structural `issue.path: issue.code` pairs, never field values.
+- **Expansion dedup set corrected** — built from `finalCandidates` (full scrape pool) not `finalFiltered`, preventing first-pass non-matching profiles from being re-inserted by expansion and skewing Gemini ranking with duplicate entries.
+- **Handle length cap** — `@handle` fast-path now validates against `/^[a-zA-Z0-9._]{1,30}$/` (Instagram's 30-char maximum) rather than 50 chars, preventing invalid handles reaching Apify.
+- **Border-radius token wiring** — `--radius-sm` (6px), `--radius` (10px), `--radius-lg` (14px) from `tokens.css` are now registered in `tailwind.config.js`'s `borderRadius` extension, so `rounded-sm`/`rounded`/`rounded-lg` utilities emit the design-system values instead of Tailwind defaults.
+
 ## [0.3.0.2] — 2026-06-01
 
 ### Added
