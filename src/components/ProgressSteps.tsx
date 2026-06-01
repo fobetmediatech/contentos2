@@ -33,20 +33,20 @@ export function ProgressSteps({ currentStep, steps }: ProgressStepsProps) {
               key={step}
               className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
                 isActive
-                  ? 'bg-indigo-50 border border-indigo-200'
+                  ? 'bg-[#2C2218] border border-[#E07B3A]/40'
                   : isDone
-                  ? 'bg-slate-50 border border-slate-100'
-                  : 'bg-white border border-slate-100 opacity-40'
+                  ? 'bg-[#2C2218] border border-[rgba(245,237,214,0.08)]'
+                  : 'bg-[#1A1410] border border-[rgba(245,237,214,0.08)] opacity-40'
               }`}
             >
               {/* Step indicator */}
               <div
                 className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${
                   isDone
-                    ? 'bg-green-100 text-green-700'
+                    ? 'bg-green-900/40 text-green-400'
                     : isActive
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-slate-100 text-slate-400'
+                    ? 'bg-[#E07B3A] text-[#1A1410]'
+                    : 'bg-[#3D3025] text-[#7A6A54]'
                 }`}
               >
                 {isDone ? (
@@ -61,7 +61,7 @@ export function ProgressSteps({ currentStep, steps }: ProgressStepsProps) {
               {/* Step label */}
               <span
                 className={`text-sm ${
-                  isActive ? 'text-indigo-900 font-medium' : isDone ? 'text-slate-600' : 'text-slate-400'
+                  isActive ? 'text-[#F5EDD6] font-medium' : isDone ? 'text-[#C4A882]' : 'text-[#7A6A54]'
                 }`}
               >
                 {stepLabels[step] ?? `Step ${step}`}
