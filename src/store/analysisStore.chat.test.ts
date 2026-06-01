@@ -205,3 +205,45 @@ describe('analysisStore — chatting → confirming lifecycle', () => {
     expect(useAnalysisStore.getState().conversationMessages).toHaveLength(1)
   })
 })
+
+describe('analysisStore — candidateCount', () => {
+  it('initialises to 0', () => {
+    expect(useAnalysisStore.getState().candidateCount).toBe(0)
+  })
+
+  it('setResults persists candidateCount', () => {
+    useAnalysisStore.getState().setResults(
+      { competitors: [], niche: 'fitness', summary: 'test' },
+      [],
+      47,
+    )
+    expect(useAnalysisStore.getState().candidateCount).toBe(47)
+  })
+
+  it('reset clears candidateCount to 0', () => {
+    useAnalysisStore.getState().setResults(
+      { competitors: [], niche: 'fitness', summary: 'test' },
+      [],
+      23,
+    )
+    useAnalysisStore.getState().reset()
+    expect(useAnalysisStore.getState().candidateCount).toBe(0)
+  })
+})
+
+describe('analysisStore — stepProgressDetail', () => {
+  it('initialises to empty string', () => {
+    expect(useAnalysisStore.getState().stepProgressDetail).toBe('')
+  })
+
+  it('reset clears stepProgressDetail', () => {
+    useAnalysisStore.getState().setStepProgressDetail('Found 47 candidate accounts')
+    useAnalysisStore.getState().reset()
+    expect(useAnalysisStore.getState().stepProgressDetail).toBe('')
+  })
+
+  it('setStepProgressDetail persists the value until reset', () => {
+    useAnalysisStore.getState().setStepProgressDetail('Found 23 candidate accounts')
+    expect(useAnalysisStore.getState().stepProgressDetail).toBe('Found 23 candidate accounts')
+  })
+})

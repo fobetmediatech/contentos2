@@ -113,8 +113,12 @@ vi.mock('./useLocationDiscovery', () => ({
   })),
 }))
 
+// vi.hoisted() is necessary because vi.mock factories run before variable initializers.
+// Any variable referenced inside a vi.mock factory must be created via vi.hoisted().
+const parseIntentMock = vi.hoisted(() => vi.fn())
+
 vi.mock('../ai/intentParser', () => ({
-  parseIntent: vi.fn(),
+  parseIntent: parseIntentMock,
 }))
 
 vi.mock('../lib/hashtagGenerator', () => ({
@@ -261,5 +265,44 @@ describe('useConversation — confirming path', () => {
 
       expect(result.current.isConfirmingLocked).toBe(false)
     })
+  })
+})
+
+// ── PARSE_ERROR error message path ───────────────────────────────────────────
+//
+// Verifies that when parseIntent throws GeminiError('PARSE_ERROR'), the
+// chat shows "unexpected response" instead of the misleading "Network error".
+
+import { GeminiError } from '../ai/gemini'
+
+describe('useConversation — chatting PARSE_ERROR message', () => {
+  beforeEach(() => {
+    mockStoreState.status = 'chatting'
+    mockStoreState.conversationMessages = []
+    // Explicitly reset the Gemini confirm spy — tests in this block never reach it
+    // but resetting prevents confusion if new tests are added here later.
+    callGeminiConfirmReplySpy.mockReset()
+    parseIntentMock.mockReset()
+  })
+
+  it('shows "unexpected response" when parseIntent throws PARSE_ERROR', async () => {
+    parseIntentMock.mockRejectedValue(
+      new GeminiError('PARSE_ERROR', 'Gemini returned invalid JSON: SyntaxError...', false),
+    )
+
+    const { result } = renderHook(() => useConversation())
+    await act(async () => {
+      await result.current.sendMessage('find fitness creators')
+    })
+
+    const errorMsg = mockStoreActions.addMessage.mock.calls.find(
+      ([m]: [{ type: string; content: string }]) => m.type === 'error',
+    )?.[0] as { content: string } | undefined
+
+    expect(errorMsg).toBeDefined()
+    expect(errorMsg?.content).toBe('Gemini returned an unexpected response — try again.')
+    expect(errorMsg?.content).not.toContain('Network error')
+    // Status must reset to 'chatting' so the UI doesn't get stuck
+    expect(mockStoreActions.setStatus).toHaveBeenCalledWith('chatting')
   })
 })
