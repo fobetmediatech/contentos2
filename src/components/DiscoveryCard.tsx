@@ -13,7 +13,7 @@
  *   unknown   → grey muted, 70% opacity
  */
 
-import { BadgeCheck, MapPin, Video, Mail } from 'lucide-react'
+import { BadgeCheck, MapPin, Video, Mail, CheckSquare, Square } from 'lucide-react'
 import type { DiscoveryResult } from '../ai/prompts'
 import type { NormalizedProfile } from '../lib/transformers'
 import { DISCOVERY_CATEGORIES } from '../shared/utils/categories'
@@ -22,6 +22,8 @@ interface DiscoveryCardProps {
   result: DiscoveryResult
   profile: NormalizedProfile | undefined
   cohortAvgER: number
+  isSelected?: boolean
+  onSelect?: (handle: string) => void
 }
 
 function formatFollowers(n: number): string {
@@ -48,14 +50,14 @@ function LocationBadge({ confidence }: { confidence: DiscoveryResult['locationCo
     )
   }
   return (
-    <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-400 opacity-70">
+    <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-[#3D3025] text-[#7A6A54] opacity-70">
       <MapPin size={10} />
       Unconfirmed
     </span>
   )
 }
 
-export function DiscoveryCard({ result, profile, cohortAvgER }: DiscoveryCardProps) {
+export function DiscoveryCard({ result, profile, cohortAvgER, isSelected, onSelect }: DiscoveryCardProps) {
   const category = DISCOVERY_CATEGORIES[result.category]
   const er = profile?.engagementRate ?? null
   const erAboveAvg = er !== null && er >= cohortAvgER
@@ -67,7 +69,25 @@ export function DiscoveryCard({ result, profile, cohortAvgER }: DiscoveryCardPro
     .toUpperCase()
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-4 relative hover:border-slate-300 transition-colors">
+    <div
+      className={`bg-[#2C2218] rounded-xl p-4 relative transition-colors ${
+        isSelected
+          ? 'border-0 ring-2 ring-[#E07B3A] ring-offset-1 ring-offset-[#1A1410]'
+          : 'border border-[rgba(245,237,214,0.08)] hover:border-[rgba(245,237,214,0.15)]'
+      } ${onSelect ? 'cursor-pointer' : ''}`}
+      onClick={onSelect ? () => onSelect(result.username) : undefined}
+    >
+      {/* Checkbox overlay — top left, only when onSelect is provided */}
+      {onSelect && (
+        <div className="absolute top-3 left-3">
+          {isSelected ? (
+            <CheckSquare size={18} className="text-[#E07B3A]" />
+          ) : (
+            <Square size={18} className="text-[#7A6A54]" />
+          )}
+        </div>
+      )}
+
       {/* Category badge — top right */}
       <span
         className={`absolute top-4 right-4 text-xs font-semibold px-2 py-0.5 rounded-full ${category.badgeBg} ${category.badgeText}`}
@@ -76,13 +96,13 @@ export function DiscoveryCard({ result, profile, cohortAvgER }: DiscoveryCardPro
       </span>
 
       {/* Profile header */}
-      <div className="flex items-start gap-3 pr-20">
+      <div className={`flex items-start gap-3 pr-20 ${onSelect ? 'pl-7' : ''}`}>
         {/* Avatar */}
         {profile?.profilePicUrl ? (
           <img
             src={profile.profilePicUrl}
             alt={`@${result.username}`}
-            className="w-12 h-12 rounded-full object-cover flex-shrink-0 bg-slate-100"
+            className="w-12 h-12 rounded-full object-cover flex-shrink-0 bg-[#3D3025]"
             onError={(e) => {
               const target = e.currentTarget
               target.style.display = 'none'
@@ -92,7 +112,7 @@ export function DiscoveryCard({ result, profile, cohortAvgER }: DiscoveryCardPro
         ) : null}
         {/* Initials fallback */}
         <div
-          className={`w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0 text-slate-600 font-semibold text-sm ${
+          className={`w-12 h-12 rounded-full bg-[#3D3025] flex items-center justify-center flex-shrink-0 text-[#C4A882] font-semibold text-sm ${
             profile?.profilePicUrl ? 'hidden' : ''
           }`}
         >
@@ -102,17 +122,17 @@ export function DiscoveryCard({ result, profile, cohortAvgER }: DiscoveryCardPro
         {/* Handle + meta */}
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="font-semibold text-slate-900 text-sm">@{result.username}</span>
+            <span className="font-semibold text-[#F5EDD6] text-sm">@{result.username}</span>
             {profile?.verified && (
               <BadgeCheck size={14} className="text-blue-500 flex-shrink-0" />
             )}
             <LocationBadge confidence={result.locationConfidence} />
           </div>
           {profile?.fullName && profile.fullName !== result.username && (
-            <p className="text-xs text-slate-500 mt-0.5 truncate">{profile.fullName}</p>
+            <p className="text-xs text-[#C4A882] mt-0.5 truncate">{profile.fullName}</p>
           )}
           {profile && (
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-[#7A6A54] mt-0.5">
               {formatFollowers(profile.followersCount)} followers
             </p>
           )}
@@ -129,7 +149,7 @@ export function DiscoveryCard({ result, profile, cohortAvgER }: DiscoveryCardPro
           >
             {er.toFixed(2)}%
           </span>
-          <span className="text-xs text-slate-400">
+          <span className="text-xs text-[#7A6A54]">
             ER · {erAboveAvg ? 'above avg' : 'below avg'}
           </span>
         </div>
@@ -141,7 +161,7 @@ export function DiscoveryCard({ result, profile, cohortAvgER }: DiscoveryCardPro
           {result.specialties.map((s) => (
             <span
               key={s}
-              className="text-xs px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-100"
+              className="text-xs px-2 py-0.5 rounded-full bg-[#1A2520] text-[#4DB894] border border-[#2A3D35]"
             >
               {s}
             </span>
@@ -152,13 +172,13 @@ export function DiscoveryCard({ result, profile, cohortAvgER }: DiscoveryCardPro
       {/* Content focus + partnership ready */}
       <div className="mt-2 flex items-center gap-3">
         {result.contentFocus && (
-          <span className="inline-flex items-center gap-1 text-xs text-slate-500">
-            <Video size={11} className="text-slate-400" />
+          <span className="inline-flex items-center gap-1 text-xs text-[#C4A882]">
+            <Video size={11} className="text-[#7A6A54]" />
             {result.contentFocus}
           </span>
         )}
         {result.partnershipReady && (
-          <span className="inline-flex items-center gap-1 text-xs text-indigo-600 font-medium">
+          <span className="inline-flex items-center gap-1 text-xs text-[#E07B3A] font-medium">
             <Mail size={11} />
             Partnership ready
           </span>
@@ -166,7 +186,7 @@ export function DiscoveryCard({ result, profile, cohortAvgER }: DiscoveryCardPro
       </div>
 
       {/* AI rationale */}
-      <p className="mt-3 text-sm text-slate-600 leading-relaxed">
+      <p className="mt-3 text-sm text-[#C4A882] leading-relaxed">
         {result.rationale}
       </p>
     </div>
