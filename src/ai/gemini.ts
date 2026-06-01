@@ -564,6 +564,7 @@ export async function callGeminiConfirmReply(
     // key extraction failure — fall through to default
   }
 
+  console.warn('[callGeminiConfirmReply] returning fallback option — Gemini returned unrecognised selection')
   return availableOptions[0]
 }
 
