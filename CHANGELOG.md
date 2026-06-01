@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.3.0.1] — 2026-06-01
+
+### Fixed
+
+- **Intent parser JSON failures** — the chat no longer shows a misleading "Network error" when Gemini returns malformed JSON
+  - Added `responseSchema` to the intent API call — enforces valid JSON grammar at the token level, eliminating unquoted keys and trailing commas
+  - Added `finishReason === 'MAX_TOKENS'` guard before `JSON.parse` — truncated responses now surface as a clear error instead of a vague `SyntaxError`
+  - Disabled thinking mode for intent classification (`thinkingBudget: 0` on gemini-2.5 models) — reduces latency and non-determinism on this simple routing task; guarded so non-2.5 models are unaffected
+  - Increased `maxOutputTokens` from 512 → 1024 — headroom for the intent JSON response
+  - `SyntaxError` from `JSON.parse` now wraps as `PARSE_ERROR` (not `UNKNOWN`) after all retries are exhausted
+  - Chat shows "Gemini returned an unexpected response — try again." instead of the misleading "Network error — check your connection"
+
+### Changed
+
+- **Results page** — "Analyzed N candidate accounts from @handle1, @handle2" header replaces the previous niche + source line, giving a concrete sense of how much data was analysed
+- **Competitor summary** — moved into a distinct indigo card above the competitor grid for faster scanning
+- **Analysis progress** — live "Found N candidate accounts" detail during the Apify wait phase
+
 ## [0.3.0.0] — 2026-06-01
 
 ### Added
