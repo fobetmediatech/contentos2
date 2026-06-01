@@ -4,6 +4,38 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.4.0.0] — 2026-06-02
+
+Content-copilot overhaul: three research tools callable independently by natural language, a conversational content copilot, and deeper HookMap-style reel analysis — on top of a green baseline and a security pass.
+
+### Added
+
+- **Content copilot** — the chat now answers content/strategy questions and *generates* content (hooks, captions, scripts, ideas) via a new `content` intent, with no scraping. Answers are grounded in the session's own research (competitor/discovery accounts and the winning hook archetypes from a reel synthesis) when available. `callGeminiContent` + `buildContentPrompt` + `useConversation.answerContent()`/`buildContentContext()`.
+- **Reel/hook analysis as an independent, NL-routable tool** — "analyze @x's hooks" routes to it directly (new `reel` pipelineType + `PIPELINE_REGISTRY` entry). Three discoverable tool chips in the empty state (Find competitors / Discover by city / Break down hooks).
+- **Deeper reel analysis** — per-reel `openingLine` (the verbatim hook that stops the scroll) on every card; a "Generate hooks like these for my niche" button on the synthesis card hands the winning archetypes to the content copilot.
+- "✦ Gemini" eyebrow on the violet AI-summary bubble (per DESIGN.md).
+
+### Changed
+
+- **Reel pipeline consolidated.** `useReelAnalysis` runs scrape → analyze → synthesize as one awaited sequence with synthesis triggered explicitly (no `creatorStates` effect), so the hook can mount in both `ChatPage` and `useConversation` without double-firing. One `AbortController` per run, aborted on unmount (reel was the only flow with no cancellation). `ReelAnalysisPage` now delegates to the hook instead of duplicating the pipeline.
+- **Reel benchmarks computed in code**, not by the LLM — `computeBenchmarks()` derives medianViews / likesViewsRatio / commentsLikesRatio from real metrics (the model was previously asked to do arithmetic and the UI rendered its guesses as precise percentages).
+- `addMessage` now stamps the message timestamp inside the store action (callers no longer pass `Date.now()`), clearing the React 19 `react-hooks/purity` errors.
+- Raw Tailwind `blue`/`green`/`amber` swapped for the warm `success`/`warning`/`danger` design tokens across the cards (verified badge, ER, copy check, progress step).
+
+### Fixed
+
+- **Build + lint were red; now green.** 11 `tsc` errors (stale test fixtures) and 19 eslint errors fixed; 452 unit tests pass.
+- **Bare-handles dead-end.** Pasting handles without `@` (e.g. `nike, adidas`) set the confirming state without a parsed intent, so confirming dead-ended on "Session expired." The fast path now synthesizes a competitor intent.
+- Reel synthesis output is coerced/guarded so a missing or mistyped LLM field can't crash the results card.
+
+### Security
+
+- **Gemini API key moved out of the URL** (`?key=`) into the `x-goog-api-key` header at all 5 call sites, via a shared `geminiHeaders()` helper — keys no longer leak to browser history, the devtools Network tab, referrers, or disk cache.
+- **Apify error bodies no longer reach the UI.** Error codes map to fixed friendly strings; raw response bodies (which can echo request internals) stay in the DEV console only.
+- DEV-gated the Apify request-payload debug log.
+- Cross-tab `storage` listener patches only present fields, so a partial write from another tab can no longer wipe the user's keys.
+- Reel-analysis failures surface a friendly message instead of the raw error.
+
 ## [0.3.0.3] — 2026-06-01
 
 ### Fixed

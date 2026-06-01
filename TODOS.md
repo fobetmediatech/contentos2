@@ -222,3 +222,18 @@ _38 tasks total (12 CEO-phase + 2 pre-L1 gates + 11 design-phase + 13 eng-phase)
   - **Scope:** `reelScraper.ts` for the cache read/write wrapper; `ReelAnalysisPage.tsx` for cache-aware mount logic.
   - **Blocked by:** v1 feature shipped.
   - **Priority:** High — cost and time per run make caching the highest-leverage follow-up.
+
+---
+
+## Content Copilot Overhaul — Deferred (added by /ship 2026-06-02, v0.4.0.0)
+
+Shipped in v0.4.0.0: green baseline + security hardening, reel/hooks as an independent NL tool, the content copilot, and deeper HookMap analysis. The full repo audit lives in `.planning/audit-findings.md` (42 findings: 3 Critical + 11 High + 16 Medium + 12 Low). Criticals C1–C3 + H9/H11 + the build/lint baseline shipped in this release. Remaining, deferred:
+
+- [ ] **AUDIT-H8** · `locationFilter` reads a `businessAddress` field that `transformers` never populates, so local businesses without the city literally in their bio are silently rejected. Fix: add `businessAddress` to `ApifyProfileRaw`/`NormalizedProfile` + populate in `normalizeProfile`, or delete the dead branch + false comment. **Priority: High** (real correctness bug — needs the Apify field name).
+- [ ] **AUDIT-H10** · `hashtagGenerator` swallows ALL Gemini errors (incl. auth) into a silent rule-based fallback — users never learn their key is bad, they just get worse hashtags. Fix: re-throw `GeminiError` with `code === 'AUTH_ERROR'`; fall back only on transient/parse errors (callers' catch blocks must map it). **Priority: High.**
+- [ ] **AUDIT-H6** · Orphaned `/results` + `/discover/results` pages — results render inline now, nothing navigates there. Decide: wire navigation or delete them + the `resultsPath` registry field. **Priority: Medium.**
+- [ ] **AUDIT-M7** · Intent prompt embeds user text with only quote-escaping (confirm-reply already uses `JSON.stringify` — make consistent); the validation-retry path re-injects the raw user message. **Priority: Medium.**
+- [ ] **AUDIT-M10** · `keyRotator.pickAvailableKey` round-robins by `floor(Date.now()/1000)` — parallel scrapes within the same second all pick the same key, defeating multi-key rate-limit avoidance. Use a persisted incrementing index. **Priority: Medium.**
+- [ ] **SHIP-P3** · After a reel run, status returns to `'chatting'`, so a typed follow-up re-runs intent parsing rather than the content copilot. The "remix" button is the intended grounded handoff, and a content-classified follow-up still gets reel grounding — so minor. **Priority: Low.**
+- [ ] **AUDIT-DOCS** · `TODOS.md` (this file), `AGENTS.md`, `CLAUDE.md` reference deleted `InputPage`/`ProgressPage` and the abandoned indigo/Inter/slate design system. Prune stale references. **Priority: Low.**
+- [ ] **AUDIT-L10 / L12** · Desktop-only `body { min-width: 1024px }` (document the intent or add a small-screen message); `package.json` name is still `instagram-competitor-finder` not `content-os`. **Priority: Low.**
