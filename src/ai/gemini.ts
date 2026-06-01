@@ -9,7 +9,7 @@
  *   empty candidates[]      → SAFETY block, surface as content policy error
  */
 
-import { buildCompetitorPrompt, buildDiscoveryPrompt, buildClarificationPrompt, buildFollowUpContext, buildConfirmReplyPrompt, type AnalysisOutput, type DiscoveryOutput, type ClarificationQuestion } from './prompts'
+import { buildCompetitorPrompt, buildDiscoveryPrompt, buildClarificationPrompt, buildContentPrompt, buildConfirmReplyPrompt, type AnalysisOutput, type DiscoveryOutput, type ClarificationQuestion, type ContentContext } from './prompts'
 import type { NormalizedProfile } from '../lib/transformers'
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta'
@@ -433,35 +433,28 @@ export async function generateClarificationQuestion(
   }
 }
 
-// ----- Follow-up prose response -----
+// ----- Content copilot response -----
 
 /**
- * Send a free-form follow-up message to Gemini after a pipeline completes.
+ * Conversational content-assistant turn. Powers the chat's "copilot" mode:
+ * answers content/strategy questions and GENERATES content (hooks, captions,
+ * scripts, ideas) as prose — no JSON schema. When research context is supplied
+ * (a completed competitor/discovery run or reel synthesis), the prompt grounds
+ * the answer in it so e.g. "write hooks" reuses the winning archetypes found.
  *
- * Unlike the analysis functions, this call:
- *   - Uses plain text MIME (not JSON mode) — response is conversational prose.
- *   - Does NOT use responseSchema — no structured output needed.
- *   - Is intentionally simple: the system context from buildFollowUpContext()
- *     frames the conversation and the user message is appended directly.
- *
- * @param geminiKey        Active Gemini API key.
- * @param summary          Short description of what the completed pipeline found.
- *                         Injected via buildFollowUpContext() as system context.
- * @param userMessage      The user's follow-up message (already sanitized by sendMessage).
- * @param signal           AbortController signal.
- * @param accountSummaries Optional list of accounts found by the pipeline.
- *                         When provided, Gemini can reference specific accounts in its response.
- * @returns                Gemini's prose response (1–3 sentences).
+ * @param geminiKey   Active Gemini API key.
+ * @param userMessage The user's message (already sanitized by sendMessage).
+ * @param context     Optional research grounding (summary, accounts, hook patterns).
+ * @param signal      AbortController signal.
+ * @returns           Gemini's prose response (markdown bold/lists allowed).
  */
-export async function callGeminiFollowUp(
+export async function callGeminiContent(
   geminiKey: string,
-  summary: string,
   userMessage: string,
+  context?: ContentContext,
   signal?: AbortSignal,
-  accountSummaries?: Array<{ username: string; followers: number; er: number }>,
 ): Promise<string> {
-  const systemContext = buildFollowUpContext(summary, accountSummaries)
-  const fullPrompt = `${systemContext}\n\nUser: ${userMessage}`
+  const fullPrompt = buildContentPrompt(userMessage, context)
 
   const url = `${GEMINI_BASE}/models/${MODEL}:generateContent`
 
@@ -471,8 +464,8 @@ export async function callGeminiFollowUp(
     body: JSON.stringify({
       contents: [{ parts: [{ text: fullPrompt }] }],
       generationConfig: {
-        temperature: 0.7,       // slightly higher for natural conversational tone
-        maxOutputTokens: 256,   // prose follow-up is always short
+        temperature: 0.7,       // natural, conversational copywriting tone
+        maxOutputTokens: 1024,  // content generation (hook lists, scripts) runs longer
       },
     }),
     signal,

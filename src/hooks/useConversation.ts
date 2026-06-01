@@ -32,6 +32,7 @@
 import { useRef, useState, useEffect } from 'react'
 import { useAnalysisStore } from '../store/analysisStore'
 import { useDiscoveryStore } from '../store/discoveryStore'
+import { useReelAnalysisStore } from '../store/reelAnalysisStore'
 import { useKeysStore } from '../store/keysStore'
 import { useCompetitorAnalysis } from './useCompetitorAnalysis'
 import { useLocationDiscovery } from './useLocationDiscovery'
@@ -39,12 +40,13 @@ import { useReelAnalysis } from './useReelAnalysis'
 import { parseIntent } from '../ai/intentParser'
 import { generateHashtags } from '../lib/hashtagGenerator'
 import { scrapeHashtagUsernames } from '../lib/apifyClient'
-import { GeminiError, callGeminiFollowUp, callGeminiConfirmReply } from '../ai/gemini'
+import { GeminiError, callGeminiContent, callGeminiConfirmReply } from '../ai/gemini'
 import { ApifyError } from '../lib/apifyCore'
 import { PROCEED_LABEL, DISCOVERY_REDIRECT_TO_COMPETITOR, GEMINI_KEY_MISSING_MSG } from '../lib/constants'
 import { PIPELINE_REGISTRY } from '../tools/registry'
 import type { ParsedIntent } from '../ai/intentParser'
 import type { ResolvedIntent } from '../tools/types'
+import type { ContentContext } from '../ai/prompts'
 
 const DISCOVERY_TIMEOUT_MS = 90_000
 const DISCOVERY_SOFT_NUDGE_MS = 60_000
@@ -145,6 +147,9 @@ export function useConversation() {
   // confirming-state message. Exposed to ChatPage so it can show a TypingIndicator
   // and disable the option buttons to prevent a button+type race condition.
   const [isConfirmingPending, setIsConfirmingPending] = useState(false)
+  // True while the content copilot is generating a reply — drives a typing indicator
+  // and disables send (so a second content turn can't fire mid-generation).
+  const [isAnswering, setIsAnswering] = useState(false)
   // Ref mirror of isConfirmingPending — used inside confirmSeeds() to guard
   // against button clicks that arrive during the 200ms window before React
   // re-renders the disabled state. A ref is read synchronously; state is not.
@@ -322,8 +327,69 @@ export function useConversation() {
   }
 
   /**
+   * Assemble research grounding for the content copilot from whatever the user
+   * has run this session (competitor/discovery results + reel synthesis).
+   */
+  const buildContentContext = (): ContentContext | undefined => {
+    const ctx: ContentContext = {}
+
+    if (
+      (store.status === 'done' && store.competitors.length > 0) ||
+      (discoveryStore.status === 'done' && discoveryStore.results.length > 0)
+    ) {
+      ctx.researchSummary = buildPipelineSummary()
+      ctx.accounts = buildFollowUpAccountSummaries()
+    }
+
+    // Reel synthesis (read fresh — the reel store is separate from this hook).
+    const reel = useReelAnalysisStore.getState()
+    if (reel.synthesisStatus === 'done' && reel.synthesis) {
+      ctx.hookPatterns = reel.synthesis.topPatterns.map((p) => ({ archetype: p.archetype, count: p.count }))
+      ctx.replicateTips = reel.synthesis.replicateTips
+      if (!ctx.researchSummary) {
+        const who = reel.activeHandles.map((h) => '@' + h).join(', ')
+        ctx.researchSummary = `Reel hook analysis just completed for ${who}.`
+      }
+    }
+
+    return Object.keys(ctx).length > 0 ? ctx : undefined
+  }
+
+  /**
+   * Content copilot turn — answer or generate content conversationally, grounded
+   * in the session's research context. No scraping. Used for both the 'content'
+   * intent (idle chat) and follow-up messages after a pipeline completes.
+   */
+  const answerContent = async (userMessage: string) => {
+    if (!geminiKey?.trim()) {
+      store.addMessage({ role: 'assistant', content: GEMINI_KEY_MISSING_MSG, type: 'error' })
+      return
+    }
+    // Abort any in-flight content/confirm call before starting a new one.
+    discoveryAbortRef.current?.abort()
+    const controller = new AbortController()
+    discoveryAbortRef.current = controller
+    setIsAnswering(true)
+    try {
+      const reply = await callGeminiContent(geminiKey, userMessage, buildContentContext(), controller.signal)
+      store.addMessage({ role: 'assistant', content: reply, type: 'text' })
+    } catch (err) {
+      if (controller.signal.aborted) return
+      let content = 'Something went wrong — try again.'
+      if (err instanceof GeminiError) {
+        if (err.code === 'AUTH_ERROR') content = 'Gemini API key is invalid or missing. Go to Settings to update it.'
+        else if (err.code === 'RATE_LIMITED') content = 'Gemini rate limit hit — wait a few seconds and try again.'
+      }
+      store.addMessage({ role: 'assistant', content, type: 'error' })
+    } finally {
+      // Only clear the flag if this call is still the active one (not superseded).
+      if (discoveryAbortRef.current === controller) setIsAnswering(false)
+    }
+  }
+
+  /**
    * Handle a user message in the chat input.
-   * When a pipeline is done, routes to follow-up instead of re-running parseIntent.
+   * When a pipeline is done, routes to the content copilot instead of re-running parseIntent.
    */
   const sendMessage = async (text: string) => {
     // ── Confirming path: user typed text while waiting to pick a direction ────
@@ -449,35 +515,8 @@ export function useConversation() {
       try {
         const safeText = text.replace(/[\n\r]/g, ' ').trim().slice(0, 500)
         store.addMessage({ role: 'user', content: safeText, type: 'text' })
-
-        if (!geminiKey?.trim()) {
-          store.addMessage({
-            role: 'assistant',
-            content: GEMINI_KEY_MISSING_MSG,
-            type: 'error',
-          })
-          return
-        }
-
-        // Abort any in-flight follow-up before starting a new one — otherwise the
-        // old request becomes a zombie and calls store.addMessage with stale data.
-        discoveryAbortRef.current?.abort()
-        const followUpController = new AbortController()
-        discoveryAbortRef.current = followUpController
-
-        try {
-          const summary = buildPipelineSummary()
-          const accountSummaries = buildFollowUpAccountSummaries()
-          const reply = await callGeminiFollowUp(geminiKey, summary, safeText, followUpController.signal, accountSummaries)
-          store.addMessage({ role: 'assistant', content: reply, type: 'text' })
-        } catch (err) {
-          let content = 'Something went wrong — try again.'
-          if (err instanceof GeminiError) {
-            if (err.code === 'AUTH_ERROR') content = 'Gemini API key is invalid or missing. Go to Settings to update it.'
-            else if (err.code === 'RATE_LIMITED') content = 'Gemini rate limit hit — wait a few seconds and try again.'
-          }
-          store.addMessage({ role: 'assistant', content, type: 'error' })
-        }
+        // Pipeline done → every message is a content-copilot turn, grounded in results.
+        await answerContent(safeText)
       } finally {
         isSendingRef.current = false
       }
@@ -634,6 +673,13 @@ export function useConversation() {
       const niche = 'niche' in intent ? intent.niche : ''
       const location = 'location' in intent ? (intent.location ?? '') : ''
       const pipelineType = 'pipelineType' in intent ? (intent.pipelineType ?? 'competitor') : 'competitor'
+
+      // ── Content copilot ────────────────────────────────────────────────────
+      // Conversational help / generation — no scraping, no confirm step.
+      if (pipelineType === 'content') {
+        await answerContent(safeText)
+        return
+      }
 
       const descriptor = PIPELINE_REGISTRY[pipelineType]
 
@@ -841,5 +887,5 @@ export function useConversation() {
     confirmSeeds(option)
   }
 
-  return { sendMessage, confirmSeeds: confirmSeedsWithReset, isConfirmingPending, isConfirmingLocked }
+  return { sendMessage, confirmSeeds: confirmSeedsWithReset, isConfirmingPending, isConfirmingLocked, isAnswering }
 }

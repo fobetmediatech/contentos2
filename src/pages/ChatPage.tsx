@@ -63,7 +63,7 @@ export function ChatPage() {
   const activePipeline = useActivePipeline()
 
   const { isReady } = useKeysStore()
-  const { sendMessage, confirmSeeds, isConfirmingPending, isConfirmingLocked } = useConversation()
+  const { sendMessage, confirmSeeds, isConfirmingPending, isConfirmingLocked, isAnswering } = useConversation()
   const { answerClarification, isPending: clarificationPending } = useCompetitorAnalysis()
   const { startAnalysis: startReelAnalysis, activeHandles, creatorStates, synthesisStatus, synthesis, synthesisError, reset: resetReel } = useReelAnalysis()
 
@@ -89,7 +89,8 @@ export function ChatPage() {
     ready &&
     !isConfirmingPending &&
     !isConfirmingLocked &&
-    !isReelRunning
+    !isReelRunning &&
+    !isAnswering
 
   // Initialise chat state on mount
   useEffect(() => {
@@ -149,7 +150,7 @@ export function ChatPage() {
   // Scroll to bottom whenever messages or pipeline state changes
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [conversationMessages, status, discoveryStatus, currentStep, activePipeline.step, activeHandles, creatorStates, synthesisStatus])
+  }, [conversationMessages, status, discoveryStatus, currentStep, activePipeline.step, activeHandles, creatorStates, synthesisStatus, isAnswering])
 
   const resetTextareaHeight = () => {
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
@@ -306,6 +307,7 @@ export function ChatPage() {
               {/* Typing indicators */}
               {isDiscovering && <TypingIndicator />}
               {isConfirmingPending && <TypingIndicator />}
+              {isAnswering && <TypingIndicator />}
 
               {/* ── Competitor analysis progress ──────────────────────── */}
               {(isAnalysisRunning || isAnalysisClarifying) && (
@@ -621,7 +623,8 @@ export function ChatPage() {
                 (status !== 'chatting' && status !== 'confirming' && !activePipeline.followUpAllowed) ||
                 isConfirmingPending ||
                 isConfirmingLocked ||
-                isReelRunning
+                isReelRunning ||
+                isAnswering
               }
               aria-label="Message input"
               className={`w-full px-3 py-2.5 text-sm bg-[#1A1410] text-primary border rounded-xl focus:outline-none focus:ring-1 focus:ring-[#E07B3A] focus:border-[#E07B3A] resize-none disabled:opacity-40 disabled:cursor-not-allowed leading-relaxed placeholder:text-muted ${

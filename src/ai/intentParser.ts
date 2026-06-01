@@ -52,7 +52,7 @@ const IntentSchema = z.object({
   // .catch('competitor') gracefully handles null, undefined, and unknown enum
   // values (e.g. 'location') without triggering the validation-retry path.
   pipelineType: z
-    .enum(['competitor', 'discovery', 'reel'])
+    .enum(['competitor', 'discovery', 'reel', 'content'])
     .catch('competitor'),
   // How confident Gemini is about the pipeline routing decision.
   // 'high' = clear from the message; 'medium' = judgment call or ambiguous.
@@ -103,7 +103,7 @@ async function fetchIntent(
             knownHandles: { type: 'array', items: { type: 'string' } },
             depth: { type: 'string', enum: ['standard', 'deep'] },
             clientName: { type: 'string' },
-            pipelineType: { type: 'string', enum: ['competitor', 'discovery', 'reel'] },
+            pipelineType: { type: 'string', enum: ['competitor', 'discovery', 'reel', 'content'] },
             routingConfidence: { type: 'string', enum: ['high', 'medium'] },
           },
           required: ['needsClarification'],

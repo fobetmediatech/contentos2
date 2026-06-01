@@ -400,6 +400,14 @@ Determine pipelineType based on what the user is asking for:
   "study @a and @b's viral reels", "reverse-engineer @c's content", "what makes @d go viral"
   When the user names handles AND asks about their reels/hooks/videos/content style
   specifically, prefer "reel" over "competitor".
+- "content": user wants help CREATING content or with content STRATEGY — NOT researching
+  accounts. Writing hooks/captions/scripts/CTAs, generating content ideas, planning a
+  posting schedule, critiquing a draft, or how-to/strategy questions.
+  Examples: "write me 5 hooks for a fitness reel", "draft a caption for this", "what's a
+  good posting cadence", "10 content ideas for a coffee brand", "critique this script",
+  "how do I make my reels go viral"
+  Choose "content" when there are no specific accounts or cities to scrape and the user
+  wants you to produce or advise rather than find accounts.
 - "discovery": user wants creators geographically located in a specific city/region
   Examples: "find food bloggers in Mumbai", "who's posting about yoga in Delhi",
   "creators based in Singapore", "local influencers in Lagos"
@@ -441,49 +449,83 @@ OR if clarification needed:
 // ── Follow-up prompts ────────────────────────────────────────────────────────
 
 /**
- * Build the system context injected into a follow-up refinement call.
- *
- * Follow-up messages bypass parseIntent() entirely and go straight to a prose
- * Gemini call (callGeminiFollowUp). This context tells Gemini what the
- * pipeline already produced so it can give an informed refinement response
- * rather than treating the follow-up as a brand-new query.
- *
- * @param summary          A short human-readable description of what the pipeline
- *                         found, e.g. "Found 8 fitness creators in Mumbai" or
- *                         "Competitor analysis complete — 12 accounts in the
- *                         Indian food blogging space".
- * @param accountSummaries Optional list of accounts found by the pipeline.
- *                         When provided, Gemini can reference specific accounts
- *                         when answering refinement questions.
+ * Research grounding passed to the content copilot. Every field is optional —
+ * present only for whatever the user has actually run this session.
  */
-export function buildFollowUpContext(
-  summary: string,
-  accountSummaries?: Array<{ username: string; followers: number; er: number }>,
-): string {
-  // Sanitize usernames before embedding in the prompt — Apify data is external and could
-  // contain prompt-injection text. Instagram usernames are [a-zA-Z0-9._] only.
-  const accountsSection = accountSummaries && accountSummaries.length > 0
-    ? `\nACCOUNTS FOUND:\n${accountSummaries
+export interface ContentContext {
+  /** One-line summary of the most recent completed run. */
+  researchSummary?: string
+  /** Accounts found by a competitor/discovery run. */
+  accounts?: Array<{ username: string; followers: number; er: number }>
+  /** Dominant hook archetypes from a completed reel synthesis. */
+  hookPatterns?: Array<{ archetype: string; count: number }>
+  /** "What's working" tips from a completed reel synthesis. */
+  replicateTips?: string[]
+}
+
+/**
+ * Build the prompt for the content copilot — the chat's conversational mode.
+ *
+ * Unlike the research pipelines, this produces and advises on content directly
+ * (hooks, captions, scripts, ideas, strategy). When research context is supplied,
+ * the model grounds its answer in it (e.g. "write hooks" reuses the winning
+ * archetypes just discovered) and can cite real accounts/benchmarks.
+ *
+ * All external strings (usernames) are sanitized before embedding — Apify/Gemini
+ * data is untrusted and could carry prompt-injection text.
+ *
+ * @param userMessage The user's message (will be sanitized + length-clamped here).
+ * @param context     Optional research grounding from the current session.
+ */
+export function buildContentPrompt(userMessage: string, context?: ContentContext): string {
+  const safeMessage = userMessage.replace(/[\n\r]/g, ' ').trim().slice(0, 500)
+
+  let grounding = ''
+  if (context) {
+    const parts: string[] = []
+    if (context.researchSummary) {
+      parts.push(`RESEARCH JUST COMPLETED:\n${context.researchSummary.slice(0, 300)}`)
+    }
+    if (context.accounts && context.accounts.length > 0) {
+      const accts = context.accounts
+        .slice(0, 12)
         .map((a) => {
           const safeUsername = a.username.replace(/[^a-zA-Z0-9._]/g, '').slice(0, 30)
           return `@${safeUsername} — ${a.followers.toLocaleString()} followers, ${a.er.toFixed(1)}% ER`
         })
-        .join('\n')}\n`
-    : ''
+        .join('\n')
+      parts.push(`ACCOUNTS FOUND:\n${accts}`)
+    }
+    if (context.hookPatterns && context.hookPatterns.length > 0) {
+      const pats = context.hookPatterns
+        .slice(0, 8)
+        .map((p) => `${String(p.archetype).slice(0, 40)} (used ${p.count}x)`)
+        .join(', ')
+      parts.push(`WINNING HOOK PATTERNS in this niche: ${pats}`)
+    }
+    if (context.replicateTips && context.replicateTips.length > 0) {
+      const tips = context.replicateTips.slice(0, 5).map((t) => `- ${String(t).slice(0, 200)}`).join('\n')
+      parts.push(`WHAT IS WORKING:\n${tips}`)
+    }
+    if (parts.length > 0) {
+      grounding = `\n\nResearch context from the user's session — ground your answer in it and cite specific accounts/patterns when relevant:\n\n${parts.join('\n\n')}\n`
+    }
+  }
 
-  return `You are a helpful assistant for a social media creator research tool.
+  return `You are Content OS, a sharp content strategist and copywriter for Instagram and short-form video creators. You help with everything around content: writing hooks, captions, scripts, and CTAs; generating content ideas and series; planning posting cadence; critiquing drafts; and answering strategy questions (hashtags, formats, trends, growth).
+${grounding}
+USER MESSAGE: "${safeMessage.replace(/"/g, '\\"')}"
 
-The analysis pipeline just completed with the following result:
-${summary}
-${accountsSection}
-The user is now sending a follow-up message to refine or filter these results.
-Respond conversationally in 1-3 sentences. Focus on:
-- Acknowledging what they want to refine or filter
-- Confirming whether their refinement can be applied to the existing results
-- Suggesting a concrete next action if useful (e.g. "Start a new search for micro-influencers only")
+HOW TO RESPOND:
+- Be a practical, opinionated copilot. Give usable output, not generic advice.
+- If they ask you to write or generate, produce the actual content (e.g. a numbered list of 5 hooks), not a description of it.
+- If the request is too vague to answer well, ask ONE concise clarifying question instead of guessing.
+- When research context is provided above, use it — reference the winning hook patterns, real accounts, or benchmarks.
+- Keep it tight and skimmable: short paragraphs or a numbered/bulleted list. Use **bold** for key phrases, sparingly.
+- Stay on content and social-media topics. If asked something off-topic, gently steer back.
+- Do not claim to run scrapes or analyses. If the user wants competitor, location, or reel research, tell them to describe it and you will run that tool.
 
-Do not re-run any analysis. Do not describe capabilities you don't have.
-Keep your response short, friendly, and actionable.`
+Respond directly in plain text (markdown bold and lists are fine). No filler preamble — lead with the value.`
 }
 
 /**
