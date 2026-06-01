@@ -129,6 +129,19 @@ src/
     utils/export.ts           # CSV + clipboard export formatters
 ```
 
+## Design System
+Always read DESIGN.md before making any visual or UI decisions.
+All font choices, colors, spacing, border radii, and aesthetic direction are defined there.
+Do not deviate without explicit user approval.
+
+Key rules from DESIGN.md:
+- Fonts: Instrument Serif (display/italic), Outfit (body/UI), DM Mono (metrics/data)
+- Background: #1A1410 (chai dark) — NOT slate-50 or white
+- Accent: #E07B3A (saffron orange) — NOT indigo-600
+- All neutrals must have warm undertones — no pure Tailwind slate grays
+- AI-generated content only uses the violet tint (#A78BFA)
+- In QA mode, flag any code that uses Inter, slate colors, or indigo as the accent
+
 ## Skill routing
 
 When the user's request matches an available skill, invoke it via the Skill tool. When in doubt, invoke the skill.
