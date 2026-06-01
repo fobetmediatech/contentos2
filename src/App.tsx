@@ -5,6 +5,7 @@ import { ChatPage } from './pages/ChatPage'
 import { ResultsPage } from './pages/ResultsPage'
 import { DiscoveryResultsPage } from './pages/DiscoveryResultsPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { ReelAnalysisPage } from './pages/ReelAnalysisPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -32,6 +33,9 @@ export default function App() {
 
             {/* Location discovery results */}
             <Route path="discover/results" element={<DiscoveryResultsPage />} />
+
+            {/* Reel analysis */}
+            <Route path="reel-analysis" element={<ReelAnalysisPage />} />
 
             {/* Settings */}
             <Route path="settings" element={<SettingsPage />} />
