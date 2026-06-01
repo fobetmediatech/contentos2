@@ -2,7 +2,7 @@
  * ChatPage — conversational entry point for the analysis pipeline.
  *
  * All pipeline states (running, clarifying, done, error) now render inline
- * within the chat — no navigation away to /progress or /discover/progress.
+ * within the chat — no navigation to separate progress pages.
  *
  * Layout (T11): rendered inside AppLayout's noPadding mode (h-[100dvh] flex flex-col).
  * T5:  send button + textarea disabled when status !== 'chatting'.
@@ -24,6 +24,7 @@ import { useDiscoveryStore } from '../store/discoveryStore'
 import { useKeysStore } from '../store/keysStore'
 import { useConversation } from '../hooks/useConversation'
 import { useCompetitorAnalysis } from '../hooks/useCompetitorAnalysis'
+import { useActivePipeline } from '../hooks/useActivePipeline'
 import { ChatMessage, TypingIndicator } from '../components/ChatMessage'
 import { ProgressSteps } from '../components/ProgressSteps'
 import { ClarificationCard } from '../components/ClarificationCard'
@@ -32,14 +33,6 @@ const EXAMPLE_PROMPTS = [
   'Indian food bloggers in Mumbai',
   'Fitness creators focused on women',
   'Personal finance influencers in Delhi',
-]
-
-const DISCOVERY_STEPS = [
-  'Generating location hashtags',
-  'Scraping location-tagged posts',
-  'Fetching creator profiles',
-  'Filtering by location signals',
-  'Generating AI insights',
 ]
 
 export function ChatPage() {
@@ -60,14 +53,12 @@ export function ChatPage() {
   } = analysisStore
 
   const discoveryStatus = useDiscoveryStore((s) => s.status)
-  const discoveryStep = useDiscoveryStore((s) => s.currentStep)
-  const discoveryParams = useDiscoveryStore((s) => s.params)
-  const discoveryResults = useDiscoveryStore((s) => s.results)
   const discoveryError = useDiscoveryStore((s) => s.error)
   const resetDiscovery = useDiscoveryStore((s) => s.reset)
+  const activePipeline = useActivePipeline()
 
   const { isReady } = useKeysStore()
-  const { sendMessage, confirmSeeds } = useConversation()
+  const { sendMessage, confirmSeeds, isConfirmingPending } = useConversation()
   const { answerClarification, isPending: clarificationPending } = useCompetitorAnalysis()
 
   const [inputText, setInputText] = useState('')
@@ -79,7 +70,14 @@ export function ChatPage() {
   const ready = isReady()
   const isInPipeline = ['running', 'clarifying', 'done', 'error'].includes(status) ||
     ['running', 'done', 'error'].includes(discoveryStatus)
-  const canSend = status === 'chatting' && inputText.trim().length > 0 && ready
+  // Allow sending when chatting, when following up after a pipeline completes,
+  // or when in 'confirming' state so the user can type a direction instead of
+  // clicking a button. isConfirmingPending re-locks while we await Gemini's mapping.
+  const canSend =
+    (status === 'chatting' || status === 'confirming' || activePipeline.followUpAllowed) &&
+    inputText.trim().length > 0 &&
+    ready &&
+    !isConfirmingPending
 
   // T7 + T23: initialise chat state on mount
   useEffect(() => {
@@ -126,7 +124,7 @@ export function ChatPage() {
   // Scroll to bottom whenever messages change or pipeline state changes
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [conversationMessages, status, discoveryStatus, currentStep, discoveryStep])
+  }, [conversationMessages, status, discoveryStatus, currentStep, activePipeline.step])
 
   const resetTextareaHeight = () => {
     if (textareaRef.current) {
@@ -171,9 +169,9 @@ export function ChatPage() {
   const isAnalysisClarifying = status === 'clarifying'
   const isAnalysisDone = status === 'done'
 
-  // Location discovery inline states
-  const isDiscoveryRunning = discoveryStatus === 'running'
-  const isDiscoveryDone = discoveryStatus === 'done'
+  // Location discovery inline states (via bridge hook)
+  const isDiscoveryRunning = activePipeline.activePipelineId === 'discovery' && activePipeline.isRunning
+  const isDiscoveryDone = activePipeline.activePipelineId === 'discovery' && activePipeline.isDone
 
   const showInlineContent = isAnalysisRunning || isAnalysisClarifying || isAnalysisDone ||
     isDiscoveryRunning || isDiscoveryDone
@@ -243,12 +241,17 @@ export function ChatPage() {
                   key={`${message.timestamp}-${i}`}
                   message={message}
                   onOptionSelect={confirmSeeds}
-                  optionsDisabled={status !== 'confirming'}
+                  // Buttons are disabled when not in confirming state, or while
+                  // we are awaiting Gemini's mapping of a typed reply (AD2).
+                  optionsDisabled={status !== 'confirming' || isConfirmingPending}
                 />
               ))}
 
               {/* T12: animated typing indicator while parsing intent */}
               {isDiscovering && <TypingIndicator />}
+
+              {/* Typing indicator while Gemini maps a typed confirming-state reply (AD2) */}
+              {isConfirmingPending && <TypingIndicator />}
 
               {/* ── Inline competitor analysis progress ──────────────────── */}
               {(isAnalysisRunning || isAnalysisClarifying) && (
@@ -278,12 +281,10 @@ export function ChatPage() {
                   <div className="flex items-center justify-center gap-2 mb-4">
                     <MapPin size={14} className="text-teal-600" />
                     <p className="text-xs text-slate-500">
-                      {discoveryParams
-                        ? `Discovering creators in ${discoveryParams.city}…`
-                        : 'Running location discovery…'}
+                      {activePipeline.progressLabel}
                     </p>
                   </div>
-                  <ProgressSteps currentStep={discoveryStep} steps={DISCOVERY_STEPS} />
+                  <ProgressSteps currentStep={activePipeline.step} steps={activePipeline.stepLabels} />
                 </div>
               )}
 
@@ -320,14 +321,14 @@ export function ChatPage() {
               )}
 
               {/* ── Location discovery done ───────────────────────────────── */}
-              {isDiscoveryDone && discoveryResults && (
+              {isDiscoveryDone && activePipeline.discoveryResults && (
                 <div className="w-full max-w-2xl mx-auto mt-2 rounded-xl border border-teal-200 bg-teal-50 p-5">
                   <div className="flex items-start gap-3">
                     <CheckCircle size={20} className="text-teal-600 flex-shrink-0 mt-0.5" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-slate-900">
-                        Found {discoveryResults.length} creator{discoveryResults.length !== 1 ? 's' : ''}
-                        {discoveryParams ? ` in ${discoveryParams.city}` : ''}
+                        Found {activePipeline.discoveryResults.length} creator{activePipeline.discoveryResults.length !== 1 ? 's' : ''}
+                        {activePipeline.progressLabel ? ` — ${activePipeline.progressLabel.replace('Discovering creators in ', '').replace('…', '')}` : ''}
                       </p>
                       <p className="text-xs text-slate-500 mt-0.5">
                         Filtered for location signals and partnership readiness.
@@ -336,7 +337,7 @@ export function ChatPage() {
                   </div>
                   <div className="flex gap-2 mt-4">
                     <button
-                      onClick={() => navigate('/discover/results')}
+                      onClick={() => navigate(activePipeline.resultsPath)}
                       className="flex-1 py-2 text-sm font-medium bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
                     >
                       View full report →
@@ -376,15 +377,23 @@ export function ChatPage() {
                   : status === 'discovering'
                   ? 'Searching for accounts…'
                   : status === 'confirming'
-                  ? 'Select an option above to continue…'
+                  ? 'Or describe what you want…'
                   : 'Describe a niche, location, or paste handles…'
               }
               maxLength={500}
               rows={1}
-              // T5: disabled when not in chatting state
-              disabled={status !== 'chatting'}
+              // T5: disabled when not in chatting or confirming state (follow-up enabled when pipeline is done).
+              // Also disabled while isConfirmingPending to prevent double-submit during Gemini mapping.
+              disabled={
+                (status !== 'chatting' && status !== 'confirming' && !activePipeline.followUpAllowed) ||
+                isConfirmingPending
+              }
               aria-label="Message input"
-              className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none disabled:bg-slate-50 disabled:text-slate-400 leading-relaxed"
+              className={`w-full px-3 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none disabled:bg-slate-50 disabled:text-slate-400 leading-relaxed ${
+                status === 'confirming' && !isConfirmingPending
+                  ? 'border-indigo-300 ring-1 ring-indigo-100'
+                  : 'border-slate-200'
+              }`}
             />
             {/* T6: char counter shown at 400+ */}
             {inputText.length >= 400 && (

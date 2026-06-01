@@ -2,12 +2,9 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AppLayout } from './components/AppLayout'
 import { ChatPage } from './pages/ChatPage'
-import { ProgressPage } from './pages/ProgressPage'
 import { ResultsPage } from './pages/ResultsPage'
-import { SettingsPage } from './pages/SettingsPage'
-import { DiscoverPage } from './pages/DiscoverPage'
-import { DiscoveryProgressPage } from './pages/DiscoveryProgressPage'
 import { DiscoveryResultsPage } from './pages/DiscoveryResultsPage'
+import { SettingsPage } from './pages/SettingsPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -30,20 +27,16 @@ export default function App() {
 
           {/* All other routes — standard layout with padding */}
           <Route element={<AppLayout />}>
-            {/* Competitor analysis flow — /analyze redirects to chat */}
-            <Route path="analyze" element={<Navigate to="/" replace />} />
-            <Route path="progress" element={<ProgressPage />} />
+            {/* Competitor analysis results */}
             <Route path="results" element={<ResultsPage />} />
 
-            {/* Location discovery flow */}
-            <Route path="discover" element={<DiscoverPage />} />
-            <Route path="discover/progress" element={<DiscoveryProgressPage />} />
+            {/* Location discovery results */}
             <Route path="discover/results" element={<DiscoveryResultsPage />} />
 
             {/* Settings */}
             <Route path="settings" element={<SettingsPage />} />
 
-            {/* Fallback */}
+            {/* Redirect all legacy / dead routes back to Chat */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

@@ -35,7 +35,7 @@ export function DiscoveryResultsPage() {
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
-    if (results.length === 0) navigate('/discover')
+    if (results.length === 0) navigate('/')
   }, [results.length, navigate])
 
   const topResults = results.filter((r) => r.category === 'top').sort((a, b) => a.rank - b.rank)
@@ -85,7 +85,7 @@ export function DiscoveryResultsPage() {
 
   const handleNewSearch = () => {
     reset()
-    navigate('/discover')
+    navigate('/')
   }
 
   return (
