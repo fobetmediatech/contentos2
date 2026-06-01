@@ -10,7 +10,7 @@
 
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Copy, Download, RotateCcw, Check, MapPin, Info } from 'lucide-react'
+import { Copy, Download, RotateCcw, Check, MapPin, Info, X } from 'lucide-react'
 import { useDiscoveryStore } from '../store/discoveryStore'
 import { DiscoveryCard } from '../components/DiscoveryCard'
 import { DISCOVERY_CATEGORIES } from '../shared/utils/categories'
@@ -33,6 +33,22 @@ export function DiscoveryResultsPage() {
     reset,
   } = useDiscoveryStore()
   const [copied, setCopied] = useState(false)
+  const [selectedHandles, setSelectedHandles] = useState<string[]>([])
+  const [selectionWarning, setSelectionWarning] = useState<string | null>(null)
+
+  const handleToggleSelect = (handle: string) => {
+    setSelectedHandles((prev) => {
+      if (prev.includes(handle)) {
+        return prev.filter((h) => h !== handle)
+      }
+      if (prev.length >= 5) {
+        setSelectionWarning('Select up to 5 creators at a time')
+        setTimeout(() => setSelectionWarning(null), 2500)
+        return prev
+      }
+      return [...prev, handle]
+    })
+  }
 
   useEffect(() => {
     if (results.length === 0) navigate('/')
@@ -88,8 +104,17 @@ export function DiscoveryResultsPage() {
     navigate('/')
   }
 
+  const selectionCount = selectedHandles.length
+
   return (
     <div className="pb-24">
+
+      {/* Selection warning toast */}
+      {selectionWarning && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 bg-[#2C2118] border border-[#E07B3A]/40 rounded-xl text-sm text-[#E07B3A] shadow-lg">
+          {selectionWarning}
+        </div>
+      )}
 
       {/* Page header */}
       <div className="mb-6 flex items-start justify-between">
@@ -145,6 +170,8 @@ export function DiscoveryResultsPage() {
                 result={r}
                 profile={profileMap.get(r.username)}
                 cohortAvgER={cohortAvgER}
+                isSelected={selectedHandles.includes(r.username)}
+                onSelect={handleToggleSelect}
               />
             ))}
           </div>
@@ -164,37 +191,67 @@ export function DiscoveryResultsPage() {
                 result={r}
                 profile={profileMap.get(r.username)}
                 cohortAvgER={cohortAvgER}
+                isSelected={selectedHandles.includes(r.username)}
+                onSelect={handleToggleSelect}
               />
             ))}
           </div>
         </section>
       )}
 
-      {/* Sticky export bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-6 py-3 z-20">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <p className="text-xs text-slate-500">
-            {results.length} creators · {city} {nicheLabel}
-            {clientName && <span> · {clientName}</span>}
-          </p>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleCopy}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-700 border border-slate-200 rounded-lg hover:border-slate-300 hover:text-slate-900 transition-colors"
-            >
-              {copied ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
-              {copied ? 'Copied!' : 'Copy for Slides'}
-            </button>
-            <button
-              onClick={handleCSV}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
-            >
-              <Download size={14} />
-              Export CSV
-            </button>
+      {/* Sticky export bar — hidden when selection is active */}
+      {selectionCount === 0 && (
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-6 py-3 z-20">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <p className="text-xs text-slate-500">
+              {results.length} creators · {city} {nicheLabel}
+              {clientName && <span> · {clientName}</span>}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleCopy}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-700 border border-slate-200 rounded-lg hover:border-slate-300 hover:text-slate-900 transition-colors"
+              >
+                {copied ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
+                {copied ? 'Copied!' : 'Copy for Slides'}
+              </button>
+              <button
+                onClick={handleCSV}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+              >
+                <Download size={14} />
+                Export CSV
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* Floating selection CTA bar — shown when 1+ creators selected */}
+      {selectionCount >= 1 && (
+        <div className="fixed bottom-0 left-0 right-0 bg-[#1A1410] border-t border-[#E07B3A]/30 px-6 py-3 z-30">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <p className="text-sm font-medium text-[#F5E6D3]">
+              {selectionCount} creator{selectionCount !== 1 ? 's' : ''} selected
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSelectedHandles([])}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-[#A09080] border border-[#3D2E1E] rounded-lg hover:text-[#F5E6D3] hover:border-[#5C4A30] transition-colors"
+              >
+                <X size={14} />
+                Clear
+              </button>
+              <button
+                onClick={() => navigate('/reel-analysis?handles=' + selectedHandles.join(','))}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-[#E07B3A] text-[#1A1410] rounded-lg hover:bg-[#C96A2A] transition-colors"
+              >
+                Analyze {selectionCount} creator{selectionCount !== 1 ? 's' : ''} (~{selectionCount * 2}–{selectionCount * 3}m)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
