@@ -22,3 +22,33 @@ body {
 #root {
   min-height: 100vh;
 }
+
+/* ── Print / Save as PDF — the niche report (Phase 2 refinement) ──
+   The app is dark-themed; browsers drop background colors when printing, which would
+   leave the light report text invisible. Isolate .report-printable, hide the chrome,
+   and force dark-on-white for legibility. */
+@media print {
+  body {
+    min-width: 0;
+    background: #fff;
+  }
+  body * {
+    visibility: hidden;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .report-printable,
+  .report-printable * {
+    visibility: visible;
+    color: #1a1410 !important;
+    background: transparent !important;
+    border-color: #d4c5b0 !important;
+  }
+  .report-printable {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+}

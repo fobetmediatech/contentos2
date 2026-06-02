@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { ProgressSteps } from './ProgressSteps'
 import type {
@@ -55,7 +56,16 @@ export function InlineReelResults({ handles, creatorStates, synthesisStatus, syn
           <p className="text-sm text-[#A78BFA]">Synthesizing the niche report…</p>
         </div>
       )}
-      {deepReportStatus === 'done' && deepReport && <DeepReportCard report={deepReport} />}
+      {deepReportStatus === 'done' && deepReport && (
+        <>
+          <DeepReportCard report={deepReport} />
+          <div className="-mt-5 mb-8">
+            <Link to="/report" className="text-sm font-medium text-[#E07B3A] hover:underline">
+              Open full report ↗
+            </Link>
+          </div>
+        </>
+      )}
       {deepReportStatus === 'failed' && (
         <div className="mb-8 px-4 py-3 bg-[#2C1818] border border-danger/30 rounded-xl text-sm text-danger">
           Niche report synthesis failed — the per-creator analyses below are still available.
@@ -387,8 +397,10 @@ function ReportList({ title, items, titleClass }: { title: string; items: string
  * The client-ready niche report: who's winning + the winning formula (Gemini synthesis),
  * the cross-creator archetype mix + comparison table + top exemplars (code-computed), and
  * actionable replicate/avoid/test/gaps. AI-synthesized copy uses the violet tint.
+ *
+ * Exported so the dedicated /report page can reuse the exact same rendering.
  */
-function DeepReportCard({ report }: { report: DeepNicheReport }) {
+export function DeepReportCard({ report }: { report: DeepNicheReport }) {
   return (
     <div className="mb-8 px-5 py-5 bg-[#1E1A2E] border border-[#A78BFA]/20 rounded-xl">
       <h2 className="text-lg font-semibold text-[#F5EDD6] mb-1">Niche report</h2>

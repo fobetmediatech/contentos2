@@ -6,6 +6,7 @@ import { ResultsPage } from './pages/ResultsPage'
 import { DiscoveryResultsPage } from './pages/DiscoveryResultsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { ReelAnalysisPage } from './pages/ReelAnalysisPage'
+import { ReportPage } from './pages/ReportPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -36,6 +37,9 @@ export default function App() {
 
             {/* Reel analysis */}
             <Route path="reel-analysis" element={<ReelAnalysisPage />} />
+
+            {/* Deep niche report (full-page, client-ready view) */}
+            <Route path="report" element={<ReportPage />} />
 
             {/* Settings */}
             <Route path="settings" element={<SettingsPage />} />
