@@ -12,12 +12,20 @@ import { isReady, pickAvailableKey, getKeyExpiry } from '../lib/keyRotator'
 // VITE_ env vars are baked in at build time — acceptable for internal team deployments.
 // Team members who manually enter keys in Settings override these; they're just defaults.
 const ENV_GEMINI_KEY: string = import.meta.env.VITE_GEMINI_KEY ?? ''
+// Read up to 10 keys from env — matches the store's 10-key cap (setApifyKeys
+// slices to 10, addApifyKey guards at 10). More keys = more rotation headroom
+// for keyRotator to dodge per-key Apify rate limits.
 const ENV_APIFY_KEYS: string[] = [
   import.meta.env.VITE_APIFY_KEY_1,
   import.meta.env.VITE_APIFY_KEY_2,
   import.meta.env.VITE_APIFY_KEY_3,
   import.meta.env.VITE_APIFY_KEY_4,
   import.meta.env.VITE_APIFY_KEY_5,
+  import.meta.env.VITE_APIFY_KEY_6,
+  import.meta.env.VITE_APIFY_KEY_7,
+  import.meta.env.VITE_APIFY_KEY_8,
+  import.meta.env.VITE_APIFY_KEY_9,
+  import.meta.env.VITE_APIFY_KEY_10,
 ].filter((k): k is string => typeof k === 'string' && k.trim().length > 0)
 
 interface KeysState {

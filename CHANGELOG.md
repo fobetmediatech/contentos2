@@ -21,6 +21,7 @@ Content-copilot overhaul: three research tools callable independently by natural
 - **Reel benchmarks computed in code**, not by the LLM — `computeBenchmarks()` derives medianViews / likesViewsRatio / commentsLikesRatio from real metrics (the model was previously asked to do arithmetic and the UI rendered its guesses as precise percentages).
 - `addMessage` now stamps the message timestamp inside the store action (callers no longer pass `Date.now()`), clearing the React 19 `react-hooks/purity` errors.
 - Raw Tailwind `blue`/`green`/`amber` swapped for the warm `success`/`warning`/`danger` design tokens across the cards (verified badge, ER, copy check, progress step).
+- The build-time env loader now reads up to 10 Apify keys (`VITE_APIFY_KEY_1..10`), matching the store's 10-key cap, for more `keyRotator` rotation headroom.
 
 ### Fixed
 
