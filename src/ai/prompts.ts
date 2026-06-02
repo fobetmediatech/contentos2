@@ -389,12 +389,12 @@ EXTRACT:
 - knownHandles (optional): any @handles or handle-like strings they mentioned (max 5, strip @ prefix)
 - depth: "deep" if they say "thorough", "complete", "deep scan", "detailed"; otherwise "standard"
 - clientName (optional): client or brand name they mentioned for the report (e.g. "for Acme Corp")
-- needsClarification: true ONLY if the message is completely ambiguous, off-topic, or you cannot determine a niche at all
+- needsClarification: true when you cannot confidently determine WHICH creators to find — the niche is vague or generic ("good accounts", "creators", "influencers", "the best ones" with no domain), the request could mean materially different creator sets, or it's off-topic. When the creator target is genuinely unclear, ASK — one sharp question beats searching the wrong thing.
 
 RULES:
-- If you can extract a niche with reasonable confidence, set needsClarification=false
-- Only set needsClarification=true as a last resort — prefer a best-guess niche
-- If needsClarification=true, provide a short clarifying question in the "question" field
+- ASK (needsClarification=true) when the creator target is ambiguous. Searching the wrong creators wastes the user's time; a single clarifying question fixes it.
+- RESOLVE (needsClarification=false) when the niche is specific enough to search confidently (a clear domain like "vegan food creators" or "home-workout coaches") OR when @handles are named. Do NOT ask in these cases — that is over-asking.
+- If needsClarification=true, put ONE short, specific question in the "question" field that names 2-3 concrete directions so the user can answer in a tap (e.g. "Which kind of fitness accounts — home-workout coaches, gym/bodybuilding, or yoga/mobility?"). Never ask a vague "what do you mean?".
 - niche should describe WHO to find, not WHAT TO DO (not "analyze competitors", not "find accounts")
 - Strip @ from any handles mentioned
 
