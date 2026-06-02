@@ -393,7 +393,9 @@ EXTRACT:
 
 RULES:
 - ASK (needsClarification=true) when the creator target is ambiguous. Searching the wrong creators wastes the user's time; a single clarifying question fixes it.
-- RESOLVE (needsClarification=false) when the niche is specific enough to search confidently (a clear domain like "vegan food creators" or "home-workout coaches") OR when @handles are named. Do NOT ask in these cases — that is over-asking.
+- RESOLVE (needsClarification=false) when the niche is specific enough to search confidently (a clear domain like "vegan food creators" or "home-workout coaches"). Do NOT ask in these cases — that is over-asking.
+- HARD RULE — handles override clarification: if the message names ANY @handle, or a handle-like reference after "similar to" / "like" / "reference" / "such as", ALWAYS set needsClarification=false and extract the handles, EVEN WITH NO NICHE. The handles ARE the target; never ask for a niche when a handle is present. e.g. "similar to @nas.daily" → needsClarification=false, knownHandles=["nas.daily"], pipelineType="competitor".
+- Clarification is ONLY for requests to FIND accounts. NEVER ask for clarification on content/strategy/how-to questions (write, create, ideas, captions, hooks, scripts, posting cadence, "how do I…", "how to go viral"). Those always resolve with needsClarification=false and pipelineType="content".
 - If needsClarification=true, put ONE short, specific question in the "question" field that names 2-3 concrete directions so the user can answer in a tap (e.g. "Which kind of fitness accounts — home-workout coaches, gym/bodybuilding, or yoga/mobility?"). Never ask a vague "what do you mean?".
 - niche should describe WHO to find, not WHAT TO DO (not "analyze competitors", not "find accounts")
 - Strip @ from any handles mentioned
@@ -426,6 +428,13 @@ Determine pipelineType based on what the user is asking for:
 - Only use "discovery" when the user's goal is explicitly geographic.
 - routingConfidence: "high" if the pipelineType is unambiguous from the message;
   "medium" if you had to make a judgment call or the message could fit either pipeline.
+- LOCATION AMBIGUITY (important): when a niche + a city appear together with NO competitive
+  word ("top", "best", "who's winning", "dominates") AND NO explicit geographic word
+  ("based in", "located in", "local", "based out of") — e.g. "fitness creators in Hyderabad",
+  "cricket content creators in Chennai" —
+  the request is genuinely ambiguous (competitors filtered to that city vs creators who LIVE
+  there). Set routingConfidence="medium" so the app can ask which the user means. A competitive
+  word forces "competitor"+"high"; an explicit geographic word forces "discovery"+"high".
 
 HANDLE EXTRACTION EXAMPLES:
 - "like @foodie.creator and @chefmike" → knownHandles: ["foodie.creator", "chefmike"]
