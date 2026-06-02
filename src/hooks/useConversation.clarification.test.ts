@@ -184,3 +184,45 @@ describe('useConversation — Phase 1a clarification loop', () => {
     )
   })
 })
+
+describe('useConversation — Phase 1a routingConfidence consumption', () => {
+  const MEDIUM_WITH_LOC = {
+    needsClarification: false, niche: 'fitness creators', location: 'Austin', knownHandles: [],
+    depth: 'standard', clientName: '', pipelineType: 'competitor', routingConfidence: 'medium',
+  }
+  const LOC_MSG = 'fitness creators in austin'
+
+  it('E. medium confidence + location + no handles → asks competitor-vs-local, does NOT dispatch', async () => {
+    parseIntentMock.mockResolvedValue(MEDIUM_WITH_LOC)
+    const { result } = renderHook(() => useConversation())
+
+    await act(async () => { await result.current.sendMessage(LOC_MSG) })
+
+    expect(lastAssistant()?.content).toMatch(/based in Austin/i)
+    expect(mockStoreActions.setStatus).toHaveBeenLastCalledWith('chatting')
+    // It must NOT have dispatched the guessed pipeline.
+    expect(scrapeHashtagUsernamesMock).not.toHaveBeenCalled()
+    expect(mockStoreActions.setDiscoveredSeeds).not.toHaveBeenCalled()
+  })
+
+  it('F. medium confidence but NO location → dispatches (does not over-ask)', async () => {
+    parseIntentMock.mockResolvedValue({ ...MEDIUM_WITH_LOC, location: '' })
+    const { result } = renderHook(() => useConversation())
+
+    await act(async () => { await result.current.sendMessage('who is winning in fitness') })
+
+    // No routing question; it proceeded to competitor discovery (hashtag scrape).
+    expect(lastAssistant()?.content ?? '').not.toMatch(/based in/i)
+    expect(scrapeHashtagUsernamesMock).toHaveBeenCalled()
+  })
+
+  it('G. HIGH confidence + location → dispatches without asking (confidence gate works)', async () => {
+    parseIntentMock.mockResolvedValue({ ...MEDIUM_WITH_LOC, routingConfidence: 'high' })
+    const { result } = renderHook(() => useConversation())
+
+    await act(async () => { await result.current.sendMessage(LOC_MSG) })
+
+    expect(lastAssistant()?.content ?? '').not.toMatch(/based in Austin/i)
+    expect(scrapeHashtagUsernamesMock).toHaveBeenCalled()
+  })
+})

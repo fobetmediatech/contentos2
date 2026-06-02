@@ -725,6 +725,7 @@ export function useConversation() {
       const niche = 'niche' in intent ? intent.niche : ''
       const location = 'location' in intent ? (intent.location ?? '') : ''
       const pipelineType = 'pipelineType' in intent ? (intent.pipelineType ?? 'competitor') : 'competitor'
+      const routingConfidence = 'routingConfidence' in intent ? (intent.routingConfidence ?? 'high') : 'high'
 
       // ── Content copilot ────────────────────────────────────────────────────
       // Conversational help / generation — no scraping, no confirm step.
@@ -746,6 +747,29 @@ export function useConversation() {
         .filter((h, i, arr) => arr.indexOf(h) === i) // dedup
         .slice(0, 5)
       const knownHandles = geminiHandles.length > 0 ? geminiHandles : clientHandles
+
+      // ── Routing confidence (Phase 1a) ────────────────────────────────────────
+      // The parser is only "medium" confident about competitor-vs-discovery when a
+      // location is present (e.g. "fitness creators in Austin" — competitors based
+      // there, or local creators?). Rather than dispatch the guess, ASK which one.
+      // Reuses the clarification loop + shared cap. Tightly gated (medium + location
+      // + no handles + competitor/discovery) so clear requests never get interrogated.
+      if (
+        routingConfidence === 'medium' &&
+        location &&
+        knownHandles.length === 0 &&
+        (pipelineType === 'competitor' || pipelineType === 'discovery') &&
+        clarificationTurns < CLARIFICATION_CAP
+      ) {
+        setClarificationTurns((c) => c + 1)
+        store.addMessage({
+          role: 'assistant',
+          content: `Want **${niche || 'those'}** competitors anywhere, or creators physically **based in ${location}**? Tell me which and I'll run the right search.`,
+          type: 'text',
+        })
+        store.setStatus('chatting')
+        return
+      }
 
       // ── Reel / hook analysis ───────────────────────────────────────────────
       // Needs specific creators to study. If none were named, ask for handles.
