@@ -6,7 +6,7 @@
  */
 
 import { create } from 'zustand'
-import type { DeepReelAnalysis } from '../ai/prompts/deepReelAnalysis'
+import type { DeepReelAnalysis, DeepNicheReport } from '../ai/prompts/deepReelAnalysis'
 
 // ----- Creator status -----
 
@@ -91,6 +91,9 @@ interface ReelAnalysisState {
   synthesisStatus: 'idle' | 'running' | 'done' | 'failed'
   synthesis: SynthesisOutput | null
   synthesisError: string | null
+  // Cross-profile deep niche report (Phase 2) — produced after a deep run finishes.
+  deepReport: DeepNicheReport | null
+  deepReportStatus: 'idle' | 'running' | 'done' | 'failed'
   // actions
   setSelectedHandles: (handles: string[]) => void
   setActiveHandles: (handles: string[]) => void
@@ -104,6 +107,8 @@ interface ReelAnalysisState {
   setSynthesis: (output: SynthesisOutput) => void
   setSynthesisStatus: (status: ReelAnalysisState['synthesisStatus']) => void
   setSynthesisError: (msg: string) => void
+  setDeepReport: (report: DeepNicheReport) => void
+  setDeepReportStatus: (status: ReelAnalysisState['deepReportStatus']) => void
   reset: () => void
 }
 
@@ -116,6 +121,9 @@ const initialState = {
   synthesisStatus: 'idle' as ReelAnalysisState['synthesisStatus'],
   synthesis: null as SynthesisOutput | null,
   synthesisError: null as string | null,
+  // Phase 2: included in initialState so reset() clears them (zustand-initialstate learning).
+  deepReport: null as DeepNicheReport | null,
+  deepReportStatus: 'idle' as ReelAnalysisState['deepReportStatus'],
 }
 
 // ----- Store -----
@@ -159,6 +167,10 @@ export const useReelAnalysisStore = create<ReelAnalysisState>()((set) => ({
   setSynthesisStatus: (status) => set({ synthesisStatus: status }),
 
   setSynthesisError: (msg) => set({ synthesisError: msg, synthesisStatus: 'failed' }),
+
+  setDeepReport: (report) => set({ deepReport: report, deepReportStatus: 'done' }),
+
+  setDeepReportStatus: (status) => set({ deepReportStatus: status }),
 
   reset: () => set(initialState),
 }))

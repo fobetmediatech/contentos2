@@ -50,6 +50,67 @@ export interface DeepReelAnalysis {
   // commentsLikesRatio is added client-side (NOT asked of Gemini)
 }
 
+/**
+ * Per-creator deep playbook — Phase-2 aggregation OVER a creator's DeepReelAnalysis set.
+ * Pure/code-computed (no LLM): the creator's repeatable formula extracted from the
+ * video-grounded analyses. Feeds the per-creator section of the cross-profile report.
+ */
+export interface DeepCreatorPlaybook {
+  handle: string
+  reelCount: number
+  archetypeDistribution: Array<{ archetype: string; count: number }> // sorted desc by count
+  dominantArchetype: string
+  secondaryArchetype?: string
+  avgHookScore: number // mean hookScore across enriched reels
+  medianViews: number
+  consistencyScore: number // 0-1: dominant archetype's share (how repeatable the formula is)
+  signatureTemplate: string // the top exemplar's replicationTemplate (their winning hook template)
+  topExemplar: {
+    shortCode: string
+    hookArchetype: string
+    hookScore: number
+    spokenHookVerbatim: string
+    visualOpening: string
+    views: number
+  } | null
+}
+
+// ----- Cross-profile niche report (Phase 2) -----
+
+export interface DeepReportComparisonRow {
+  handle: string
+  reelCount: number
+  avgHookScore: number
+  medianViews: number
+  dominantArchetype: string
+}
+
+export interface DeepReportExemplar {
+  handle: string
+  shortCode: string
+  hookArchetype: string
+  hookScore: number
+  spokenHookVerbatim: string
+  views: number
+}
+
+/** The Gemini-synthesized (qualitative) half of the niche report. */
+export interface DeepReportSynthesis {
+  whoIsWinning: string // the standout creator + WHY
+  nicheFormula: string // the winning formula for THIS niche
+  gaps: string[] // underused hooks/angles = opportunities
+  replicate: string[] // what to copy
+  avoid: string[] // what not to copy
+  test: string[] // experiments to run
+}
+
+/** Full cross-profile report = code-computed table + Gemini synthesis. */
+export interface DeepNicheReport extends DeepReportSynthesis {
+  archetypeDistribution: Array<{ archetype: string; count: number }> // across ALL creators' reels
+  comparison: DeepReportComparisonRow[]
+  topExemplars: DeepReportExemplar[]
+}
+
 // ---------------------------------------------------------------------------
 // JSON Schema (Gemini responseSchema) — enum-constrained hook fields
 // ---------------------------------------------------------------------------
@@ -130,4 +191,57 @@ ${HOOK_TAXONOMY}
 - hookScore: integer 1-10 — how strong the hook is at stopping the scroll.
 
 Return only valid JSON matching the schema. No commentary outside the JSON.`
+}
+
+// ---------------------------------------------------------------------------
+// Cross-profile niche report — synthesis schema + prompt (Phase 2)
+// ---------------------------------------------------------------------------
+
+export const DEEP_REPORT_SCHEMA = {
+  type: 'object',
+  properties: {
+    whoIsWinning: { type: 'string' },
+    nicheFormula: { type: 'string' },
+    gaps: { type: 'array', items: { type: 'string' } },
+    replicate: { type: 'array', items: { type: 'string' } },
+    avoid: { type: 'array', items: { type: 'string' } },
+    test: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['whoIsWinning', 'nicheFormula', 'gaps', 'replicate', 'avoid', 'test'],
+} as const
+
+/**
+ * Build the cross-profile synthesis prompt from per-creator playbooks (already grounded
+ * in the video analyses). Gemini returns the qualitative half; the comparison table +
+ * archetype distribution + exemplars are computed in code (buildDeepReportTable).
+ */
+export function buildDeepReportPrompt(playbooks: DeepCreatorPlaybook[]): string {
+  const compact = playbooks.map((p) => ({
+    handle: p.handle,
+    reels: p.reelCount,
+    dominantArchetype: p.dominantArchetype,
+    secondaryArchetype: p.secondaryArchetype ?? null,
+    archetypeMix: p.archetypeDistribution,
+    avgHookScore: Number(p.avgHookScore.toFixed(1)),
+    medianViews: p.medianViews,
+    consistency: Number(p.consistencyScore.toFixed(2)),
+    signatureHook: p.topExemplar
+      ? { spoken: p.topExemplar.spokenHookVerbatim, visual: p.topExemplar.visualOpening, score: p.topExemplar.hookScore, views: p.topExemplar.views }
+      : null,
+    signatureTemplate: p.signatureTemplate,
+  }))
+  return `You are a short-form content strategist writing the synthesis section of a client-ready niche report. You are given per-creator "playbooks" already derived from WATCHING each creator's reels (visual + spoken hooks). Synthesise across them and return JSON only.
+
+## Per-creator playbooks (JSON)
+${JSON.stringify(compact, null, 2)}
+
+## Return
+- whoIsWinning: which creator is winning in this niche and WHY (cite their hook mix / scores / views). One tight paragraph.
+- nicheFormula: the synthesised "winning formula" for THIS niche — the repeatable pattern across the strong creators.
+- gaps: 2-4 underused hooks/angles in this niche = opportunities a new creator could exploit.
+- replicate: 3 concrete, actionable things to copy.
+- avoid: 2 things that correlate with weaker performance here.
+- test: 2-3 experiments worth running.
+
+Be specific and grounded in the data above. Return only valid JSON matching the schema.`
 }

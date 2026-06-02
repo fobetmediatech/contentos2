@@ -24,14 +24,29 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('../lib/reelScraper', () => ({ scrapeTopReels: mocks.scrapeTopReels, NoReelsError: mocks.NoReelsErrorMock }))
 vi.mock('../lib/reelVideoClient', () => ({ scrapeReelVideos: mocks.scrapeReelVideos }))
-// startDeepReport only calls analyzeReelDeep from reelAnalyzer; stub the rest so the
-// real module (and its Gemini client import) never loads in the test.
+// startDeepReport calls analyzeReelDeep + the report builders from reelAnalyzer; stub
+// them all so the real module (and its Gemini client import) never loads in the test.
+// The report step runs after creators finish — stubbed to a no-op so the per-creator
+// status assertions are what's under test (report rendering is covered elsewhere).
 vi.mock('../lib/reelAnalyzer', () => ({
   analyzeReel: vi.fn(),
   analyzeReelDeep: mocks.analyzeReelDeep,
   synthesizeNiche: vi.fn(),
   buildPerCreatorSummary: vi.fn(),
   computeBenchmarks: vi.fn(),
+  buildDeepPlaybook: vi.fn(() => ({
+    handle: '',
+    reelCount: 0,
+    archetypeDistribution: [],
+    dominantArchetype: '',
+    avgHookScore: 0,
+    medianViews: 0,
+    consistencyScore: 0,
+    signatureTemplate: '',
+    topExemplar: null,
+  })),
+  buildDeepReportTable: vi.fn(() => ({ archetypeDistribution: [], comparison: [], topExemplars: [] })),
+  synthesizeDeepReport: vi.fn(async () => ({ whoIsWinning: '', nicheFormula: '', gaps: [], replicate: [], avoid: [], test: [] })),
 }))
 
 import { useReelAnalysis } from './useReelAnalysis'

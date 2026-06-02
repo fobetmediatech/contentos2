@@ -4,7 +4,16 @@ import { useReelAnalysisStore } from '../store/reelAnalysisStore'
 import { useKeysStore } from '../store/keysStore'
 import { scrapeTopReels, NoReelsError } from '../lib/reelScraper'
 import { scrapeReelVideos } from '../lib/reelVideoClient'
-import { analyzeReel, analyzeReelDeep, synthesizeNiche, buildPerCreatorSummary, computeBenchmarks } from '../lib/reelAnalyzer'
+import {
+  analyzeReel,
+  analyzeReelDeep,
+  synthesizeNiche,
+  buildPerCreatorSummary,
+  computeBenchmarks,
+  buildDeepPlaybook,
+  buildDeepReportTable,
+  synthesizeDeepReport,
+} from '../lib/reelAnalyzer'
 import type { DeepReelStatus } from '../store/reelAnalysisStore'
 
 // Cap Gemini concurrency across all creators in a run.
@@ -36,12 +45,16 @@ export function useReelAnalysis() {
     synthesisStatus,
     synthesis,
     synthesisError,
+    deepReport,
+    deepReportStatus,
     setActiveHandles,
     setCreatorState,
     setDeepReel,
     setSynthesis,
     setSynthesisError,
     setSynthesisStatus,
+    setDeepReport,
+    setDeepReportStatus,
     reset,
   } = useReelAnalysisStore()
 
@@ -201,11 +214,34 @@ export function useReelAnalysis() {
     )
 
     await Promise.allSettled(handles.map((handle) => runCreatorDeepPipeline(handle, controller.signal)))
+    if (controller.signal.aborted) return
+
+    // Cross-profile niche report (Phase 2): build per-creator playbooks from creators
+    // that finished with deep data, then code-table + Gemini synthesis. Read fresh from
+    // the store to avoid a stale closure over creatorStates.
+    const states = useReelAnalysisStore.getState().creatorStates
+    const playbooks = Object.values(states)
+      .filter((s) => s.status === 'done' && s.deepAnalyses && Object.keys(s.deepAnalyses).length > 0)
+      .map((s) => buildDeepPlaybook(s.handle, s.deepAnalyses ?? {}, s.reels))
+    if (playbooks.length === 0) return
+
+    setDeepReportStatus('running')
+    try {
+      const table = buildDeepReportTable(playbooks)
+      const synthesis = await synthesizeDeepReport(playbooks, geminiKey, controller.signal)
+      if (controller.signal.aborted) return
+      setDeepReport({ ...table, ...synthesis })
+    } catch {
+      if (controller.signal.aborted) return
+      setDeepReportStatus('failed')
+    }
   }
 
   return {
     startAnalysis,
     startDeepReport,
+    deepReport,
+    deepReportStatus,
     activeHandles,
     creatorStates,
     synthesisStatus,
