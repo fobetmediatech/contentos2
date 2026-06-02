@@ -76,4 +76,33 @@ describe('intentParser — niche optional when handles are named', () => {
 
     await expect(parseIntent('key', 'do the thing')).rejects.toBeInstanceOf(GeminiError)
   })
+
+  it('resolves a CONTENT intent with no niche and no handles (eval-caught: how-to questions)', async () => {
+    // "how do I make my reels blow up in India" → content, no creator to find.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeOkResponse({
+      needsClarification: false,
+      location: 'India',
+      pipelineType: 'content',
+      routingConfidence: 'high',
+    })))
+
+    const intent = await parseIntent('key', 'how do I make my reels blow up in India')
+
+    const resolved = intent as Extract<typeof intent, { needsClarification?: false | null | undefined }>
+    expect(resolved.pipelineType).toBe('content')
+  })
+
+  it('resolves a REEL intent with no handles (the orchestrator asks for handles later)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeOkResponse({
+      needsClarification: false,
+      knownHandles: [],
+      pipelineType: 'reel',
+      routingConfidence: 'high',
+    })))
+
+    const intent = await parseIntent('key', 'break down some reel hooks')
+
+    const resolved = intent as Extract<typeof intent, { needsClarification?: false | null | undefined }>
+    expect(resolved.pipelineType).toBe('reel')
+  })
 })

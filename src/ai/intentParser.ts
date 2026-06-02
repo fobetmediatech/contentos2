@@ -65,13 +65,18 @@ const IntentSchema = z.object({
     .enum(['high', 'medium'])
     .catch('high'),
 })
-  // A resolved intent must have SOMETHING to act on — a niche OR at least one handle.
-  // niche is optional (Gemini omits it for handle-driven requests), so without this a
-  // resolved-but-empty intent could slip through; the refine forces re-clarification.
-  .refine((d) => d.niche.length > 0 || d.knownHandles.length > 0, {
-    message: 'resolved intent needs a niche or at least one handle',
-    path: ['niche'],
-  })
+  // Only competitor/discovery SEARCHES need a target (a niche or handles) — an empty one
+  // would dispatch a garbage hashtag search. A `reel` intent resolves handle-less (the
+  // orchestrator then asks which creators), and a `content` intent acts on the message
+  // itself, so both are exempt. (Both exemptions were eval-caught: `content` with no
+  // niche, and the earlier handle-only-no-niche case.)
+  .refine(
+    (d) =>
+      (d.pipelineType !== 'competitor' && d.pipelineType !== 'discovery') ||
+      d.niche.length > 0 ||
+      d.knownHandles.length > 0,
+    { message: 'a competitor/discovery search needs a niche or at least one handle', path: ['niche'] },
+  )
 
 const ParsedIntentSchema = z.union([ClarificationSchema, IntentSchema])
 
