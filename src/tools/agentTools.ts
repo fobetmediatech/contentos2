@@ -1,0 +1,156 @@
+/**
+ * Agent tool registry + validate/repair layer (Phase 1b T8).
+ *
+ * AGENT_TOOLS are the function declarations handed to callGeminiWithTools. When the
+ * model returns a functionCall, useAgentConversation runs it through validateToolCall
+ * BEFORE dispatching:
+ *   - unknown tool name (hallucination) → { ok:false, reason:'unknown_tool' }
+ *   - args fail the per-tool Zod schema  → { ok:false, reason:'invalid_args' }
+ *   - valid                              → { ok:true, name, args } (parsed + normalized)
+ *
+ * On ok:false the loop feeds `detail` back to Gemini for ONE repair turn, then falls
+ * back to ask_clarification. Pure module — no React, no network — so it's fully unit
+ * tested here while the hook (T8) is integration-tested separately.
+ *
+ * Invariants mirror intentParser deliberately: competitor search needs a niche OR
+ * handles; @handles are normalized (strip @, lowercase, ≤30 chars).
+ */
+
+import { z } from 'zod'
+import type { GeminiFunctionDeclaration } from '../ai/gemini'
+
+export type AgentToolName =
+  | 'ask_clarification'
+  | 'discover_competitors'
+  | 'discover_by_location'
+  | 'analyze_reels'
+  | 'answer_content'
+
+export type ToolValidation =
+  | { ok: true; name: AgentToolName; args: Record<string, unknown> }
+  | { ok: false; reason: 'unknown_tool' | 'invalid_args'; detail: string }
+
+/** Normalize a handle list: strip @, lowercase, trim, drop empties + over-length. */
+const normalizeHandles = (arr: string[] | null | undefined): string[] =>
+  (arr ?? [])
+    .map((h) => h.replace(/^@/, '').toLowerCase().trim())
+    .filter((h) => h.length > 0 && h.length <= 30)
+
+// Per-tool argument schemas. safeParse failures become the repair `detail`.
+const argSchemas: Record<AgentToolName, z.ZodTypeAny> = {
+  ask_clarification: z.object({
+    question: z.string().min(1),
+  }),
+
+  discover_competitors: z
+    .object({
+      niche: z.string().nullish().transform((s) => (s ?? '').trim()),
+      knownHandles: z.array(z.string()).nullish().transform(normalizeHandles),
+      segment: z.enum(['micro', 'macro', 'business', 'all']).nullish().transform((s) => s ?? 'all'),
+    })
+    // niche OR handles — an empty competitor search would scrape garbage.
+    .refine((d) => d.niche.length > 0 || d.knownHandles.length > 0, {
+      message: 'a competitor search needs a niche or at least one handle',
+      path: ['niche'],
+    }),
+
+  discover_by_location: z.object({
+    niche: z.string().min(1),
+    city: z.string().min(1),
+    depth: z.enum(['standard', 'deep']).nullish().transform((s) => s ?? 'standard'),
+  }),
+
+  analyze_reels: z
+    .object({
+      handles: z.array(z.string()).transform(normalizeHandles),
+    })
+    .refine((d) => d.handles.length > 0, { message: 'at least one @handle is required', path: ['handles'] }),
+
+  answer_content: z.object({
+    message: z.string().min(1),
+  }),
+}
+
+/**
+ * Validate a model-emitted tool call. Returns a typed dispatch on success, or a
+ * repair signal (with a human-readable `detail`) the agent loop can feed back.
+ */
+export function validateToolCall(name: string, args: Record<string, unknown>): ToolValidation {
+  if (!Object.prototype.hasOwnProperty.call(argSchemas, name)) {
+    return {
+      ok: false,
+      reason: 'unknown_tool',
+      detail: `Unknown tool "${name}". Valid tools: ${Object.keys(argSchemas).join(', ')}.`,
+    }
+  }
+  const result = argSchemas[name as AgentToolName].safeParse(args ?? {})
+  if (!result.success) {
+    return {
+      ok: false,
+      reason: 'invalid_args',
+      detail: result.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; '),
+    }
+  }
+  return { ok: true, name: name as AgentToolName, args: result.data as Record<string, unknown> }
+}
+
+/** Function declarations passed to callGeminiWithTools. Descriptions guide routing. */
+export const AGENT_TOOLS: GeminiFunctionDeclaration[] = [
+  {
+    name: 'ask_clarification',
+    description:
+      'Ask the user ONE short, specific question when their request is too ambiguous to act on (e.g. a vague niche like "good accounts"). Name 2-3 concrete directions so they can answer in a tap. Use ONLY when you genuinely cannot tell what to search.',
+    parameters: {
+      type: 'object',
+      properties: { question: { type: 'string', description: 'The clarifying question to show the user.' } },
+      required: ['question'],
+    },
+  },
+  {
+    name: 'discover_competitors',
+    description:
+      'Find the top accounts succeeding in a niche, regardless of location. Use when the user wants competitors/leaders in a space, or names reference @handles to find similar accounts. "top X in <city>" is competitor (city is a filter), not discovery.',
+    parameters: {
+      type: 'object',
+      properties: {
+        niche: { type: 'string', description: 'Creator niche, e.g. "vegan food creators". Optional if handles are given.' },
+        knownHandles: { type: 'array', items: { type: 'string' }, description: 'Reference @handles to find similar accounts.' },
+        segment: { type: 'string', enum: ['micro', 'macro', 'business', 'all'], description: 'Follower-size segment.' },
+      },
+    },
+  },
+  {
+    name: 'discover_by_location',
+    description:
+      'Find creators physically based in a specific city. Use ONLY when the goal is explicitly geographic ("creators based in Pune", "local food bloggers in Mumbai").',
+    parameters: {
+      type: 'object',
+      properties: {
+        niche: { type: 'string', description: 'Creator niche to find in the city.' },
+        city: { type: 'string', description: 'The city to search within.' },
+        depth: { type: 'string', enum: ['standard', 'deep'] },
+      },
+      required: ['niche', 'city'],
+    },
+  },
+  {
+    name: 'analyze_reels',
+    description:
+      'Break down the hook patterns in recent reels of specific named creators. Requires at least one @handle.',
+    parameters: {
+      type: 'object',
+      properties: { handles: { type: 'array', items: { type: 'string' }, description: 'The creator @handles to analyze.' } },
+      required: ['handles'],
+    },
+  },
+  {
+    name: 'answer_content',
+    description:
+      'Answer a content/strategy/how-to question or generate content (hooks, captions, ideas, scripts) — no scraping. Use when the user wants advice or content, not account research ("how do I go viral", "write 5 hooks").',
+    parameters: {
+      type: 'object',
+      properties: { message: { type: 'string', description: "The user's content/strategy request." } },
+      required: ['message'],
+    },
+  },
+]
