@@ -29,6 +29,7 @@ import { markKeyCooldown } from '../lib/keyRotator'
 import { ApifyError } from '../lib/apifyClient'
 import { GeminiError } from '../ai/gemini'
 import { friendlyApify, friendlyGemini } from '../lib/errorMessages'
+import { linkAbort } from '../lib/abortControl'
 
 const TIMEOUT_MS = 150_000
 const MIN_COMPETITOR_RESULTS = 8
@@ -41,13 +42,13 @@ export function useCompetitorAnalysis() {
   // ── Phase 1: Discovery + clarification question generation ────────────────
 
   const discoverMutation = useMutation({
-    mutationFn: async (params: AnalysisParams) => {
+    mutationFn: async ({ params, externalSignal }: { params: AnalysisParams; externalSignal?: AbortSignal }) => {
       const apifyKey = pickKey()
       if (!apifyKey) throw new Error('No Apify keys available. All keys are in cooldown.')
       if (!geminiKey?.trim()) throw new Error('Gemini API key is not configured.')
 
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS)
+      // linkAbort: internal 150s timeout + an optional external (agent-loop) signal.
+      const abort = linkAbort(TIMEOUT_MS, externalSignal)
 
       try {
         startAnalysis(params)
@@ -57,7 +58,7 @@ export function useCompetitorAnalysis() {
         const { inputProfiles, candidateProfiles } = await discoverCompetitors(
           params.handles,
           apifyKey,
-          controller.signal,
+          abort.signal,
           params.depth,
         )
 
@@ -81,7 +82,7 @@ export function useCompetitorAnalysis() {
               referenceProfile,
               candidateProfiles,
               params.nicheContext,
-              controller.signal,
+              abort.signal,
             )
           : { question: 'Which direction best fits your client?', options: ['Exact niche match', 'Broader category'] }
 
@@ -91,12 +92,14 @@ export function useCompetitorAnalysis() {
         return { inputProfiles, candidateProfiles }
 
       } catch (err) {
+        // Superseded by the agent loop (latest-wins steer) — silent, not a failure.
+        if (abort.wasSuperseded()) return undefined
         console.error('[analysis:discover] failed:', err)
-        const message = buildErrorMessage(err, controller, apifyKey, pickKey)
+        const message = buildErrorMessage(err, abort.signal, apifyKey, pickKey)
         setError(message)
         throw new Error(message, { cause: err })
       } finally {
-        clearTimeout(timeout)
+        abort.cleanup()
       }
     },
     retry: 0,
@@ -106,15 +109,14 @@ export function useCompetitorAnalysis() {
   // ── Phase 2: Ranking with clarification answer injected ───────────────────
 
   const analyzeMutation = useMutation({
-    mutationFn: async ({ answer, nicheContext }: { answer: string; nicheContext: string }) => {
+    mutationFn: async ({ answer, nicheContext, externalSignal }: { answer: string; nicheContext: string; externalSignal?: AbortSignal }) => {
       if (!geminiKey?.trim()) throw new Error('Gemini API key is not configured.')
 
       // Read pendingDiscovery synchronously from store at call time — avoids stale closure.
       const discovery = useAnalysisStore.getState().pendingDiscovery
       if (!discovery) throw new Error('No discovery data available — please restart the analysis.')
 
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS)
+      const abort = linkAbort(TIMEOUT_MS, externalSignal)
 
       try {
         setStep(5)
@@ -126,7 +128,7 @@ export function useCompetitorAnalysis() {
           geminiKey,
           inputProfiles,
           candidateProfiles,
-          controller.signal,
+          abort.signal,
           nicheContext || undefined,
           answer || undefined,
         )
@@ -140,7 +142,7 @@ export function useCompetitorAnalysis() {
             geminiKey,
             inputProfiles,
             candidateProfiles,
-            controller.signal,
+            abort.signal,
           )
         }
 
@@ -158,12 +160,13 @@ export function useCompetitorAnalysis() {
         return output
 
       } catch (err) {
+        if (abort.wasSuperseded()) return undefined
         console.error('[analysis:analyze] failed:', err)
-        const message = buildErrorMessage(err, controller, null, () => null)
+        const message = buildErrorMessage(err, abort.signal, null, () => null)
         setError(message)
         throw new Error(message, { cause: err })
       } finally {
-        clearTimeout(timeout)
+        abort.cleanup()
       }
     },
     retry: 0,
@@ -173,8 +176,8 @@ export function useCompetitorAnalysis() {
   // ── Public API ─────────────────────────────────────────────────────────────
 
   /** Kick off Phase 1 (discovery + question generation). */
-  const analyze = (params: AnalysisParams) => {
-    discoverMutation.mutate(params)
+  const analyze = (params: AnalysisParams, externalSignal?: AbortSignal) => {
+    discoverMutation.mutate({ params, externalSignal })
   }
 
   /**
@@ -182,11 +185,11 @@ export function useCompetitorAnalysis() {
    * Stores the answer and immediately fires Phase 2 (ranking).
    * Pass an empty string to proceed without refinement ("Looks right, proceed as-is").
    */
-  const answerClarification = (answer: string) => {
+  const answerClarification = (answer: string, externalSignal?: AbortSignal) => {
     storeAnswerClarification(answer)
     const currentParams = useAnalysisStore.getState().params
     if (!currentParams) return
-    analyzeMutation.mutate({ answer, nicheContext: currentParams.nicheContext })
+    analyzeMutation.mutate({ answer, nicheContext: currentParams.nicheContext, externalSignal })
   }
 
   return {
@@ -206,11 +209,11 @@ export function useCompetitorAnalysis() {
 
 function buildErrorMessage(
   err: unknown,
-  controller: AbortController,
+  signal: AbortSignal,
   apifyKey: string | null,
   pickKey: () => string | null,
 ): string {
-  if (controller.signal.aborted) {
+  if (signal.aborted) {
     return 'Analysis timed out after 150 seconds. Try with fewer handles or check your Apify key.'
   }
   if (err instanceof ApifyError) {

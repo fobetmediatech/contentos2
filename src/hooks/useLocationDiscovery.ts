@@ -26,6 +26,7 @@ import type { DiscoveryResult } from '../ai/prompts'
 import { markKeyCooldown } from '../lib/keyRotator'
 import { ApifyError } from '../lib/apifyCore'
 import { GeminiError } from '../ai/gemini'
+import { linkAbort } from '../lib/abortControl'
 
 const TIMEOUT_MS = 150_000
 // Minimum post-filter results before triggering a second hashtag batch
@@ -36,13 +37,14 @@ export function useLocationDiscovery() {
   const { geminiKey, pickKey } = useKeysStore()
 
   const mutation = useMutation({
-    mutationFn: async (params: DiscoveryParams) => {
+    mutationFn: async ({ params, externalSignal }: { params: DiscoveryParams; externalSignal?: AbortSignal }) => {
       const apifyKey = pickKey()
       if (!apifyKey) throw new Error('No Apify keys available. All keys are in cooldown.')
       if (!geminiKey?.trim()) throw new Error('Gemini API key is not configured.')
 
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS)
+      // linkAbort: internal 150s timeout + an optional external (agent-loop) signal.
+      // wasSuperseded() tells an intentional steer (silent) from a timeout (real error).
+      const abort = linkAbort(TIMEOUT_MS, externalSignal)
 
       try {
         startDiscovery(params)
@@ -58,7 +60,7 @@ export function useLocationDiscovery() {
           safeCity,
           safeNiche,
           params.depth,
-          controller.signal,
+          abort.signal,
         )
 
         // Step 2: Scrape hashtag posts → handles (inside runLocationDiscovery)
@@ -71,7 +73,7 @@ export function useLocationDiscovery() {
           safeCity,
           apifyKey,
           params.depth,
-          controller.signal,
+          abort.signal,
         )
         let scrapedHashtags = firstPassHashtags
 
@@ -87,7 +89,7 @@ export function useLocationDiscovery() {
         let finalCandidates = candidateProfiles
         let didExpand = false
 
-        if (filterResult.filtered.length < MIN_LOCATION_RESULTS && !controller.signal.aborted) {
+        if (filterResult.filtered.length < MIN_LOCATION_RESULTS && !abort.signal.aborted) {
           setStep(6)
           setStepProgressDetail(
             `Found only ${filterResult.filtered.length} creator${filterResult.filtered.length !== 1 ? 's' : ''} in ${safeCity} — trying new hashtags…`
@@ -99,17 +101,17 @@ export function useLocationDiscovery() {
               safeCity,
               safeNiche,
               'deep',          // always deep for expansion — more hashtags, different angle
-              controller.signal,
+              abort.signal,
               scrapedHashtags, // exclude already-tried hashtags (sanitized inside generateHashtags)
             )
 
-            if (expandedHashtags.length > 0 && !controller.signal.aborted) {
+            if (expandedHashtags.length > 0 && !abort.signal.aborted) {
               const expansion = await runLocationDiscovery(
                 expandedHashtags,
                 safeCity,
                 apifyKey,
                 params.depth,
-                controller.signal,
+                abort.signal,
               )
               // Dedup against finalCandidates (full pool), not finalFiltered (filtered subset).
               // Using finalFiltered would re-add profiles that were scraped but didn't pass
@@ -149,7 +151,7 @@ export function useLocationDiscovery() {
           safeCity,
           safeNiche,
           finalFiltered,
-          controller.signal,
+          abort.signal,
           creatorCount,
           businessCount,
         )
@@ -162,7 +164,7 @@ export function useLocationDiscovery() {
             '',  // remove city context
             '',  // remove niche context
             finalCandidates,  // use ALL candidates (including expansion), not just filtered
-            controller.signal,
+            abort.signal,
             creatorCount,
             businessCount,
           )
@@ -190,10 +192,12 @@ export function useLocationDiscovery() {
         return output
 
       } catch (err) {
+        // Superseded by the agent loop (latest-wins steer) — silent, not a failure.
+        if (abort.wasSuperseded()) return undefined
         console.error('[discovery] failed:', err)
         let message = 'An unexpected error occurred.'
 
-        if (controller.signal.aborted) {
+        if (abort.signal.aborted) {
           message = 'Discovery timed out after 150 seconds. Try Standard depth or check your Apify key.'
         } else if (err instanceof ApifyError) {
           if (err.code === 'RATE_LIMITED') {
@@ -215,7 +219,7 @@ export function useLocationDiscovery() {
         setError(message)
         throw new Error(message, { cause: err })
       } finally {
-        clearTimeout(timeout)
+        abort.cleanup()
       }
     },
     retry: 0,
@@ -223,7 +227,9 @@ export function useLocationDiscovery() {
   })
 
   return {
-    discover: mutation.mutate,
+    // Accepts an optional external signal so the agent loop (T8) can supersede a run.
+    discover: (params: DiscoveryParams, externalSignal?: AbortSignal) =>
+      mutation.mutate({ params, externalSignal }),
     isPending: mutation.isPending,
     isError: mutation.isError,
     reset,
