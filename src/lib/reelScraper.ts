@@ -15,9 +15,8 @@ import { pickAvailableKey } from './keyRotator'
 import { ACTORS, buildReelScraperInput } from './actors'
 import type { ReelData } from '../store/reelAnalysisStore'
 
-// Shared global p-limit(1): serializes ALL Apify runs (this scrape + the reel-video
-// scrape) — free-tier concurrency protection. Imported from apifyCore so every
-// caller queues on the SAME gate.
+// Shared Apify limiter (pLimit(3), key-rotated across distinct accounts) from apifyCore,
+// so this list scrape + the reel-video scrape queue on the SAME gate. See apifyCore.
 const apifyLimiter = apifyRunLimiter
 
 // ----- Error class -----

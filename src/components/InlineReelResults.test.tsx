@@ -6,8 +6,14 @@
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+import type { ReactElement } from 'react'
+import { render as rtlRender, screen, fireEvent, cleanup } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { InlineReelResults } from './InlineReelResults'
+
+// InlineReelResults now renders a <Link> (Open full report) — wrap every render in a
+// Router so that link has the context it needs.
+const render = (ui: ReactElement) => rtlRender(<MemoryRouter>{ui}</MemoryRouter>)
 
 // vitest config has no `globals: true`, so RTL's auto-cleanup isn't registered —
 // unmount between tests manually or the DOM accumulates across cases.

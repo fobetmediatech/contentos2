@@ -18,13 +18,16 @@ export const POLL_INTERVAL_MS = 2000   // 2 seconds between polls
 export const MAX_POLL_MS = 110_000     // 110s hard limit (leaves 10s buffer for 150s total timeout)
 
 /**
- * Global Apify run limiter — serializes ALL Apify actor runs across the app
- * (reel list scrape, reel VIDEO scrape, etc.) to one at a time. Free-tier
- * concurrency protection: a single shared gate so two callers can't run two
- * actors at once. Shared so reelScraper + reelVideoClient queue together rather
- * than each holding its own pLimit(1) (which would allow 2 concurrent runs).
+ * Shared Apify run limiter for the REEL pipelines (reelScraper + reelVideoClient).
+ *
+ * pLimit(3): up to 3 concurrent Apify runs. keyRotator.pickAvailableKey is round-robin
+ * (see its M10 note — built precisely for parallel scrapes), so 3 concurrent runs land
+ * on 3 DISTINCT keys/accounts; with the user's up-to-10 keys no single account ever gets
+ * more than one concurrent run. This ~3x's a multi-creator deep report vs serial while
+ * staying within free-tier per-account limits. Competitor + discovery pipelines have
+ * their own limiters and are unaffected by this value.
  */
-export const apifyRunLimiter = pLimit(1)
+export const apifyRunLimiter = pLimit(3)
 
 // ----- Error class (shared between both clients) -----
 
