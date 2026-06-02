@@ -25,8 +25,10 @@
  *   abort the wrong one). useEffect cleanup aborts the whole set on unmount; pending
  *   timers are tracked the same way so a concurrent run can't clobber them (M1).
  *
- * Clarification loop guard (T21):
- *   After 1 needsClarification turn, we force progression to avoid an infinite loop.
+ * Clarification loop guard (T21, Phase 1a):
+ *   After 2 needsClarification turns, we force progression to avoid an infinite loop.
+ *   (Phase 1a raised the cap from 1→2 so the parser, which now asks when the creator
+ *   target is ambiguous instead of best-guessing, can hold a real clarifying exchange.)
  *   The counter lives in component-local state (not the store) — it resets per mount.
  */
 
@@ -687,9 +689,14 @@ export function useConversation() {
         releaseController(parseController)
       }
 
-      // Handle needsClarification (T21: max 1 turn)
+      // Handle needsClarification (T21: max 2 turns — Phase 1a)
+      // Phase 1a (10C): the parser now ASKS when the creator target is ambiguous
+      // (prompts.ts) instead of best-guessing, and we let it hold up to TWO
+      // clarifying turns before forcing a fallback. This is the "consume the
+      // signal the classifier already emits" fix — no agent loop required.
+      const CLARIFICATION_CAP = 2
       if ('needsClarification' in intent && intent.needsClarification === true) {
-        if (clarificationTurns < 1) {
+        if (clarificationTurns < CLARIFICATION_CAP) {
           setClarificationTurns((c) => c + 1)
           store.addMessage({
             role: 'assistant',
@@ -699,7 +706,7 @@ export function useConversation() {
           store.setStatus('chatting')
           return
         }
-        // Second ambiguous response — force a handle-based fallback.
+        // Cap reached and still ambiguous — force a handle-based fallback.
         // Reset clarificationTurns so the user can try again after providing handles.
         setClarificationTurns(0)
         store.addMessage({
@@ -718,6 +725,7 @@ export function useConversation() {
       const niche = 'niche' in intent ? intent.niche : ''
       const location = 'location' in intent ? (intent.location ?? '') : ''
       const pipelineType = 'pipelineType' in intent ? (intent.pipelineType ?? 'competitor') : 'competitor'
+      const routingConfidence = 'routingConfidence' in intent ? (intent.routingConfidence ?? 'high') : 'high'
 
       // ── Content copilot ────────────────────────────────────────────────────
       // Conversational help / generation — no scraping, no confirm step.
@@ -739,6 +747,29 @@ export function useConversation() {
         .filter((h, i, arr) => arr.indexOf(h) === i) // dedup
         .slice(0, 5)
       const knownHandles = geminiHandles.length > 0 ? geminiHandles : clientHandles
+
+      // ── Routing confidence (Phase 1a) ────────────────────────────────────────
+      // The parser is only "medium" confident about competitor-vs-discovery when a
+      // location is present (e.g. "fitness creators in Austin" — competitors based
+      // there, or local creators?). Rather than dispatch the guess, ASK which one.
+      // Reuses the clarification loop + shared cap. Tightly gated (medium + location
+      // + no handles + competitor/discovery) so clear requests never get interrogated.
+      if (
+        routingConfidence === 'medium' &&
+        location &&
+        knownHandles.length === 0 &&
+        (pipelineType === 'competitor' || pipelineType === 'discovery') &&
+        clarificationTurns < CLARIFICATION_CAP
+      ) {
+        setClarificationTurns((c) => c + 1)
+        store.addMessage({
+          role: 'assistant',
+          content: `Want **${niche || 'those'}** competitors anywhere, or creators physically **based in ${location}**? Tell me which and I'll run the right search.`,
+          type: 'text',
+        })
+        store.setStatus('chatting')
+        return
+      }
 
       // ── Reel / hook analysis ───────────────────────────────────────────────
       // Needs specific creators to study. If none were named, ask for handles.
