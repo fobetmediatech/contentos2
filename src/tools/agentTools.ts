@@ -17,7 +17,7 @@
  */
 
 import { z } from 'zod'
-import type { GeminiFunctionDeclaration } from '../ai/gemini'
+import type { GeminiFunctionDeclaration, GeminiToolResult } from '../ai/gemini'
 
 export type AgentToolName =
   | 'ask_clarification'
@@ -29,6 +29,36 @@ export type AgentToolName =
 export type ToolValidation =
   | { ok: true; name: AgentToolName; args: Record<string, unknown> }
   | { ok: false; reason: 'unknown_tool' | 'invalid_args'; detail: string }
+
+/** The next thing the agent loop should do, derived from one Gemini tool result. */
+export type AgentAction =
+  | { type: 'message'; text: string }
+  | { type: 'ask'; question: string }
+  | { type: 'answer'; message: string }
+  | { type: 'dispatch'; name: 'discover_competitors' | 'discover_by_location' | 'analyze_reels'; args: Record<string, unknown> }
+  | { type: 'repair'; detail: string }
+
+/**
+ * Map one Gemini tool result to the agent loop's next action. Free text → render a
+ * message; a valid tool call → ask / answer / dispatch; an invalid or hallucinated
+ * call → repair (re-prompt the model once with the detail).
+ */
+export function decideAction(result: GeminiToolResult): AgentAction {
+  if (result.kind === 'text') {
+    return { type: 'message', text: result.text }
+  }
+  const v = validateToolCall(result.name, result.args)
+  if (!v.ok) {
+    return { type: 'repair', detail: v.detail }
+  }
+  if (v.name === 'ask_clarification') {
+    return { type: 'ask', question: String((v.args as { question: string }).question) }
+  }
+  if (v.name === 'answer_content') {
+    return { type: 'answer', message: String((v.args as { message: string }).message) }
+  }
+  return { type: 'dispatch', name: v.name, args: v.args }
+}
 
 /** Normalize a handle list: strip @, lowercase, trim, drop empties + over-length. */
 const normalizeHandles = (arr: string[] | null | undefined): string[] =>
