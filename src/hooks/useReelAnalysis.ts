@@ -4,6 +4,7 @@ import { useReelAnalysisStore } from '../store/reelAnalysisStore'
 import { useKeysStore } from '../store/keysStore'
 import { scrapeTopReels, NoReelsError } from '../lib/reelScraper'
 import { scrapeReelVideos } from '../lib/reelVideoClient'
+import { getCachedDeep, setCachedDeep } from '../lib/deepReelCache'
 import {
   analyzeReel,
   analyzeReelDeep,
@@ -153,33 +154,46 @@ export function useReelAnalysis() {
       for (const r of reels) seededStatus[r.shortCode] = 'pending'
       setCreatorState(handle, { reels, status: 'analyzing', deepStatus: seededStatus, deepAnalyses: {} })
 
-      // ONE batch Apify run resolves all the stable video URLs (Issue 1: batch, not per-reel).
-      const videos = await scrapeReelVideos(reels.map((r) => r.url), apifyKeys, signal)
+      // Cache check (R2 resume / R3 free re-runs): cached reels restore instantly;
+      // only uncached reels go on to the (expensive) video scrape + Gemini.
+      const uncached: typeof reels = []
+      for (const reel of reels) {
+        const cached = await getCachedDeep(reel.shortCode)
+        if (cached) setDeepReel(handle, reel.shortCode, { status: 'done', analysis: cached })
+        else uncached.push(reel)
+      }
       if (signal.aborted) return
 
-      // Per reel: no video -> skipped; else deep-analyze via the function (capped concurrency).
-      // R2: one reel failing/skipping never blocks the others — the run still completes.
-      await Promise.all(
-        reels.map((reel) =>
-          deepLimiter(async () => {
-            if (signal.aborted) return
-            const videoUrl = videos.get(reel.shortCode)
-            if (!videoUrl) {
-              setDeepReel(handle, reel.shortCode, { status: 'skipped' })
-              return
-            }
-            setDeepReel(handle, reel.shortCode, { status: 'analyzing' })
-            try {
-              const analysis = await analyzeReelDeep(reel, videoUrl, signal)
+      if (uncached.length > 0) {
+        // ONE batch Apify run resolves stable video URLs for the UNCACHED reels only.
+        const videos = await scrapeReelVideos(uncached.map((r) => r.url), apifyKeys, signal)
+        if (signal.aborted) return
+
+        // Per reel: no video -> skipped; else deep-analyze via the function (capped concurrency).
+        // R2: one reel failing/skipping never blocks the others — the run still completes.
+        await Promise.all(
+          uncached.map((reel) =>
+            deepLimiter(async () => {
               if (signal.aborted) return
-              setDeepReel(handle, reel.shortCode, { status: 'done', analysis })
-            } catch {
-              if (signal.aborted) return
-              setDeepReel(handle, reel.shortCode, { status: 'failed' })
-            }
-          }),
-        ),
-      )
+              const videoUrl = videos.get(reel.shortCode)
+              if (!videoUrl) {
+                setDeepReel(handle, reel.shortCode, { status: 'skipped' })
+                return
+              }
+              setDeepReel(handle, reel.shortCode, { status: 'analyzing' })
+              try {
+                const analysis = await analyzeReelDeep(reel, videoUrl, signal)
+                if (signal.aborted) return
+                setDeepReel(handle, reel.shortCode, { status: 'done', analysis })
+                void setCachedDeep(reel.shortCode, analysis) // best-effort: makes re-runs free
+              } catch {
+                if (signal.aborted) return
+                setDeepReel(handle, reel.shortCode, { status: 'failed' })
+              }
+            }),
+          ),
+        )
+      }
       if (signal.aborted) return
       setCreatorState(handle, { status: 'done' })
     } catch (err) {

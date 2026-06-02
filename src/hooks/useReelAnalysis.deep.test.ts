@@ -18,12 +18,15 @@ const mocks = vi.hoisted(() => {
     scrapeTopReels: vi.fn(),
     scrapeReelVideos: vi.fn(),
     analyzeReelDeep: vi.fn(),
+    getCachedDeep: vi.fn(),
+    setCachedDeep: vi.fn(),
     NoReelsErrorMock,
   }
 })
 
 vi.mock('../lib/reelScraper', () => ({ scrapeTopReels: mocks.scrapeTopReels, NoReelsError: mocks.NoReelsErrorMock }))
 vi.mock('../lib/reelVideoClient', () => ({ scrapeReelVideos: mocks.scrapeReelVideos }))
+vi.mock('../lib/deepReelCache', () => ({ getCachedDeep: mocks.getCachedDeep, setCachedDeep: mocks.setCachedDeep }))
 // startDeepReport calls analyzeReelDeep + the report builders from reelAnalyzer; stub
 // them all so the real module (and its Gemini client import) never loads in the test.
 // The report step runs after creators finish — stubbed to a no-op so the per-creator
@@ -87,6 +90,9 @@ const deepResult = (): StoredDeepReelAnalysis => ({
 beforeEach(() => {
   vi.clearAllMocks()
   useReelAnalysisStore.getState().reset()
+  // Default: cache miss (clearAllMocks keeps implementations, so re-establish each test).
+  mocks.getCachedDeep.mockResolvedValue(undefined)
+  mocks.setCachedDeep.mockResolvedValue(undefined)
 })
 afterEach(cleanup)
 
@@ -144,5 +150,16 @@ describe('useReelAnalysis.startDeepReport — R2 partial-failure', () => {
 
     const states = await run(['nike'])
     expect(states.nike.status).toBe('no-reels')
+  })
+
+  it('cache hit: restores from cache, skips the video scrape AND the analysis (R3 free re-run)', async () => {
+    mocks.scrapeTopReels.mockResolvedValue([reel('a')])
+    mocks.getCachedDeep.mockResolvedValue(deepResult()) // cached
+
+    const states = await run(['nike'])
+    expect(states.nike.status).toBe('done')
+    expect(states.nike.deepStatus).toEqual({ a: 'done' })
+    expect(mocks.scrapeReelVideos).not.toHaveBeenCalled()
+    expect(mocks.analyzeReelDeep).not.toHaveBeenCalled()
   })
 })

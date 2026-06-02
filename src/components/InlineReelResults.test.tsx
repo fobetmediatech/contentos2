@@ -117,7 +117,7 @@ const report = (): DeepNicheReport => ({
     { archetype: 'Curiosity gap', count: 3 },
   ],
   comparison: [{ handle: 'nike', reelCount: 8, avgHookScore: 7.5, medianViews: 12000, dominantArchetype: 'Bold claim' }],
-  topExemplars: [{ handle: 'nike', shortCode: 'x', hookArchetype: 'Bold claim', hookScore: 9, spokenHookVerbatim: 'stop', views: 50000 }],
+  topExemplars: [{ handle: 'nike', shortCode: 'x', hookArchetype: 'Bold claim', hookScore: 9, spokenHookVerbatim: 'stop', visualOpening: 'a fast zoom', views: 50000 }],
 })
 
 describe('InlineReelResults — niche report (Phase 2)', () => {

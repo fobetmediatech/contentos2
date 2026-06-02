@@ -91,6 +91,7 @@ export interface DeepReportExemplar {
   hookArchetype: string
   hookScore: number
   spokenHookVerbatim: string
+  visualOpening: string
   views: number
 }
 

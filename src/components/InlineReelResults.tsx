@@ -10,6 +10,7 @@ import type {
   DeepReelStatus,
 } from '../store/reelAnalysisStore'
 import type { DeepNicheReport } from '../ai/prompts/deepReelAnalysis'
+import { copyToClipboard, downloadMarkdown, formatDeepReportMarkdown } from '../shared/utils/export'
 
 const REEL_STEPS = ['Scraping reels', 'Analyzing hooks', 'Done']
 
@@ -443,6 +444,22 @@ function DeepReportCard({ report }: { report: DeepNicheReport }) {
         <ReportList title="Avoid" items={report.avoid} titleClass="text-danger" />
         <ReportList title="Test" items={report.test} titleClass="text-[#E07B3A]" />
         <ReportList title="Gaps / opportunities" items={report.gaps} titleClass="text-[#C4A882]" />
+      </div>
+
+      {/* Export — the client-ready deliverable. */}
+      <div className="flex gap-2 mt-5">
+        <button
+          onClick={() => void copyToClipboard(formatDeepReportMarkdown(report, report.comparison.map((c) => c.handle)))}
+          className="px-3 py-2 text-xs font-semibold rounded-lg bg-[#A78BFA]/15 text-[#C4B5FD] border border-[#A78BFA]/30 hover:bg-[#A78BFA]/25 transition-colors"
+        >
+          Copy report (markdown)
+        </button>
+        <button
+          onClick={() => downloadMarkdown(formatDeepReportMarkdown(report, report.comparison.map((c) => c.handle)), 'niche-report.md')}
+          className="px-3 py-2 text-xs font-semibold rounded-lg bg-[#2C2218] text-[#C4A882] border border-[rgba(245,237,214,0.12)] hover:border-[#E07B3A]/40 transition-colors"
+        >
+          Download .md
+        </button>
       </div>
     </div>
   )
