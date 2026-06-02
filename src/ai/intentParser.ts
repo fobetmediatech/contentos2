@@ -33,7 +33,10 @@ const ClarificationSchema = z.object({
 const IntentSchema = z.object({
   // Gemini may return null when no clarification is needed — treat as false.
   needsClarification: z.union([z.literal(false), z.null(), z.undefined()]).nullish(),
-  niche: z.string().min(1).max(100).transform((s) => s.trim()),
+  // niche is OPTIONAL: Gemini correctly omits it for handle-driven requests
+  // ("compare @a and @b", "break down @x's reels") where the handles ARE the target.
+  // The .refine() below enforces niche-OR-handles so a resolved intent is never empty.
+  niche: z.string().max(100).nullish().default('').transform((s) => (s ?? '').trim()),
   location: z.string().max(50).nullish().transform((s) => s?.trim() || undefined),
   // Gemini often returns null for an empty array — normalise to [].
   knownHandles: z
@@ -62,6 +65,13 @@ const IntentSchema = z.object({
     .enum(['high', 'medium'])
     .catch('high'),
 })
+  // A resolved intent must have SOMETHING to act on — a niche OR at least one handle.
+  // niche is optional (Gemini omits it for handle-driven requests), so without this a
+  // resolved-but-empty intent could slip through; the refine forces re-clarification.
+  .refine((d) => d.niche.length > 0 || d.knownHandles.length > 0, {
+    message: 'resolved intent needs a niche or at least one handle',
+    path: ['niche'],
+  })
 
 const ParsedIntentSchema = z.union([ClarificationSchema, IntentSchema])
 
