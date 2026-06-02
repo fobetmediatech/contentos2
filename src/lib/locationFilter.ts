@@ -2,7 +2,7 @@
  * Location filter for the discovery pipeline.
  *
  * After profile scraping, filters candidates to those with a detectable
- * city signal in their biography or business address.
+ * city signal in their biography or display name.
  *
  * Filter logic — differentiated by account type:
  *   Creator accounts (isBusinessAccount: false):
@@ -11,8 +11,8 @@
  *     3. No city signal in bio → pass (assumed local; found under city hashtags)
  *   Business accounts:
  *     1. Bio contains target city → pass
- *     2. businessAddress contains target city → pass
- *     3. Otherwise → fail (businesses always name their city if local)
+ *     2. Display name (fullName) contains target city → pass
+ *     3. Otherwise → fail (businesses reliably name their city if local)
  *
  * Relaxation rule (per design doc):
  *   If fewer than MIN_RESULTS candidates pass, the filter is relaxed and ALL
@@ -82,13 +82,6 @@ function textContainsCitySignal(text: string, cityTerms: string[]): boolean {
   return cityTerms.some((term) => lower.includes(term))
 }
 
-// ----- Raw profile extension for businessAddress -----
-// The Apify Profile Scraper may return businessAddress — not in NormalizedProfile
-// but accessible via the profile's biography field in practice.
-// We check it via a duck-typed extension here to avoid changing transformers.ts.
-
-type ProfileWithAddress = NormalizedProfile & { businessAddress?: string }
-
 // ----- Public API -----
 
 export interface FilterResult {
@@ -113,9 +106,7 @@ export function filterByLocation(
   const cityTerms = getCityTerms(city)
   const otherCityTerms = getAllOtherCityTerms(city)
 
-  const passed = profiles.filter((p) => {
-    const profile = p as ProfileWithAddress
-
+  const passed = profiles.filter((profile) => {
     // --- Creator accounts: pass unless bio names a different city ---
     if (!profile.isBusinessAccount) {
       if (textContainsCitySignal(profile.biography, cityTerms)) return true
@@ -123,9 +114,13 @@ export function filterByLocation(
       return true  // no city signal → assumed local (found under city-specific hashtags)
     }
 
-    // --- Business accounts: require explicit city confirmation ---
+    // --- Business accounts: confirm the city in bio or display name ---
+    // H8: the old businessAddress branch was dead — the scraper never populates that
+    // field. fullName is reliably populated and local businesses often carry the city
+    // in their name (e.g. "Mumbai Pizza Co"), so this recovers matches the dead branch
+    // never could, without guessing an Apify field.
     if (textContainsCitySignal(profile.biography, cityTerms)) return true
-    if (profile.businessAddress && textContainsCitySignal(profile.businessAddress, cityTerms)) return true
+    if (textContainsCitySignal(profile.fullName, cityTerms)) return true
     return false
   })
 

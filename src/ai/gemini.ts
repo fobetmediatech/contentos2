@@ -9,13 +9,26 @@
  *   empty candidates[]      → SAFETY block, surface as content policy error
  */
 
-import { buildCompetitorPrompt, buildDiscoveryPrompt, buildClarificationPrompt, buildFollowUpContext, buildConfirmReplyPrompt, type AnalysisOutput, type DiscoveryOutput, type ClarificationQuestion } from './prompts'
+import { buildCompetitorPrompt, buildDiscoveryPrompt, buildClarificationPrompt, buildContentPrompt, buildConfirmReplyPrompt, type AnalysisOutput, type DiscoveryOutput, type ClarificationQuestion, type ContentContext } from './prompts'
 import type { NormalizedProfile } from '../lib/transformers'
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta'
 // Model precedence: env override → default. Update default here when Google deprecates.
 // History: gemini-1.5-flash (retired) → gemini-2.0-flash (retired) → gemini-2.5-flash (current)
 const MODEL = import.meta.env.VITE_GEMINI_MODEL ?? 'gemini-2.5-flash'
+
+/**
+ * Shared request headers for every Gemini REST call.
+ *
+ * SECURITY: the API key is sent via the `x-goog-api-key` header, NOT the
+ * `?key=` query param. URLs leak into browser history, the devtools Network
+ * tab, disk cache, extension hooks, and proxy/referrer logs — and in a
+ * browser-only app the user's own key is the only secret. Headers don't leak
+ * that way. Gemini supports both; we use the header everywhere.
+ */
+export function geminiHeaders(apiKey: string): Record<string, string> {
+  return { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey }
+}
 
 // ----- Error class -----
 
@@ -111,7 +124,7 @@ async function _callGeminiWithRetry<T>(
     signal,
   } = options ?? {}
 
-  const url = `${GEMINI_BASE}/models/${MODEL}:generateContent?key=${apiKey}`
+  const url = `${GEMINI_BASE}/models/${MODEL}:generateContent`
 
   const generationConfig: Record<string, unknown> = {
     temperature,
@@ -126,7 +139,7 @@ async function _callGeminiWithRetry<T>(
 
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: geminiHeaders(apiKey),
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig,
@@ -143,7 +156,7 @@ async function _callGeminiWithRetry<T>(
     if (res.status === 429 || status === 'RESOURCE_EXHAUSTED') {
       if (attempt < 3) {
         const backoff = Math.pow(2, attempt) * 1000 // 1s, 2s, 4s
-        await sleep(backoff)
+        await abortableSleep(backoff, signal)
         return _callGeminiWithRetry<T>(apiKey, prompt, schema, options, attempt + 1)
       }
       throw new GeminiError('RATE_LIMITED', 'Gemini API rate limit exceeded after 3 retries.', false)
@@ -420,46 +433,39 @@ export async function generateClarificationQuestion(
   }
 }
 
-// ----- Follow-up prose response -----
+// ----- Content copilot response -----
 
 /**
- * Send a free-form follow-up message to Gemini after a pipeline completes.
+ * Conversational content-assistant turn. Powers the chat's "copilot" mode:
+ * answers content/strategy questions and GENERATES content (hooks, captions,
+ * scripts, ideas) as prose — no JSON schema. When research context is supplied
+ * (a completed competitor/discovery run or reel synthesis), the prompt grounds
+ * the answer in it so e.g. "write hooks" reuses the winning archetypes found.
  *
- * Unlike the analysis functions, this call:
- *   - Uses plain text MIME (not JSON mode) — response is conversational prose.
- *   - Does NOT use responseSchema — no structured output needed.
- *   - Is intentionally simple: the system context from buildFollowUpContext()
- *     frames the conversation and the user message is appended directly.
- *
- * @param geminiKey        Active Gemini API key.
- * @param summary          Short description of what the completed pipeline found.
- *                         Injected via buildFollowUpContext() as system context.
- * @param userMessage      The user's follow-up message (already sanitized by sendMessage).
- * @param signal           AbortController signal.
- * @param accountSummaries Optional list of accounts found by the pipeline.
- *                         When provided, Gemini can reference specific accounts in its response.
- * @returns                Gemini's prose response (1–3 sentences).
+ * @param geminiKey   Active Gemini API key.
+ * @param userMessage The user's message (already sanitized by sendMessage).
+ * @param context     Optional research grounding (summary, accounts, hook patterns).
+ * @param signal      AbortController signal.
+ * @returns           Gemini's prose response (markdown bold/lists allowed).
  */
-export async function callGeminiFollowUp(
+export async function callGeminiContent(
   geminiKey: string,
-  summary: string,
   userMessage: string,
+  context?: ContentContext,
   signal?: AbortSignal,
-  accountSummaries?: Array<{ username: string; followers: number; er: number }>,
 ): Promise<string> {
-  const systemContext = buildFollowUpContext(summary, accountSummaries)
-  const fullPrompt = `${systemContext}\n\nUser: ${userMessage}`
+  const fullPrompt = buildContentPrompt(userMessage, context)
 
-  const url = `${GEMINI_BASE}/models/${MODEL}:generateContent?key=${geminiKey}`
+  const url = `${GEMINI_BASE}/models/${MODEL}:generateContent`
 
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: geminiHeaders(geminiKey),
     body: JSON.stringify({
       contents: [{ parts: [{ text: fullPrompt }] }],
       generationConfig: {
-        temperature: 0.7,       // slightly higher for natural conversational tone
-        maxOutputTokens: 256,   // prose follow-up is always short
+        temperature: 0.7,       // natural, conversational copywriting tone
+        maxOutputTokens: 1024,  // content generation (hook lists, scripts) runs longer
       },
     }),
     signal,
@@ -570,6 +576,15 @@ export async function callGeminiConfirmReply(
 
 // ----- Utilities -----
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  // M8: a 429 backoff (up to 4s) must be interruptible — otherwise abort() during the
+  // wait still fires the retry into a dead signal. Reject on abort instead.
+  if (signal?.aborted) return Promise.reject(new GeminiError('UNKNOWN', 'Aborted during backoff', false))
+  return new Promise<void>((resolve, reject) => {
+    const t = setTimeout(resolve, ms)
+    signal?.addEventListener('abort', () => {
+      clearTimeout(t)
+      reject(new GeminiError('UNKNOWN', 'Aborted during backoff', false))
+    }, { once: true })
+  })
 }

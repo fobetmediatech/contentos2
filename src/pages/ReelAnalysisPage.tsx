@@ -1,29 +1,21 @@
 /**
- * ReelAnalysisPage — orchestrates per-creator reel scraping + AI analysis,
- * then synthesizes cross-creator niche insights.
+ * ReelAnalysisPage — standalone reel/hook analysis surface.
  *
  * URL: /reel-analysis?handles=handle1,handle2,...
- * Reads handles from query params, redirects to /discover/results if empty.
+ * Reads handles from the query string ONCE on mount; redirects to / if empty.
+ *
+ * Delegates ALL orchestration to useReelAnalysis — no duplicate pipeline or
+ * synthesis logic (was audit H3/H5). Shares the reel store with the inline
+ * ChatPage surface, so exactly one orchestrator ever runs.
  */
 
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import pLimit from 'p-limit'
 import { Info, ChevronDown, ChevronUp } from 'lucide-react'
 
-import { useReelAnalysisStore } from '../store/reelAnalysisStore'
-import { useKeysStore } from '../store/keysStore'
-import { scrapeTopReels, NoReelsError } from '../lib/reelScraper'
-import { analyzeReel, synthesizeNiche, buildPerCreatorSummary } from '../lib/reelAnalyzer'
+import { useReelAnalysis } from '../hooks/useReelAnalysis'
 import { ProgressSteps } from '../components/ProgressSteps'
 import type { CreatorAnalysisState, ReelData, ReelAnalysis, SynthesisOutput } from '../store/reelAnalysisStore'
-
-// p-limit(5): cap Gemini concurrency across all creators
-const geminiLimiter = pLimit(5)
-
-// ---------------------------------------------------------------------------
-// Reel steps for ProgressSteps
-// ---------------------------------------------------------------------------
 
 const REEL_STEPS = ['Scraping reels', 'Analyzing hooks', 'Done']
 
@@ -34,123 +26,26 @@ const REEL_STEPS = ['Scraping reels', 'Analyzing hooks', 'Done']
 export function ReelAnalysisPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const { startAnalysis, creatorStates, synthesisStatus, synthesis, synthesisError } = useReelAnalysis()
 
-  const {
-    creatorStates,
-    synthesisStatus,
-    synthesis,
-    synthesisError,
-    setCreatorState,
-    setSynthesis,
-    setSynthesisError,
-    setSynthesisStatus,
-    reset,
-  } = useReelAnalysisStore()
+  // Parse handles ONCE on mount (H7: previously parsed twice — in the effect and
+  // again at render, which could diverge).
+  const [handles] = useState<string[]>(() =>
+    (searchParams.get('handles') ?? '').split(',').map((h) => h.trim()).filter(Boolean),
+  )
+  const startedRef = useRef(false)
 
-  const { apifyKeys, geminiKey } = useKeysStore()
-
-  const analysisStarted = useRef(false)
-  const handlesRef = useRef<string[]>([])
-
-  // Mount: reset store, read handles, redirect if empty, kick off analysis
+  // Mount: redirect to chat if no handles, otherwise kick off the (single) pipeline.
   useEffect(() => {
-    reset()
-    const handlesParam = searchParams.get('handles') ?? ''
-    const handles = handlesParam.split(',').map(h => h.trim()).filter(Boolean)
-
     if (handles.length === 0) {
-      navigate('/discover/results', { replace: true })
+      navigate('/', { replace: true })
       return
     }
-
-    if (analysisStarted.current) return
-    analysisStarted.current = true
-    handlesRef.current = handles
-
-    runAnalysis(handles)
+    if (startedRef.current) return
+    startedRef.current = true
+    void startAnalysis(handles)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // empty deps — runs once on mount
-
-  // ---------------------------------------------------------------------------
-  // runAnalysis
-  // ---------------------------------------------------------------------------
-
-  async function runAnalysis(handles: string[]) {
-    // Initialize all creators as 'scraping'
-    handles.forEach(handle => {
-      setCreatorState(handle, { handle, status: 'scraping', reels: [], analyses: {} })
-    })
-
-    // Run all creator pipelines in parallel
-    // (Apify runs are serialized internally via reelScraper's own pLimit(1))
-    await Promise.allSettled(handles.map(handle => runCreatorPipeline(handle)))
-  }
-
-  async function runCreatorPipeline(handle: string) {
-    try {
-      // 1. Scrape top 10 reels
-      const reels = await scrapeTopReels(handle, 10, apifyKeys)
-      setCreatorState(handle, { reels, status: 'analyzing' })
-
-      // 2. Analyze each reel (geminiLimiter caps concurrency at 5)
-      const analysisEntries = await Promise.all(
-        reels.map(reel =>
-          geminiLimiter(async () => {
-            const analysis = await analyzeReel(reel, geminiKey)
-            return [reel.shortCode, analysis] as const
-          }),
-        ),
-      )
-
-      const analyses = Object.fromEntries(analysisEntries)
-      setCreatorState(handle, { analyses, status: 'done' })
-    } catch (err) {
-      if (err instanceof NoReelsError) {
-        setCreatorState(handle, { status: 'no-reels', error: (err as Error).message })
-      } else {
-        setCreatorState(handle, { status: 'failed', error: (err as Error).message })
-      }
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Synthesis trigger — fires once all creators reach a terminal state
-  // ---------------------------------------------------------------------------
-
-  useEffect(() => {
-    const states = Object.values(creatorStates)
-    if (states.length === 0) return
-
-    const TERMINAL = ['done', 'no-reels', 'failed'] as const
-    const allTerminal = states.every(s => TERMINAL.includes(s.status as (typeof TERMINAL)[number]))
-    if (!allTerminal) return
-    if (synthesisStatus !== 'idle') return // already ran
-
-    const doneSummaries = states
-      .filter(s => s.status === 'done')
-      .map(s => buildPerCreatorSummary(s.handle, s.analyses, s.reels))
-
-    if (doneSummaries.length === 0) {
-      setSynthesisError('All creators failed — no data to synthesize')
-      return
-    }
-
-    setSynthesisStatus('running')
-    synthesizeNiche(doneSummaries, geminiKey)
-      .then(output => setSynthesis(output))
-      .catch(err => setSynthesisError((err as Error).message))
-  }, [creatorStates, synthesisStatus]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ---------------------------------------------------------------------------
-  // Derive ordered handles (stable — from URL param parsed at mount)
-  // ---------------------------------------------------------------------------
-
-  const handlesParam = searchParams.get('handles') ?? ''
-  const handles = handlesParam.split(',').map(h => h.trim()).filter(Boolean)
-
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
+  }, [])
 
   return (
     <div className="pb-24">
@@ -168,7 +63,7 @@ export function ReelAnalysisPage() {
       )}
 
       {/* Per-creator sections */}
-      {handles.map(handle => {
+      {handles.map((handle) => {
         const state = creatorStates[handle]
         if (!state) return null
         return <CreatorSection key={handle} state={state} />
@@ -195,7 +90,7 @@ function SynthesisLoadingCard() {
 
 function SynthesisErrorCard({ error }: { error: string }) {
   return (
-    <div className="mb-6 px-5 py-4 bg-[#2C1818] border border-red-900/40 rounded-xl text-sm text-red-400">
+    <div className="mb-6 px-5 py-4 bg-[#2C1818] border border-danger/30 rounded-xl text-sm text-danger">
       Synthesis failed: {error}
     </div>
   )
@@ -264,13 +159,13 @@ function SynthesisCard({ synthesis }: { synthesis: SynthesisOutput }) {
           </ul>
         </div>
         <div>
-          <h3 className="text-xs font-semibold text-red-400 uppercase tracking-wide mb-2">
+          <h3 className="text-xs font-semibold text-danger uppercase tracking-wide mb-2">
             Avoid
           </h3>
           <ul className="space-y-2">
             {synthesis.avoidTips.map((tip, i) => (
               <li key={i} className="flex items-start gap-2 text-sm text-[#C4A882]">
-                <span className="text-red-500 mt-0.5">–</span>
+                <span className="text-danger mt-0.5">–</span>
                 {tip}
               </li>
             ))}
@@ -297,9 +192,8 @@ function CreatorSection({ state }: { state: CreatorAnalysisState }) {
 
   if (state.status === 'failed') {
     return (
-      <div className="mb-4 px-4 py-3 bg-[#2C1818] border border-red-900/40 rounded-xl text-sm text-red-400">
-        @{state.handle} — analysis failed: {state.error ?? 'Unknown error'}. Check if account is
-        public.
+      <div className="mb-4 px-4 py-3 bg-[#2C1818] border border-danger/30 rounded-xl text-sm text-danger">
+        @{state.handle} — {state.error ?? 'analysis failed'}
       </div>
     )
   }
@@ -367,6 +261,11 @@ function ReelCard({ reel, analysis }: { reel: ReelData; analysis?: ReelAnalysis 
       <div className="p-3">
         {/* Views */}
         <p className="text-xs text-[#7A6A54] font-mono">{formatViews(reel.videoViewCount)} views</p>
+
+        {/* Verbatim hook line (HookMap-style) */}
+        {analysis?.openingLine && (
+          <p className="text-xs text-[#F5EDD6] mt-1 leading-snug italic">"{analysis.openingLine}"</p>
+        )}
 
         {/* Hook archetype chip */}
         {analysis && (

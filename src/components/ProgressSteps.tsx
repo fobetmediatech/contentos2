@@ -43,7 +43,7 @@ export function ProgressSteps({ currentStep, steps }: ProgressStepsProps) {
               <div
                 className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${
                   isDone
-                    ? 'bg-green-900/40 text-green-400'
+                    ? 'bg-success/15 text-success'
                     : isActive
                     ? 'bg-[#E07B3A] text-[#1A1410]'
                     : 'bg-[#3D3025] text-[#7A6A54]'

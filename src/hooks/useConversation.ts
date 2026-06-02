@@ -19,10 +19,11 @@
  *   selecting DISCOVERY_REDIRECT_TO_COMPETITOR. This calls runCompetitorDiscovery()
  *   which re-scrapes seeds from hashtags — never passes an empty handles array.
  *
- * AbortController lifecycle (T20):
- *   A new controller is created for each sendMessage() call.
- *   The ref is stored so unmounting ChatPage can abort in-flight discovery.
- *   useEffect cleanup calls controller.abort() on unmount.
+ * AbortController lifecycle (M2):
+ *   Each in-flight request (parse, discovery, confirm-reply, content) gets its OWN
+ *   AbortController, tracked in a Set — requests no longer share one ref (which could
+ *   abort the wrong one). useEffect cleanup aborts the whole set on unmount; pending
+ *   timers are tracked the same way so a concurrent run can't clobber them (M1).
  *
  * Clarification loop guard (T21):
  *   After 1 needsClarification turn, we force progression to avoid an infinite loop.
@@ -32,18 +33,21 @@
 import { useRef, useState, useEffect } from 'react'
 import { useAnalysisStore } from '../store/analysisStore'
 import { useDiscoveryStore } from '../store/discoveryStore'
+import { useReelAnalysisStore } from '../store/reelAnalysisStore'
 import { useKeysStore } from '../store/keysStore'
 import { useCompetitorAnalysis } from './useCompetitorAnalysis'
 import { useLocationDiscovery } from './useLocationDiscovery'
+import { useReelAnalysis } from './useReelAnalysis'
 import { parseIntent } from '../ai/intentParser'
 import { generateHashtags } from '../lib/hashtagGenerator'
 import { scrapeHashtagUsernames } from '../lib/apifyClient'
-import { GeminiError, callGeminiFollowUp, callGeminiConfirmReply } from '../ai/gemini'
+import { GeminiError, callGeminiContent, callGeminiConfirmReply } from '../ai/gemini'
 import { ApifyError } from '../lib/apifyCore'
 import { PROCEED_LABEL, DISCOVERY_REDIRECT_TO_COMPETITOR, GEMINI_KEY_MISSING_MSG } from '../lib/constants'
 import { PIPELINE_REGISTRY } from '../tools/registry'
 import type { ParsedIntent } from '../ai/intentParser'
 import type { ResolvedIntent } from '../tools/types'
+import type { ContentContext } from '../ai/prompts'
 
 const DISCOVERY_TIMEOUT_MS = 90_000
 const DISCOVERY_SOFT_NUDGE_MS = 60_000
@@ -132,6 +136,10 @@ export function useConversation() {
   const { geminiKey, pickKey } = useKeysStore()
   const { analyze } = useCompetitorAnalysis()
   const { discover } = useLocationDiscovery()
+  // Reel analysis is triggerable from here (NL-routed) the same way analyze()/discover()
+  // are. Safe to mount alongside ChatPage's instance — synthesis is explicit, not an
+  // effect, so it never double-fires (see useReelAnalysis).
+  const { startAnalysis: startReelAnalysis } = useReelAnalysis()
 
   // T21: clarification turn counter — resets each mount, never stored in Zustand
   const [clarificationTurns, setClarificationTurns] = useState(0)
@@ -140,6 +148,9 @@ export function useConversation() {
   // confirming-state message. Exposed to ChatPage so it can show a TypingIndicator
   // and disable the option buttons to prevent a button+type race condition.
   const [isConfirmingPending, setIsConfirmingPending] = useState(false)
+  // True while the content copilot is generating a reply — drives a typing indicator
+  // and disables send (so a second content turn can't fire mid-generation).
+  const [isAnswering, setIsAnswering] = useState(false)
   // Ref mirror of isConfirmingPending — used inside confirmSeeds() to guard
   // against button clicks that arrive during the 200ms window before React
   // re-renders the disabled state. A ref is read synchronously; state is not.
@@ -151,28 +162,53 @@ export function useConversation() {
   const [confirmErrorCount, setConfirmErrorCount] = useState(0)
   const confirmErrorCountRef = useRef(0)
 
-  // T20: AbortController ref for discovery — cleaned up on unmount
-  const discoveryAbortRef = useRef<AbortController | null>(null)
-
-  // Soft-nudge timer ref — cleared on abort or completion
-  const nudgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // Hard-abort timeout ref — stored as ref so unmount cleanup can clear it.
-  // A bare local variable inside runCompetitorDiscovery is unreachable from the
-  // useEffect cleanup; storing it here guarantees it is always cancelled on unmount
-  // even if the async function is mid-flight.
-  const discoveryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // M2: every in-flight request gets its OWN AbortController, tracked here. The old
+  // single discoveryAbortRef multiplexed parse / discovery / confirm-reply / follow-up
+  // through one slot, so a new request (or unmount) could abort a DIFFERENT request than
+  // intended. We isolate per request and abort the whole set on unmount.
+  const activeControllers = useRef<Set<AbortController>>(new Set())
+  // M1: pending timers, tracked so each invocation clears its OWN. The old shared
+  // nudge/hard-abort refs let a second runCompetitorDiscovery overwrite the first's
+  // timers — the first's finally then cleared the SECOND's, cancelling its 90s timeout.
+  const activeTimers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set())
 
   // D6: single-flight guard — prevents Enter + button click firing sendMessage
   // twice in the same render frame before status transitions to 'discovering'.
   const isSendingRef = useRef(false)
 
-  // T20: cleanup on unmount
+  // Create + track an AbortController; release (untrack) it when the op settles.
+  const trackController = (): AbortController => {
+    const c = new AbortController()
+    activeControllers.current.add(c)
+    return c
+  }
+  const releaseController = (c: AbortController): void => {
+    activeControllers.current.delete(c)
+  }
+  // setTimeout that auto-untracks when it fires; clearTracked() cancels + untracks early.
+  const trackTimeout = (fn: () => void, ms: number): ReturnType<typeof setTimeout> => {
+    const t = setTimeout(() => {
+      activeTimers.current.delete(t)
+      fn()
+    }, ms)
+    activeTimers.current.add(t)
+    return t
+  }
+  const clearTracked = (t: ReturnType<typeof setTimeout> | null): void => {
+    if (t === null) return
+    clearTimeout(t)
+    activeTimers.current.delete(t)
+  }
+
+  // Cleanup on unmount: abort every in-flight request and clear every pending timer.
   useEffect(() => {
+    const controllers = activeControllers.current
+    const timers = activeTimers.current
     return () => {
-      discoveryAbortRef.current?.abort()
-      if (nudgeTimerRef.current) clearTimeout(nudgeTimerRef.current)
-      if (discoveryTimeoutRef.current) clearTimeout(discoveryTimeoutRef.current)
+      controllers.forEach((c) => c.abort())
+      controllers.clear()
+      timers.forEach((t) => clearTimeout(t))
+      timers.clear()
     }
   }, [])
 
@@ -190,20 +226,16 @@ export function useConversation() {
     geminiKey: string,
     apifyKey: string,
   ) => {
-    const discoveryController = new AbortController()
-    // Overwrites the parseController stored by sendMessage() — safe because
-    // runCompetitorDiscovery() is always called after parseIntent() has resolved.
-    discoveryAbortRef.current = discoveryController
-    // Store in ref so the useEffect cleanup (and re-runs) can cancel it on unmount.
-    discoveryTimeoutRef.current = setTimeout(() => discoveryController.abort(), DISCOVERY_TIMEOUT_MS)
-
-    // T9: soft nudge at 60s
-    nudgeTimerRef.current = setTimeout(() => {
+    // M2: own controller (tracked for unmount-abort, not a shared ref).
+    const discoveryController = trackController()
+    // M1: timers are LOCAL to this invocation — a concurrent run can't overwrite them,
+    // and the finally clears exactly these two (the set also clears them on unmount).
+    const hardTimeout = trackTimeout(() => discoveryController.abort(), DISCOVERY_TIMEOUT_MS)
+    const nudgeTimer = trackTimeout(() => {
       if (store.status === 'discovering') {
         store.addMessage({
           role: 'assistant',
           content: "Still searching — this is taking a bit longer than usual. Hang tight…",
-          timestamp: Date.now(),
           type: 'text',
         })
       }
@@ -223,7 +255,6 @@ export function useConversation() {
         store.addMessage({
           role: 'assistant',
           content: `Couldn't find accounts automatically for "${niche}"${location ? ` in ${location}` : ''}. Do you know any handles in this niche I can start from?`,
-          timestamp: Date.now(),
           type: 'text',
         })
         store.setStatus('chatting')
@@ -239,7 +270,6 @@ export function useConversation() {
       store.addMessage({
         role: 'assistant',
         content: `Found **${seeds.length} ${niche} accounts** via hashtag search: ${seeds.slice(0, 4).map(s => '@' + s).join(', ')}${seeds.length > 4 ? ` + ${seeds.length - 4} more` : ''}. Which direction should I focus on?`,
-        timestamp: Date.now(),
         type: 'options',
         options: [
           PROCEED_LABEL,
@@ -251,7 +281,11 @@ export function useConversation() {
 
     } catch (err) {
       let message = 'Search timed out — try again.'
-      if (err instanceof ApifyError) {
+      if (err instanceof GeminiError && err.code === 'AUTH_ERROR') {
+        // H10: hashtag generation now throws on a bad Gemini key instead of silently
+        // falling back to template hashtags — surface it so the user fixes the key.
+        message = 'Gemini API key is invalid or missing. Add it in Settings.'
+      } else if (err instanceof ApifyError) {
         // Don't forward err.message — it may contain internal URLs or key fragments.
         message = 'Scraping error — try again or check your Apify key.'
       } else if (err instanceof TypeError && String(err.message).includes('fetch')) {
@@ -260,12 +294,13 @@ export function useConversation() {
         message = 'Search timed out after 90 seconds. Try again.'
       }
 
-      store.addMessage({ role: 'assistant', content: message, timestamp: Date.now(), type: 'error' })
+      store.addMessage({ role: 'assistant', content: message, type: 'error' })
       store.setStatus('chatting')
     } finally {
-      // Always clear both timers — whether the discovery succeeded, failed, or was aborted.
-      if (discoveryTimeoutRef.current) clearTimeout(discoveryTimeoutRef.current)
-      if (nudgeTimerRef.current) clearTimeout(nudgeTimerRef.current)
+      // Clear exactly THIS invocation's timers + release its controller (M1/M2).
+      clearTracked(hardTimeout)
+      clearTracked(nudgeTimer)
+      releaseController(discoveryController)
     }
   }
 
@@ -320,8 +355,69 @@ export function useConversation() {
   }
 
   /**
+   * Assemble research grounding for the content copilot from whatever the user
+   * has run this session (competitor/discovery results + reel synthesis).
+   */
+  const buildContentContext = (): ContentContext | undefined => {
+    const ctx: ContentContext = {}
+
+    if (
+      (store.status === 'done' && store.competitors.length > 0) ||
+      (discoveryStore.status === 'done' && discoveryStore.results.length > 0)
+    ) {
+      ctx.researchSummary = buildPipelineSummary()
+      ctx.accounts = buildFollowUpAccountSummaries()
+    }
+
+    // Reel synthesis (read fresh — the reel store is separate from this hook).
+    const reel = useReelAnalysisStore.getState()
+    if (reel.synthesisStatus === 'done' && reel.synthesis) {
+      ctx.hookPatterns = reel.synthesis.topPatterns.map((p) => ({ archetype: p.archetype, count: p.count }))
+      ctx.replicateTips = reel.synthesis.replicateTips
+      if (!ctx.researchSummary) {
+        const who = reel.activeHandles.map((h) => '@' + h).join(', ')
+        ctx.researchSummary = `Reel hook analysis just completed for ${who}.`
+      }
+    }
+
+    return Object.keys(ctx).length > 0 ? ctx : undefined
+  }
+
+  /**
+   * Content copilot turn — answer or generate content conversationally, grounded
+   * in the session's research context. No scraping. Used for both the 'content'
+   * intent (idle chat) and follow-up messages after a pipeline completes.
+   */
+  const answerContent = async (userMessage: string) => {
+    if (!geminiKey?.trim()) {
+      store.addMessage({ role: 'assistant', content: GEMINI_KEY_MISSING_MSG, type: 'error' })
+      return
+    }
+    // M2: own tracked controller. sendMessage's single-flight (isSendingRef) already
+    // prevents a second content turn from overlapping this one, so there's no prior
+    // call to abort — the set handles unmount.
+    const controller = trackController()
+    setIsAnswering(true)
+    try {
+      const reply = await callGeminiContent(geminiKey, userMessage, buildContentContext(), controller.signal)
+      store.addMessage({ role: 'assistant', content: reply, type: 'text' })
+    } catch (err) {
+      if (controller.signal.aborted) return
+      let content = 'Something went wrong — try again.'
+      if (err instanceof GeminiError) {
+        if (err.code === 'AUTH_ERROR') content = 'Gemini API key is invalid or missing. Go to Settings to update it.'
+        else if (err.code === 'RATE_LIMITED') content = 'Gemini rate limit hit — wait a few seconds and try again.'
+      }
+      store.addMessage({ role: 'assistant', content, type: 'error' })
+    } finally {
+      releaseController(controller)
+      setIsAnswering(false)
+    }
+  }
+
+  /**
    * Handle a user message in the chat input.
-   * When a pipeline is done, routes to follow-up instead of re-running parseIntent.
+   * When a pipeline is done, routes to the content copilot instead of re-running parseIntent.
    */
   const sendMessage = async (text: string) => {
     // ── Confirming path: user typed text while waiting to pick a direction ────
@@ -334,13 +430,12 @@ export function useConversation() {
       isConfirmingPendingRef.current = true
       try {
         const safeText = text.replace(/[\n\r]/g, ' ').trim().slice(0, 500)
-        store.addMessage({ role: 'user', content: safeText, timestamp: Date.now(), type: 'text' })
+        store.addMessage({ role: 'user', content: safeText, type: 'text' })
 
         if (!geminiKey?.trim()) {
           store.addMessage({
             role: 'assistant',
             content: GEMINI_KEY_MISSING_MSG,
-            timestamp: Date.now(),
             type: 'error',
           })
           return
@@ -357,7 +452,6 @@ export function useConversation() {
           store.addMessage({
             role: 'assistant',
             content: 'Switching pipelines…',
-            timestamp: Date.now(),
             type: 'text',
           })
           // CRITICAL: clear guards BEFORE recursive call or the inner sendMessage
@@ -377,7 +471,6 @@ export function useConversation() {
           store.addMessage({
             role: 'assistant',
             content: 'Something went wrong with your request — please try again.',
-            timestamp: Date.now(),
             type: 'error',
           })
           store.setStatus('chatting')
@@ -393,26 +486,29 @@ export function useConversation() {
           store.addMessage({
             role: 'assistant',
             content: `Got it — running with "${heuristicMatch}"…`,
-            timestamp: Date.now(),
             type: 'text',
           })
           confirmSeeds(heuristicMatch)
           return
         }
 
-        // 3. Gemini fallback — maps free text to the closest option string
-        const confirmController = new AbortController()
-        discoveryAbortRef.current = confirmController  // allow abort on navigate/unmount (AE4)
-        const mappedOption = await callGeminiConfirmReply(
-          geminiKey,
-          safeText,
-          availableOptions,
-          confirmController.signal,
-        )
+        // 3. Gemini fallback — maps free text to the closest option string.
+        // M2: own tracked controller, released once the call settles.
+        const confirmController = trackController()
+        let mappedOption: string
+        try {
+          mappedOption = await callGeminiConfirmReply(
+            geminiKey,
+            safeText,
+            availableOptions,
+            confirmController.signal,
+          )
+        } finally {
+          releaseController(confirmController)
+        }
         store.addMessage({
           role: 'assistant',
           content: `Got it — running with "${mappedOption}"…`,
-          timestamp: Date.now(),
           type: 'text',
         })
         // AD5: successful resolution — reset the error counter
@@ -431,7 +527,6 @@ export function useConversation() {
         store.addMessage({
           role: 'assistant',
           content,
-          timestamp: Date.now(),
           type: newCount >= 2 ? 'error' : 'text',
         })
         // Stay in confirming so the user can still click a button
@@ -452,37 +547,9 @@ export function useConversation() {
       isSendingRef.current = true
       try {
         const safeText = text.replace(/[\n\r]/g, ' ').trim().slice(0, 500)
-        store.addMessage({ role: 'user', content: safeText, timestamp: Date.now(), type: 'text' })
-
-        if (!geminiKey?.trim()) {
-          store.addMessage({
-            role: 'assistant',
-            content: GEMINI_KEY_MISSING_MSG,
-            timestamp: Date.now(),
-            type: 'error',
-          })
-          return
-        }
-
-        // Abort any in-flight follow-up before starting a new one — otherwise the
-        // old request becomes a zombie and calls store.addMessage with stale data.
-        discoveryAbortRef.current?.abort()
-        const followUpController = new AbortController()
-        discoveryAbortRef.current = followUpController
-
-        try {
-          const summary = buildPipelineSummary()
-          const accountSummaries = buildFollowUpAccountSummaries()
-          const reply = await callGeminiFollowUp(geminiKey, summary, safeText, followUpController.signal, accountSummaries)
-          store.addMessage({ role: 'assistant', content: reply, timestamp: Date.now(), type: 'text' })
-        } catch (err) {
-          let content = 'Something went wrong — try again.'
-          if (err instanceof GeminiError) {
-            if (err.code === 'AUTH_ERROR') content = 'Gemini API key is invalid or missing. Go to Settings to update it.'
-            else if (err.code === 'RATE_LIMITED') content = 'Gemini rate limit hit — wait a few seconds and try again.'
-          }
-          store.addMessage({ role: 'assistant', content, timestamp: Date.now(), type: 'error' })
-        }
+        store.addMessage({ role: 'user', content: safeText, type: 'text' })
+        // Pipeline done → every message is a content-copilot turn, grounded in results.
+        await answerContent(safeText)
       } finally {
         isSendingRef.current = false
       }
@@ -499,14 +566,13 @@ export function useConversation() {
       const safeText = text.replace(/[\n\r]/g, ' ').trim().slice(0, 500)
 
       // Append user message to conversation
-      store.addMessage({ role: 'user', content: safeText, timestamp: Date.now(), type: 'text' })
+      store.addMessage({ role: 'user', content: safeText, type: 'text' })
 
       const apifyKey = pickKey()
       if (!apifyKey) {
         store.addMessage({
           role: 'assistant',
           content: 'No Apify keys available. Add one in Settings.',
-          timestamp: Date.now(),
           type: 'error',
         })
         return
@@ -516,20 +582,82 @@ export function useConversation() {
         store.addMessage({
           role: 'assistant',
           content: 'Gemini API key missing. Add it in Settings.',
-          timestamp: Date.now(),
           type: 'error',
         })
         return
       }
 
+      // Step 0: handles-only fast path — detect bare comma/space-separated usernames
+      // WITHOUT @ signs and bypass Gemini entirely.
+      //
+      // Gemini can't infer a niche from raw usernames alone (no context), so it
+      // returns needsClarification:true. If clarificationTurns is already 1, the
+      // user hits the fallback and gets stuck. This pre-check breaks that loop.
+      //
+      // Only fires when:
+      //   - No @ signs (messages with @ go through the existing Gemini path which handles them well)
+      //   - All tokens match Instagram handle format
+      //   - No common English words (rules out prose sentences)
+      //   - Has commas OR at least one token has dots/underscores/digits (confirms list intent)
+      const HANDLE_TOKEN_RE = /^[a-zA-Z0-9._]{3,30}$/
+      const COMMON_WORDS = new Set([
+        'the', 'and', 'for', 'are', 'you', 'can', 'this', 'that', 'from', 'not',
+        'with', 'find', 'show', 'want', 'like', 'more', 'some', 'any', 'all',
+        'get', 'has', 'its', 'was', 'how', 'who', 'what', 'when', 'help',
+        'similar', 'analyze', 'search', 'look', 'creators', 'accounts', 'brands',
+        'influencers', 'bloggers', 'niche', 'best', 'top', 'good', 'great',
+      ])
+      if (!safeText.includes('@')) {
+        const rawTokens = safeText.split(/[\s,]+/).map(t => t.trim()).filter(Boolean)
+        const isHandlesOnly =
+          rawTokens.length >= 1 &&
+          rawTokens.length <= 5 &&
+          rawTokens.every(t => HANDLE_TOKEN_RE.test(t)) &&
+          !rawTokens.some(t => COMMON_WORDS.has(t.toLowerCase())) &&
+          // Confirm list intent: commas present OR a token has handle-special chars
+          (safeText.includes(',') || rawTokens.some(t => /[._\d]/.test(t)))
+
+        if (isHandlesOnly) {
+          // Deduplicate case-insensitively before storing
+          const seen = new Set<string>()
+          const directHandles = rawTokens
+            .map(h => h.toLowerCase())
+            .filter(h => !seen.has(h) && seen.add(h))
+          // Synthesize a competitor intent — this fast path bypasses parseIntent
+          // (which normally sets parsedIntent), so without this confirmSeeds() hits
+          // its null guard and the user dead-ends on "Session expired".
+          store.setParsedIntent({
+            needsClarification: false,
+            niche: '',
+            location: undefined,
+            knownHandles: directHandles,
+            depth: 'standard',
+            clientName: undefined,
+            pipelineType: 'competitor',
+            routingConfidence: 'high',
+          } as ParsedIntent)
+          store.setDiscoveredSeeds(directHandles)
+          store.setStatus('confirming')
+          store.addMessage({
+            role: 'assistant',
+            content: `Got **${directHandles.length} reference account${directHandles.length > 1 ? 's' : ''}**: ${directHandles.map(h => '@' + h).join(', ')}. Which direction should I focus on?`,
+            type: 'options',
+            options: [
+              PROCEED_LABEL,
+              'Micro-influencers (under 100K followers)',
+              'Macro creators (100K+ followers)',
+              'Include businesses and brands',
+            ],
+          })
+          return
+        }
+      }
+
       // Step 1: parse intent
       store.setStatus('discovering')  // show typing indicator immediately
 
-      // Sequential guarantee: parseIntent() is fully awaited before
-      // runCompetitorDiscovery() runs and overwrites this ref with its own
-      // discoveryController — the parse phase is always complete by then.
-      const parseController = new AbortController()
-      discoveryAbortRef.current = parseController
+      // M2: own tracked controller for the parse phase, released when it settles.
+      const parseController = trackController()
 
       let intent: ParsedIntent
       try {
@@ -551,11 +679,12 @@ export function useConversation() {
         store.addMessage({
           role: 'assistant',
           content: errorContent,
-          timestamp: Date.now(),
           type: 'error',
         })
         store.setStatus('chatting')
         return
+      } finally {
+        releaseController(parseController)
       }
 
       // Handle needsClarification (T21: max 1 turn)
@@ -565,17 +694,17 @@ export function useConversation() {
           store.addMessage({
             role: 'assistant',
             content: intent.question,
-            timestamp: Date.now(),
             type: 'text',
           })
           store.setStatus('chatting')
           return
         }
-        // Second ambiguous response — force a handle-based fallback
+        // Second ambiguous response — force a handle-based fallback.
+        // Reset clarificationTurns so the user can try again after providing handles.
+        setClarificationTurns(0)
         store.addMessage({
           role: 'assistant',
           content: "Having trouble understanding. Name a handle you want to analyze, and I'll find similar accounts.",
-          timestamp: Date.now(),
           type: 'text',
         })
         store.setStatus('chatting')
@@ -590,40 +719,18 @@ export function useConversation() {
       const location = 'location' in intent ? (intent.location ?? '') : ''
       const pipelineType = 'pipelineType' in intent ? (intent.pipelineType ?? 'competitor') : 'competitor'
 
-      const descriptor = PIPELINE_REGISTRY[pipelineType]
-
-      if (descriptor && pipelineType !== 'competitor') {
-        // Non-competitor pipelines: show confirm message from registry, require a location if missing
-        if (pipelineType === 'discovery' && !location) {
-          store.addMessage({
-            role: 'assistant',
-            content: `I can find **${niche}** creators in a specific city. Which city should I search in?`,
-            timestamp: Date.now(),
-            type: 'text',
-          })
-          store.setStatus('chatting')
-          return
-        }
-
-        // Confirm before firing the pipeline
-        store.setStatus('confirming')
-        store.addMessage({
-          role: 'assistant',
-          content: descriptor.confirmMessage(intent),
-          timestamp: Date.now(),
-          type: 'options',
-          options: descriptor.confirmOptions(intent),
-        })
+      // ── Content copilot ────────────────────────────────────────────────────
+      // Conversational help / generation — no scraping, no confirm step.
+      if (pipelineType === 'content') {
+        await answerContent(safeText)
         return
       }
 
-      // Competitor pipeline (default)
-      // If the user already provided reference handles, skip hashtag discovery entirely —
-      // go straight to confirming with their handles as seeds.
-      //
-      // Gemini extraction via responseSchema is unreliable when thinkingBudget=0.
-      // Extract @handles client-side as a guaranteed fallback — regex is deterministic
-      // and doesn't depend on model reasoning capability.
+      const descriptor = PIPELINE_REGISTRY[pipelineType]
+
+      // Reference handles — used by both the reel and competitor paths. Prefer
+      // Gemini's knownHandles; fall back to a deterministic @handle regex (Gemini
+      // extraction is unreliable with thinkingBudget=0).
       const geminiHandles = ('knownHandles' in intent ? (intent.knownHandles ?? []) : [])
         .filter((h): h is string => typeof h === 'string' && /^[a-zA-Z0-9._]{1,30}$/.test(h))
       const clientHandles = [...safeText.matchAll(/@([a-zA-Z0-9._]+)/g)]
@@ -632,13 +739,62 @@ export function useConversation() {
         .filter((h, i, arr) => arr.indexOf(h) === i) // dedup
         .slice(0, 5)
       const knownHandles = geminiHandles.length > 0 ? geminiHandles : clientHandles
+
+      // ── Reel / hook analysis ───────────────────────────────────────────────
+      // Needs specific creators to study. If none were named, ask for handles.
+      if (pipelineType === 'reel') {
+        if (knownHandles.length === 0) {
+          store.addMessage({
+            role: 'assistant',
+            content: "Which creators' reels should I break down? Share their @handles (e.g. @username, @username2).",
+            type: 'text',
+          })
+          store.setStatus('chatting')
+          return
+        }
+        store.setDiscoveredSeeds(knownHandles)
+        store.setStatus('confirming')
+        const shown = knownHandles.slice(0, 4).map(h => '@' + h).join(', ')
+        store.addMessage({
+          role: 'assistant',
+          content: `Break down the hook patterns in recent reels for ${shown}${knownHandles.length > 4 ? ` + ${knownHandles.length - 4} more` : ''}? I'll analyze the top ~10 reels each — about 2–3 min per creator.`,
+          type: 'options',
+          options: descriptor.confirmOptions(intent),
+        })
+        return
+      }
+
+      // ── Location discovery ─────────────────────────────────────────────────
+      if (descriptor && pipelineType === 'discovery') {
+        // Require a city before firing the geographic pipeline.
+        if (!location) {
+          store.addMessage({
+            role: 'assistant',
+            content: `I can find **${niche}** creators in a specific city. Which city should I search in?`,
+            type: 'text',
+          })
+          store.setStatus('chatting')
+          return
+        }
+        store.setStatus('confirming')
+        store.addMessage({
+          role: 'assistant',
+          content: descriptor.confirmMessage(intent),
+          type: 'options',
+          options: descriptor.confirmOptions(intent),
+        })
+        return
+      }
+
+      // ── Competitor pipeline (default) ──────────────────────────────────────
+      // If the user already named reference handles, skip hashtag discovery and
+      // go straight to confirming with their handles as seeds.
       if (knownHandles.length > 0) {
         store.setDiscoveredSeeds(knownHandles)
         store.setStatus('confirming')
         store.addMessage({
           role: 'assistant',
           content: `Got **${knownHandles.length} reference account${knownHandles.length > 1 ? 's' : ''}**: ${knownHandles.slice(0, 4).map(h => '@' + h).join(', ')}${knownHandles.length > 4 ? ` + ${knownHandles.length - 4} more` : ''}. Which direction should I focus on?`,
-          timestamp: Date.now(),
           type: 'options',
           options: [
             PROCEED_LABEL,
@@ -683,7 +839,6 @@ export function useConversation() {
       store.addMessage({
         role: 'assistant',
         content: 'Session expired. Start a new conversation to try again.',
-        timestamp: Date.now(),
         type: 'text',
       })
       store.setStatus('chatting')
@@ -695,6 +850,30 @@ export function useConversation() {
     const location = 'location' in intent ? (intent.location ?? '') : ''
     const pipelineType = 'pipelineType' in intent ? (intent.pipelineType ?? 'competitor') : 'competitor'
 
+    // ── Reel / hook analysis confirmation ───────────────────────────────────
+    if (pipelineType === 'reel') {
+      if (discoveredSeeds.length === 0) {
+        store.addMessage({
+          role: 'assistant',
+          content: 'Session expired — tell me which creators to analyze to start over.',
+          type: 'text',
+        })
+        store.setStatus('chatting')
+        return
+      }
+      const shown = discoveredSeeds.slice(0, 4).map(h => '@' + h).join(', ')
+      store.addMessage({
+        role: 'assistant',
+        content: `On it — breaking down reels for ${shown}${discoveredSeeds.length > 4 ? ` + ${discoveredSeeds.length - 4} more` : ''}…`,
+        type: 'text',
+      })
+      // Reel results render inline via the reel store (activeHandles). Return chat
+      // to idle so the input stays usable; the run owns its own AbortController.
+      store.setStatus('chatting')
+      void startReelAnalysis(discoveredSeeds)
+      return
+    }
+
     // ── Discovery pipeline confirmation ─────────────────────────────────────
     if (pipelineType === 'discovery') {
       if (selectedOption === DISCOVERY_REDIRECT_TO_COMPETITOR) {
@@ -704,7 +883,6 @@ export function useConversation() {
           store.addMessage({
             role: 'assistant',
             content: 'API keys missing. Check Settings and try again.',
-            timestamp: Date.now(),
             type: 'error',
           })
           store.setStatus('chatting')
@@ -754,5 +932,5 @@ export function useConversation() {
     confirmSeeds(option)
   }
 
-  return { sendMessage, confirmSeeds: confirmSeedsWithReset, isConfirmingPending, isConfirmingLocked }
+  return { sendMessage, confirmSeeds: confirmSeedsWithReset, isConfirmingPending, isConfirmingLocked, isAnswering }
 }

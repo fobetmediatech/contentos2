@@ -74,7 +74,7 @@ describe('fetchIntent — responseSchema in request body', () => {
     expect(schema.required).toContain('needsClarification')
     expect(schema.properties).toHaveProperty('niche')
     expect(schema.properties).toHaveProperty('pipelineType')
-    expect(schema.properties.pipelineType.enum).toEqual(['competitor', 'discovery'])
+    expect(schema.properties.pipelineType.enum).toEqual(['competitor', 'discovery', 'reel', 'content'])
   })
 })
 

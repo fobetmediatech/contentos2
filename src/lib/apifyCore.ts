@@ -67,7 +67,9 @@ export async function startRun(
   signal?: AbortSignal,
 ): Promise<{ runId: string; datasetId: string }> {
   const url = `${BASE_URL}/acts/${actorId}/runs`
-  console.debug('[apify] POST', url, input)
+  // SECURITY (C3): never log the full request payload (scraped handles / target URLs)
+  // in production — these logs live on the end-user's machine and in error captures.
+  if (import.meta.env.DEV) console.debug('[apify] POST', url)
 
   const res = await fetch(url, {
     method: 'POST',
@@ -82,11 +84,15 @@ export async function startRun(
 
   if (!res.ok) {
     const body = await res.text()
+    // SECURITY (C2): the raw Apify body can echo the request (actor IDs, the
+    // handles/URLs we sent) and other internals. Keep it in the DEV console only —
+    // never in the thrown message, which is surfaced to the chat UI.
+    if (import.meta.env.DEV) console.error('[apify] startRun failed', res.status, body)
     if (res.status === 429) {
       markKeyCooldown(apiKey)
       throw new ApifyError('RATE_LIMITED', `Apify key rate limited. Marked for cooldown.`, res.status)
     }
-    throw new ApifyError('RUN_START_FAILED', `Failed to start actor run: ${res.status} ${body}`, res.status)
+    throw new ApifyError('RUN_START_FAILED', `Failed to start actor run (${res.status})`, res.status)
   }
 
   const json = (await res.json()) as ApifyRunResponse
@@ -103,22 +109,32 @@ export async function pollRun(
   maxPollMs?: number,
 ): Promise<string> {
   const deadline = Date.now() + (maxPollMs ?? MAX_POLL_MS)
-  let datasetId = ''
 
   while (Date.now() < deadline) {
     if (signal?.aborted) throw new ApifyError('ABORTED', 'Request aborted', 0)
 
-    const res = await fetch(`${BASE_URL}/actor-runs/${runId}`, {
-      credentials: 'omit',
-      headers: { Authorization: `Bearer ${apiKey}` },
-      signal,
-    })
+    let res: Response
+    try {
+      res = await fetch(`${BASE_URL}/actor-runs/${runId}`, {
+        credentials: 'omit',
+        headers: { Authorization: `Bearer ${apiKey}` },
+        signal,
+      })
+    } catch (err) {
+      // M3: an abort during the in-flight poll rejects with a DOMException(AbortError),
+      // not an ApifyError — translate it so callers' `instanceof ApifyError` checks hold
+      // and a timeout surfaces as the right message instead of "unexpected error".
+      if (signal?.aborted || (err as { name?: string })?.name === 'AbortError') {
+        throw new ApifyError('ABORTED', 'Request aborted', 0)
+      }
+      throw err
+    }
 
     if (!res.ok) throw new ApifyError('POLL_FAILED', `Poll failed: ${res.status}`, res.status)
 
     const json = (await res.json()) as ApifyRunResponse
     const { status } = json.data
-    datasetId = json.data.defaultDatasetId
+    const datasetId = json.data.defaultDatasetId
 
     if (status === 'SUCCEEDED') return datasetId
     if (status === 'FAILED') throw new ApifyError('RUN_FAILED', 'Actor run failed', 0)

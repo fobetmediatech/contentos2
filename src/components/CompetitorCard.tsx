@@ -1,4 +1,4 @@
-import { BadgeCheck } from 'lucide-react'
+import { BadgeCheck, CheckSquare, Square } from 'lucide-react'
 import type { CompetitorAnalysisResult } from '../ai/prompts'
 import type { NormalizedProfile } from '../lib/transformers'
 import { COMPETITOR_CATEGORIES } from '../shared/utils/categories'
@@ -7,6 +7,8 @@ interface CompetitorCardProps {
   competitor: CompetitorAnalysisResult
   profile: NormalizedProfile | undefined
   cohortAvgER: number
+  isSelected?: boolean
+  onSelect?: (handle: string) => void
 }
 
 function formatFollowers(n: number): string {
@@ -15,7 +17,7 @@ function formatFollowers(n: number): string {
   return String(n)
 }
 
-export function CompetitorCard({ competitor, profile, cohortAvgER }: CompetitorCardProps) {
+export function CompetitorCard({ competitor, profile, cohortAvgER, isSelected, onSelect }: CompetitorCardProps) {
   const category = COMPETITOR_CATEGORIES[competitor.category]
   const er = profile?.engagementRate ?? null
   const erAboveAvg = er !== null && er >= cohortAvgER
@@ -27,7 +29,25 @@ export function CompetitorCard({ competitor, profile, cohortAvgER }: CompetitorC
     .toUpperCase()
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-4 relative hover:border-slate-300 transition-colors">
+    <div
+      className={`bg-[#2C2218] rounded-xl p-4 relative transition-colors ${
+        isSelected
+          ? 'border-0 ring-2 ring-[#E07B3A] ring-offset-1 ring-offset-[#1A1410]'
+          : 'border border-[rgba(245,237,214,0.08)] hover:border-[rgba(245,237,214,0.15)]'
+      } ${onSelect ? 'cursor-pointer' : ''}`}
+      onClick={onSelect ? () => onSelect(competitor.username) : undefined}
+    >
+      {/* Checkbox overlay — top left */}
+      {onSelect && (
+        <div className="absolute top-3 left-3">
+          {isSelected ? (
+            <CheckSquare size={18} className="text-[#E07B3A]" />
+          ) : (
+            <Square size={18} className="text-[#7A6A54]" />
+          )}
+        </div>
+      )}
+
       {/* Category badge — top right */}
       <span
         className={`absolute top-4 right-4 text-xs font-semibold px-2 py-0.5 rounded-full ${category.badgeBg} ${category.badgeText}`}
@@ -36,15 +56,14 @@ export function CompetitorCard({ competitor, profile, cohortAvgER }: CompetitorC
       </span>
 
       {/* Profile header */}
-      <div className="flex items-start gap-3 pr-20">
+      <div className={`flex items-start gap-3 pr-20 ${onSelect ? 'pl-7' : ''}`}>
         {/* Avatar */}
         {profile?.profilePicUrl ? (
           <img
             src={profile.profilePicUrl}
             alt={`@${competitor.username}`}
-            className="w-12 h-12 rounded-full object-cover flex-shrink-0 bg-slate-100"
+            className="w-12 h-12 rounded-full object-cover flex-shrink-0 bg-[#3D3025]"
             onError={(e) => {
-              // Fallback to initials on CDN expiry
               const target = e.currentTarget
               target.style.display = 'none'
               target.nextElementSibling?.classList.remove('hidden')
@@ -53,7 +72,7 @@ export function CompetitorCard({ competitor, profile, cohortAvgER }: CompetitorC
         ) : null}
         {/* Initials fallback */}
         <div
-          className={`w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0 text-slate-600 font-semibold text-sm ${
+          className={`w-12 h-12 rounded-full bg-[#3D3025] flex items-center justify-center flex-shrink-0 text-[#C4A882] font-semibold text-sm ${
             profile?.profilePicUrl ? 'hidden' : ''
           }`}
         >
@@ -63,16 +82,16 @@ export function CompetitorCard({ competitor, profile, cohortAvgER }: CompetitorC
         {/* Handle + meta */}
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
-            <span className="font-semibold text-slate-900 text-sm">@{competitor.username}</span>
+            <span className="font-semibold text-[#F5EDD6] text-sm">@{competitor.username}</span>
             {profile?.verified && (
-              <BadgeCheck size={14} className="text-blue-500 flex-shrink-0" />
+              <BadgeCheck size={14} className="text-[#C4A882] flex-shrink-0" />
             )}
           </div>
           {profile?.fullName && profile.fullName !== competitor.username && (
-            <p className="text-xs text-slate-500 mt-0.5 truncate">{profile.fullName}</p>
+            <p className="text-xs text-[#C4A882] mt-0.5 truncate">{profile.fullName}</p>
           )}
           {profile && (
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-[#7A6A54] mt-0.5">
               {formatFollowers(profile.followersCount)} followers
             </p>
           )}
@@ -84,19 +103,19 @@ export function CompetitorCard({ competitor, profile, cohortAvgER }: CompetitorC
         <div className="mt-3 flex items-baseline gap-1.5">
           <span
             className={`text-xl font-bold tabular-nums ${
-              erAboveAvg ? 'text-green-600' : 'text-amber-600'
+              erAboveAvg ? 'text-[#4DB88A]' : 'text-[#E07B3A]'
             }`}
           >
             {er.toFixed(2)}%
           </span>
-          <span className="text-xs text-slate-400">
+          <span className="text-xs text-[#7A6A54]">
             ER · {erAboveAvg ? 'above avg' : 'below avg'}
           </span>
         </div>
       )}
 
       {/* AI rationale */}
-      <p className="mt-3 text-sm text-slate-600 leading-relaxed">
+      <p className="mt-3 text-sm text-[#C4A882] leading-relaxed">
         {competitor.rationale}
       </p>
     </div>

@@ -33,9 +33,11 @@ const CANDIDATE: NormalizedProfile = {
   profilePicUrl: '',
   verified: false,
   isBusinessAccount: false,
-  private: false,
-  latestPosts: [],
-  relatedProfiles: [],
+  avgLikes: 1000,
+  avgComments: 50,
+  engagementRate: 2.1,
+  relatedHandles: [],
+  topHashtags: [],
 }
 
 const DISCOVERY_OUTPUT: DiscoveryOutput = {

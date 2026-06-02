@@ -27,8 +27,8 @@ export const COMPETITOR_CATEGORIES: Record<string, CategoryDef> = {
     sectionLabel: 'Top 5 — Established Authority',
     taxonomy:
       'Established authority accounts with large follower bases (typically 100K+), high absolute engagement numbers, consistent posting history, and strong brand recognition in the niche. These are the dominant players.',
-    badgeBg: 'bg-blue-100',
-    badgeText: 'text-blue-700',
+    badgeBg: 'bg-[rgba(59,130,246,0.12)]',
+    badgeText: 'text-[#60A5FA]',
   },
   trending: {
     id: 'trending',
@@ -36,8 +36,8 @@ export const COMPETITOR_CATEGORIES: Record<string, CategoryDef> = {
     sectionLabel: 'Trending 5 — Growing Accounts',
     taxonomy:
       'Accounts in their growth phase — ER significantly exceeds what is typical for their follower tier, signalling active momentum. Typically under 500K followers; accounts with 500K+ followers are established players (Top category) regardless of ER. Rising creators (under 100K) and fast-growing mid-tier accounts (100K–500K) with high relative engagement are the target.',
-    badgeBg: 'bg-amber-100',
-    badgeText: 'text-amber-700',
+    badgeBg: 'bg-[rgba(224,123,58,0.12)]',
+    badgeText: 'text-[#E07B3A]',
   },
 }
 
@@ -58,8 +58,8 @@ export const DISCOVERY_CATEGORIES: Record<string, CategoryDef> = {
     sectionLabel: 'Established Authority',
     taxonomy:
       'Established authority in this city+niche: large follower base (typically 100K+), consistent posting, and strong community trust. These are the dominant voices in the local scene.',
-    badgeBg: 'bg-blue-100',
-    badgeText: 'text-blue-700',
+    badgeBg: 'bg-[rgba(59,130,246,0.12)]',
+    badgeText: 'text-[#60A5FA]',
   },
   trending: {
     id: 'trending',
@@ -67,8 +67,8 @@ export const DISCOVERY_CATEGORIES: Record<string, CategoryDef> = {
     sectionLabel: 'Growing Voices',
     taxonomy:
       'Growth-phase creators: ER significantly exceeds their follower-tier average, signalling active momentum in the local scene. Typically under 500K followers. Accounts with 500K+ must go to Top.',
-    badgeBg: 'bg-amber-100',
-    badgeText: 'text-amber-700',
+    badgeBg: 'bg-[rgba(224,123,58,0.12)]',
+    badgeText: 'text-[#E07B3A]',
   },
 }
 

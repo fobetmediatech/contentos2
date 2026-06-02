@@ -29,6 +29,7 @@ export interface ReelData {
 export interface ReelAnalysis {
   hookArchetype: string
   secondaryArchetype?: string
+  openingLine?: string        // the verbatim/implied hook line that stops the scroll (HookMap-style)
   commentsLikesRatio: number  // computed client-side (commentsCount / Math.max(1, likesCount))
   retentionMechanism: string
   psychologyTrigger: string
@@ -65,12 +66,17 @@ export interface PerCreatorSummary {
 
 interface ReelAnalysisState {
   selectedHandles: string[]
+  /** Handles in the current analysis run — the single source of truth for which
+   *  creators are being / have been analyzed. Set by startAnalysis, cleared on reset.
+   *  Both the inline ChatPage surface and NL-routed runs read this. */
+  activeHandles: string[]
   creatorStates: Record<string, CreatorAnalysisState>
   synthesisStatus: 'idle' | 'running' | 'done' | 'failed'
   synthesis: SynthesisOutput | null
   synthesisError: string | null
   // actions
   setSelectedHandles: (handles: string[]) => void
+  setActiveHandles: (handles: string[]) => void
   setCreatorState: (handle: string, partial: Partial<CreatorAnalysisState>) => void
   setSynthesis: (output: SynthesisOutput) => void
   setSynthesisStatus: (status: ReelAnalysisState['synthesisStatus']) => void
@@ -82,6 +88,7 @@ interface ReelAnalysisState {
 
 const initialState = {
   selectedHandles: [] as string[],
+  activeHandles: [] as string[],
   creatorStates: {} as Record<string, CreatorAnalysisState>,
   synthesisStatus: 'idle' as ReelAnalysisState['synthesisStatus'],
   synthesis: null as SynthesisOutput | null,
@@ -94,6 +101,8 @@ export const useReelAnalysisStore = create<ReelAnalysisState>()((set) => ({
   ...initialState,
 
   setSelectedHandles: (handles) => set({ selectedHandles: handles }),
+
+  setActiveHandles: (handles) => set({ activeHandles: handles }),
 
   setCreatorState: (handle, partial) =>
     set((prev) => ({

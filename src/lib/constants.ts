@@ -17,3 +17,10 @@ export const DISCOVERY_REDIRECT_TO_COMPETITOR = 'Actually, show me who dominates
 
 /** Shared error message when Gemini API key is absent. Used in multiple useConversation paths. */
 export const GEMINI_KEY_MISSING_MSG = 'Gemini API key missing. Add it in Settings.'
+
+/**
+ * Option label shown in the reel/hook analysis confirming state.
+ * When selected, kicks off reel scraping + hook analysis for the seed handles.
+ * Matched in useConversation.confirmSeeds() — keep in sync with the registry options.
+ */
+export const REEL_ANALYZE_LABEL = 'Break down their reels'

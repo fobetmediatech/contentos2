@@ -56,6 +56,8 @@ export interface PendingDiscovery {
 }
 
 export interface ChatMessage {
+  /** Stable unique id for React keys — monotonic, assigned by addMessage. */
+  id: string
   role: 'user' | 'assistant'
   content: string
   timestamp: number
@@ -110,7 +112,7 @@ export interface AnalysisState {
   // Conversational actions
   startChat: () => void
   setStatus: (status: AnalysisStatus) => void
-  addMessage: (message: ChatMessage) => void
+  addMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'> & { id?: string; timestamp?: number }) => void
   setDiscoveredSeeds: (seeds: string[]) => void
   setParsedIntent: (intent: ParsedIntent | null) => void
 }
@@ -134,6 +136,11 @@ const initialState = {
   discoveredSeeds: [] as string[],
   parsedIntent: null,
 }
+
+// Monotonic message-id sequence for stable React keys (M13). The old
+// `${timestamp}-${index}` key collided on same-millisecond messages and churned when
+// the 50-message slice slid. Module-scope so ids stay unique across store resets.
+let _msgSeq = 0
 
 export const useAnalysisStore = create<AnalysisState>()((set) => ({
   ...initialState,
@@ -176,7 +183,7 @@ export const useAnalysisStore = create<AnalysisState>()((set) => ({
     set((state) => ({
       conversationMessages: [
         ...state.conversationMessages,
-        message,
+        { ...message, id: message.id ?? `msg-${_msgSeq++}`, timestamp: message.timestamp ?? Date.now() },
       ].slice(-50),  // cap at 50 messages
     })),
 

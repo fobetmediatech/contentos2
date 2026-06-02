@@ -1,42 +1,38 @@
 /**
- * ChatPage — conversational entry point for the analysis pipeline.
+ * ChatPage — single-surface agentic interface.
  *
- * All pipeline states (running, clarifying, done, error) now render inline
- * within the chat — no navigation to separate progress pages.
- *
- * Layout (T11): rendered inside AppLayout's noPadding mode (h-[100dvh] flex flex-col).
- * T5:  send button + textarea disabled when status !== 'chatting'.
- * T6:  maxLength=500, char counter shown at 400+ chars.
- * T7:  store reset on mount when status === 'done'.
- * T12: TypingIndicator shown while status === 'discovering'.
- * T14: role="log" aria-live="polite" on message list.
- * T17: message area is flex justify-center (empty) → justify-end (has messages).
- * T18: input container uses pb-[env(safe-area-inset-bottom)].
- * T23: status === 'error' on mount → reset + back to chatting.
+ * All pipeline states (running, clarifying, done, error) render inline in the
+ * chat — no navigation to separate result pages. Results, selection, and reel
+ * analysis all happen here.
  */
 
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, Bot, Send, CheckCircle } from 'lucide-react'
+import { AlertTriangle, Bot, Send, CheckCircle, X, Video } from 'lucide-react'
 import { useAnalysisStore } from '../store/analysisStore'
 import { useDiscoveryStore } from '../store/discoveryStore'
 import { useKeysStore } from '../store/keysStore'
 import { useConversation } from '../hooks/useConversation'
 import { useCompetitorAnalysis } from '../hooks/useCompetitorAnalysis'
 import { useActivePipeline } from '../hooks/useActivePipeline'
+import { useReelAnalysis } from '../hooks/useReelAnalysis'
 import { ChatMessage, ProgressBubble, TypingIndicator } from '../components/ChatMessage'
 import { ClarificationCard } from '../components/ClarificationCard'
+import { CompetitorCard } from '../components/CompetitorCard'
+import { DiscoveryCard } from '../components/DiscoveryCard'
+import { InlineReelResults } from '../components/InlineReelResults'
+import { COMPETITOR_CATEGORIES, DISCOVERY_CATEGORIES } from '../shared/utils/categories'
 import { MIN_LOCATION_RESULTS } from '../hooks/useLocationDiscovery'
 
-const EXAMPLE_PROMPTS = [
-  'Indian food bloggers in Mumbai',
-  'Fitness creators focused on women',
-  'Personal finance influencers in Delhi',
+// Tool chips shown in the empty state — one per independent tool, so all three
+// are discoverable at a glance. Tapping prefills the input with a representative prompt.
+const TOOL_CHIPS: { tool: string; example: string; hint: string }[] = [
+  { tool: 'Find competitors', example: 'Top fitness creators like @nike.training', hint: 'See who is winning in a niche' },
+  { tool: 'Discover by city', example: 'Food bloggers in Mumbai', hint: 'Find creators based in a location' },
+  { tool: 'Break down hooks', example: "Analyze @garyvee's reel hooks", hint: 'Reverse-engineer viral hook patterns' },
 ]
 
 export function ChatPage() {
-  const navigate = useNavigate()
   const analysisStore = useAnalysisStore()
   const {
     status,
@@ -44,6 +40,8 @@ export function ChatPage() {
     currentStep,
     pendingDiscovery,
     competitors,
+    inputProfiles,
+    summary,
     niche,
     stepProgressDetail,
     didExpand: analysisDidExpand,
@@ -58,35 +56,43 @@ export function ChatPage() {
   const discoveryError = useDiscoveryStore((s) => s.error)
   const discoveryDidExpand = useDiscoveryStore((s) => s.didExpand)
   const discoveryCity = useDiscoveryStore((s) => s.params?.city ?? '')
+  const discoveryResults = useDiscoveryStore((s) => s.results)
+  const discoveryProfiles = useDiscoveryStore((s) => s.candidateProfiles)
+  const discoveryLocationRelaxed = useDiscoveryStore((s) => s.locationFilterRelaxed)
   const resetDiscovery = useDiscoveryStore((s) => s.reset)
   const activePipeline = useActivePipeline()
 
   const { isReady } = useKeysStore()
-  const { sendMessage, confirmSeeds, isConfirmingPending, isConfirmingLocked } = useConversation()
+  const { sendMessage, confirmSeeds, isConfirmingPending, isConfirmingLocked, isAnswering } = useConversation()
   const { answerClarification, isPending: clarificationPending } = useCompetitorAnalysis()
+  const { startAnalysis: startReelAnalysis, activeHandles, creatorStates, synthesisStatus, synthesis, synthesisError, reset: resetReel } = useReelAnalysis()
 
   const [inputText, setInputText] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  // Guard: only emit one "analysis failed" chat message per error event
   const analysisErrorHandledRef = useRef(false)
 
+  // Selection state — shared across competitor + discovery results
+  const [selectedHandles, setSelectedHandles] = useState<string[]>([])
+  const [selectionWarning, setSelectionWarning] = useState<string | null>(null)
+
   const ready = isReady()
+  // Reel run state (derived from the reel store). A run is "running" until synthesis
+  // reaches a terminal state; "done" once synthesis succeeds or fails.
+  const isReelRunning = activeHandles.length > 0 && synthesisStatus !== 'done' && synthesisStatus !== 'failed'
+  const isReelDone = activeHandles.length > 0 && (synthesisStatus === 'done' || synthesisStatus === 'failed')
   const isInPipeline = ['running', 'clarifying', 'done', 'error'].includes(status) ||
     ['running', 'done', 'error'].includes(discoveryStatus)
-  // Allow sending when chatting, when following up after a pipeline completes,
-  // or when in 'confirming' state so the user can type a direction instead of
-  // clicking a button. isConfirmingPending re-locks while we await Gemini's mapping.
   const canSend =
     (status === 'chatting' || status === 'confirming' || activePipeline.followUpAllowed) &&
     inputText.trim().length > 0 &&
     ready &&
     !isConfirmingPending &&
-    !isConfirmingLocked
+    !isConfirmingLocked &&
+    !isReelRunning &&
+    !isAnswering
 
-  // T7 + T23: initialise chat state on mount.
-  // Also handles stale pipeline states (discovering/confirming/running/clarifying)
-  // left behind when the user navigated away mid-run — reset so the UI isn't stuck.
+  // Initialise chat state on mount
   useEffect(() => {
     if (status === 'idle') {
       startChat()
@@ -104,7 +110,6 @@ export function ChatPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Mount reset: clear stale discovery state so we don't immediately show old results
   useEffect(() => {
     if (discoveryStatus === 'done') {
       resetDiscovery()
@@ -112,7 +117,7 @@ export function ChatPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Analysis error → surface as chat message + return to chatting
+  // Analysis error → surface as chat message
   useEffect(() => {
     if (status === 'error' && analysisError && !analysisErrorHandledRef.current) {
       analysisErrorHandledRef.current = true
@@ -124,33 +129,33 @@ export function ChatPage() {
     }
   }, [status, analysisError, addMessage, setStatus])
 
-  // Discovery error → surface as chat message then reset
+  // Discovery error → surface as chat message then reset.
+  // M9: all read values are in deps (addMessage/setStatus/resetDiscovery are stable
+  // Zustand refs). resetDiscovery flips status off 'error' immediately, so the guard
+  // stops a re-fire — no duplicate error bubble.
   useEffect(() => {
     if (discoveryStatus === 'error') {
       const errMsg = discoveryError ?? 'Discovery failed — please try again.'
-      addMessage({ role: 'assistant', content: errMsg, timestamp: Date.now(), type: 'error' })
+      addMessage({ role: 'assistant', content: errMsg, type: 'error' })
       setStatus('chatting')
       resetDiscovery()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [discoveryStatus, resetDiscovery])
+  }, [discoveryStatus, discoveryError, addMessage, setStatus, resetDiscovery])
 
-  // AD10: auto-focus textarea when entering confirming state so users can type immediately
+  // Auto-focus textarea when entering confirming state
   useEffect(() => {
     if (status === 'confirming') {
       textareaRef.current?.focus()
     }
   }, [status])
 
-  // Scroll to bottom whenever messages change or pipeline state changes
+  // Scroll to bottom whenever messages or pipeline state changes
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [conversationMessages, status, discoveryStatus, currentStep, activePipeline.step])
+  }, [conversationMessages, status, discoveryStatus, currentStep, activePipeline.step, activeHandles, creatorStates, synthesisStatus, isAnswering])
 
   const resetTextareaHeight = () => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto'
-    }
+    if (textareaRef.current) textareaRef.current.style.height = 'auto'
   }
 
   const handleSend = async () => {
@@ -161,7 +166,6 @@ export function ChatPage() {
     await sendMessage(text)
   }
 
-  // Enter to send, Shift+Enter for newline
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -169,7 +173,6 @@ export function ChatPage() {
     }
   }
 
-  // Auto-grow textarea as user types
   const handleTextareaInput = (e: React.FormEvent<HTMLTextAreaElement>) => {
     const el = e.currentTarget
     el.style.height = 'auto'
@@ -179,23 +182,61 @@ export function ChatPage() {
   const handleStartOver = () => {
     reset()
     resetDiscovery()
+    resetReel()
     startChat()
+    setSelectedHandles([])
   }
 
+  const handleToggleSelect = (handle: string) => {
+    setSelectedHandles((prev) => {
+      if (prev.includes(handle)) return prev.filter((h) => h !== handle)
+      if (prev.length >= 5) {
+        setSelectionWarning('Select up to 5 creators at a time')
+        setTimeout(() => setSelectionWarning(null), 2500)
+        return prev
+      }
+      return [...prev, handle]
+    })
+  }
+
+  const handleAnalyzeReels = () => {
+    const handles = [...selectedHandles]
+    setSelectedHandles([])
+    startReelAnalysis(handles)  // sets activeHandles in the reel store
+  }
+
+  // Derived booleans
   const hasMessages = conversationMessages.length > 0
   const isDiscovering = status === 'discovering'
-
-  // Competitor analysis inline states
   const isAnalysisRunning = status === 'running'
   const isAnalysisClarifying = status === 'clarifying'
   const isAnalysisDone = status === 'done'
-
-  // Location discovery inline states (via bridge hook)
   const isDiscoveryRunning = activePipeline.activePipelineId === 'discovery' && activePipeline.isRunning
   const isDiscoveryDone = activePipeline.activePipelineId === 'discovery' && activePipeline.isDone
-
   const showInlineContent = isAnalysisRunning || isAnalysisClarifying || isAnalysisDone ||
     isDiscoveryRunning || isDiscoveryDone
+
+  // Profile maps + cohort ER for card rendering
+  const profileMap = new Map(inputProfiles.map((p) => [p.username, p]))
+  const allERValues = competitors
+    .map((c) => profileMap.get(c.username)?.engagementRate)
+    .filter((er): er is number => er !== null && er !== undefined)
+  const cohortAvgER = allERValues.length > 0
+    ? allERValues.reduce((a, b) => a + b, 0) / allERValues.length
+    : 3.0
+
+  const discoveryProfileMap = new Map(discoveryProfiles.map((p) => [p.username, p]))
+  const discoveryERValues = discoveryResults
+    .map((r) => discoveryProfileMap.get(r.username)?.engagementRate)
+    .filter((er): er is number => er !== null && er !== undefined)
+  const discoveryAvgER = discoveryERValues.length > 0
+    ? discoveryERValues.reduce((a, b) => a + b, 0) / discoveryERValues.length
+    : 3.0
+
+  const topCompetitors = competitors.filter((c) => c.category === 'top').sort((a, b) => a.rank - b.rank)
+  const trendingCompetitors = competitors.filter((c) => c.category === 'trending').sort((a, b) => a.rank - b.rank)
+  const topDiscovery = discoveryResults.filter((r) => r.category === 'top').sort((a, b) => a.rank - b.rank)
+  const trendingDiscovery = discoveryResults.filter((r) => r.category === 'trending').sort((a, b) => a.rank - b.rank)
 
   return (
     <div className="h-full flex flex-col bg-chai">
@@ -205,73 +246,72 @@ export function ChatPage() {
           <AlertTriangle size={14} className="text-warning flex-shrink-0 mt-0.5" />
           <p className="text-xs text-secondary">
             Add your Gemini and Apify keys in{' '}
-            <a href="/settings" className="underline font-medium text-[#F4A97B]">
-              Settings
-            </a>{' '}
+            <a href="/settings" className="underline font-medium text-[#F4A97B]">Settings</a>{' '}
             to get started.
           </p>
         </div>
       )}
 
-      {/* ── Message area ──────────────────────────────────────────────────── */}
+      {/* Selection warning toast */}
+      {selectionWarning && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 bg-[#2C2118] border border-[#E07B3A]/40 rounded-xl text-sm text-[#E07B3A] shadow-lg pointer-events-none">
+          {selectionWarning}
+        </div>
+      )}
+
+      {/* ── Message area ──────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto">
         {!hasMessages && !showInlineContent ? (
-          // T17: centered empty / welcome state
+          // Welcome / empty state
           <div className="h-full flex flex-col items-center justify-center px-6 py-12">
             <div className="w-12 h-12 rounded-full bg-[rgba(224,123,58,0.12)] flex items-center justify-center mb-4">
               <Bot size={22} className="text-[#E07B3A]" />
             </div>
             <h2 className="font-serif italic text-2xl text-primary mb-1.5 tracking-tight">
-              What do you want to analyze?
+              What do you want to research?
             </h2>
-            <p className="text-sm text-secondary text-center max-w-xs leading-relaxed">
-              Describe a niche, creator space, or location and I'll discover relevant accounts for competitor analysis.
+            <p className="text-sm text-secondary text-center max-w-sm leading-relaxed">
+              Three tools, one chat — find competitors, discover creators by city, or break down what makes reels go viral. Just describe it.
             </p>
-            {/* Example prompt chips */}
-            <div className="mt-6 flex flex-col gap-2 w-full max-w-xs">
-              {EXAMPLE_PROMPTS.map((prompt) => (
+            <div className="mt-6 flex flex-col gap-2 w-full max-w-sm">
+              {TOOL_CHIPS.map(({ tool, example, hint }) => (
                 <button
-                  key={prompt}
+                  key={tool}
                   onClick={() => {
                     if (!ready) return
-                    setInputText(prompt)
+                    setInputText(example)
                     textareaRef.current?.focus()
                   }}
                   disabled={!ready}
-                  className="px-3 py-2 text-xs text-left text-secondary bg-surface border border-[rgba(245,237,214,0.08)] rounded-lg hover:border-[#E07B3A] hover:text-[#F4A97B] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="group px-3.5 py-2.5 text-left bg-surface border border-[rgba(245,237,214,0.08)] rounded-xl hover:border-[#E07B3A] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  {prompt}
+                  <span className="block text-xs font-semibold text-[#F4A97B] mb-0.5">{tool}</span>
+                  <span className="block text-sm text-secondary group-hover:text-primary transition-colors">"{example}"</span>
+                  <span className="block text-[11px] text-muted mt-0.5">{hint}</span>
                 </button>
               ))}
             </div>
           </div>
         ) : (
-          // Messages flow top-to-bottom (no spacer) so previous messages stay
-          // visible when new content is appended during a pipeline run.
           <div className="px-4 pt-4 pb-6">
-            {/* T14: accessible message log */}
-            <div
-              role="log"
-              aria-live="polite"
-              aria-label="Conversation"
-              className="flex flex-col gap-4"
-            >
-              {conversationMessages.map((message, i) => (
+            <div role="log" aria-live="polite" aria-label="Conversation" className="flex flex-col gap-4">
+
+              {/* Conversation messages */}
+              {conversationMessages.map((message) => (
                 <ChatMessage
-                  key={`${message.timestamp}-${i}`}
+                  key={message.id}
                   message={message}
                   onOptionSelect={confirmSeeds}
                   optionsDisabled={status !== 'confirming' || isConfirmingPending}
                 />
               ))}
 
-              {/* T12: animated typing indicator while parsing intent */}
+              {/* Typing indicators */}
               {isDiscovering && <TypingIndicator />}
-
-              {/* Typing indicator while Gemini maps a typed confirming-state reply (AD2) */}
               {isConfirmingPending && <TypingIndicator />}
+              {isAnswering && <TypingIndicator />}
 
-              {/* ── Inline competitor analysis progress ──────────────────── */}
+              {/* ── Competitor analysis progress ──────────────────────── */}
               {(isAnalysisRunning || isAnalysisClarifying) && (
                 <>
                   <ProgressBubble
@@ -302,7 +342,7 @@ export function ChatPage() {
                 </>
               )}
 
-              {/* ── Inline location discovery progress ───────────────────── */}
+              {/* ── Location discovery progress ───────────────────────── */}
               {isDiscoveryRunning && (
                 <ProgressBubble
                   currentStep={activePipeline.step}
@@ -311,100 +351,259 @@ export function ChatPage() {
                 />
               )}
 
-              {/* ── Competitor analysis done ──────────────────────────────── */}
+              {/* ── Competitor analysis results ───────────────────────── */}
               {isAnalysisDone && (
-                <div className="flex items-start gap-2">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(224,123,58,0.12)] flex items-center justify-center mt-0.5">
-                    <Bot size={14} className="text-[#E07B3A]" />
-                  </div>
-                  <div className="flex flex-col gap-2 max-w-[80%]">
-                    <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(245,237,214,0.08)] text-sm leading-relaxed">
-                      <div className="flex items-center gap-2 mb-1">
-                        <CheckCircle size={14} className="text-success flex-shrink-0" />
-                        <span className="font-semibold text-primary">Analysis complete</span>
-                      </div>
-                      <p className="text-secondary">
-                        Found {competitors.length} competitor{competitors.length !== 1 ? 's' : ''}
-                        {niche ? ` in the ${niche} space` : ''}.
-                        Ranked by engagement, location fit, and partnership readiness.
-                      </p>
-                      {analysisDidExpand && (
-                        <p className="text-xs text-warning mt-1.5">
-                          This niche had sparse Instagram presence — results may be limited. Try a different reference account for a broader pool.
-                        </p>
-                      )}
+                <>
+                  {/* Completion bubble */}
+                  <div className="flex items-start gap-2">
+                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(224,123,58,0.12)] flex items-center justify-center mt-0.5">
+                      <Bot size={14} className="text-[#E07B3A]" />
                     </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => navigate('/results')}
-                        className="flex-1 py-2 text-sm font-medium bg-[#E07B3A] text-white rounded-xl hover:bg-[#C4612A] transition-colors"
-                      >
-                        View full report →
-                      </button>
+                    <div className="flex flex-col gap-2 max-w-[80%]">
+                      <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(245,237,214,0.08)] text-sm leading-relaxed">
+                        <div className="flex items-center gap-2 mb-1">
+                          <CheckCircle size={14} className="text-success flex-shrink-0" />
+                          <span className="font-semibold text-primary">Analysis complete</span>
+                        </div>
+                        <p className="text-secondary">
+                          Found {competitors.length} competitor{competitors.length !== 1 ? 's' : ''}
+                          {niche ? ` in the ${niche} space` : ''}.
+                          Ranked by engagement, location fit, and partnership readiness.
+                        </p>
+                        {analysisDidExpand && (
+                          <p className="text-xs text-warning mt-1.5">
+                            Sparse niche — results may be limited. Try a different reference account for a broader pool.
+                          </p>
+                        )}
+                      </div>
                       <button
                         onClick={handleStartOver}
-                        className="px-4 py-2 text-sm text-secondary border border-[rgba(245,237,214,0.10)] rounded-xl hover:bg-surface-raised transition-colors"
+                        className="self-start px-4 py-2 text-sm text-secondary border border-[rgba(245,237,214,0.10)] rounded-xl hover:bg-surface-raised transition-colors"
                       >
                         Start over
                       </button>
                     </div>
                   </div>
-                </div>
+
+                  {/* AI summary — violet AI tint + Gemini eyebrow per DESIGN.md */}
+                  {summary && (
+                    <div className="px-4 py-3 bg-[rgba(167,139,250,0.08)] border border-[#A78BFA]/20 rounded-xl">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-[#A78BFA] mb-1">✦ Gemini</p>
+                      <p className="text-sm text-[#C4B5FD] leading-relaxed">{summary}</p>
+                    </div>
+                  )}
+
+                  {/* Card grid */}
+                  {topCompetitors.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-[#7A6A54] uppercase tracking-wide mb-3">
+                        {COMPETITOR_CATEGORIES.top.sectionLabel}
+                      </p>
+                      <div className="grid gap-3 grid-cols-1 xl:grid-cols-2">
+                        {topCompetitors.map((c) => (
+                          <CompetitorCard
+                            key={c.username}
+                            competitor={c}
+                            profile={profileMap.get(c.username)}
+                            cohortAvgER={cohortAvgER}
+                            isSelected={selectedHandles.includes(c.username)}
+                            onSelect={activeHandles.length === 0 ? handleToggleSelect : undefined}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {trendingCompetitors.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-[#7A6A54] uppercase tracking-wide mb-3">
+                        {COMPETITOR_CATEGORIES.trending.sectionLabel}
+                      </p>
+                      <div className="grid gap-3 grid-cols-1 xl:grid-cols-2">
+                        {trendingCompetitors.map((c) => (
+                          <CompetitorCard
+                            key={c.username}
+                            competitor={c}
+                            profile={profileMap.get(c.username)}
+                            cohortAvgER={cohortAvgER}
+                            isSelected={selectedHandles.includes(c.username)}
+                            onSelect={activeHandles.length === 0 ? handleToggleSelect : undefined}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Selection CTA */}
+                  {selectedHandles.length > 0 && activeHandles.length === 0 && (
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        onClick={() => setSelectedHandles([])}
+                        className="flex items-center gap-1.5 px-3 py-2 text-sm text-[#A09080] border border-[#3D2E1E] rounded-xl hover:text-[#F5E6D3] hover:border-[#5C4A30] transition-colors"
+                      >
+                        <X size={13} />
+                        Clear
+                      </button>
+                      <button
+                        onClick={handleAnalyzeReels}
+                        className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-[#E07B3A] text-[#1A1410] rounded-xl hover:bg-[#C96A2A] transition-colors"
+                      >
+                        <Video size={14} />
+                        Analyze {selectedHandles.length} creator{selectedHandles.length !== 1 ? 's' : ''} reels
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
 
-              {/* ── Location discovery done ───────────────────────────────── */}
-              {isDiscoveryDone && activePipeline.discoveryResults && (
-                <div className="flex items-start gap-2">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(224,123,58,0.12)] flex items-center justify-center mt-0.5">
-                    <Bot size={14} className="text-[#E07B3A]" />
-                  </div>
-                  <div className="flex flex-col gap-2 max-w-[80%]">
-                    <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(245,237,214,0.08)] text-sm leading-relaxed">
-                      <div className="flex items-center gap-2 mb-1">
-                        <CheckCircle size={14} className="text-success flex-shrink-0" />
-                        <span className="font-semibold text-primary">Discovery complete</span>
-                      </div>
-                      <p className="text-secondary">
-                        Found {activePipeline.discoveryResults.length} creator{activePipeline.discoveryResults.length !== 1 ? 's' : ''}
-                        {discoveryCity ? ` in ${discoveryCity}` : ''}.
-                        Filtered for location signals and partnership readiness.
-                      </p>
-                      {discoveryDidExpand && (
-                        <p className="text-xs text-warning mt-1.5">
-                          Expanded search with a second hashtag batch — initial pass found fewer than {MIN_LOCATION_RESULTS} creators in this city.
-                        </p>
-                      )}
+              {/* ── Discovery results ─────────────────────────────────── */}
+              {isDiscoveryDone && (
+                <>
+                  {/* Completion bubble */}
+                  <div className="flex items-start gap-2">
+                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(224,123,58,0.12)] flex items-center justify-center mt-0.5">
+                      <Bot size={14} className="text-[#E07B3A]" />
                     </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => navigate(activePipeline.resultsPath)}
-                        className="flex-1 py-2 text-sm font-medium bg-[#E07B3A] text-white rounded-xl hover:bg-[#C4612A] transition-colors"
-                      >
-                        View full report →
-                      </button>
+                    <div className="flex flex-col gap-2 max-w-[80%]">
+                      <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(245,237,214,0.08)] text-sm leading-relaxed">
+                        <div className="flex items-center gap-2 mb-1">
+                          <CheckCircle size={14} className="text-success flex-shrink-0" />
+                          <span className="font-semibold text-primary">Discovery complete</span>
+                        </div>
+                        <p className="text-secondary">
+                          Found {discoveryResults.length} creator{discoveryResults.length !== 1 ? 's' : ''}
+                          {discoveryCity ? ` in ${discoveryCity}` : ''}.
+                          Filtered for location signals and partnership readiness.
+                        </p>
+                        {discoveryDidExpand && (
+                          <p className="text-xs text-warning mt-1.5">
+                            Expanded search with a second hashtag batch — initial pass found fewer than {MIN_LOCATION_RESULTS} creators in this city.
+                          </p>
+                        )}
+                        {discoveryLocationRelaxed && (
+                          <p className="text-xs text-warning mt-1.5">
+                            Location filter relaxed — showing all niche-relevant creators; some may not be locally based.
+                          </p>
+                        )}
+                      </div>
                       <button
                         onClick={handleStartOver}
-                        className="px-4 py-2 text-sm text-secondary border border-[rgba(245,237,214,0.10)] rounded-xl hover:bg-surface-raised transition-colors"
+                        className="self-start px-4 py-2 text-sm text-secondary border border-[rgba(245,237,214,0.10)] rounded-xl hover:bg-surface-raised transition-colors"
                       >
                         Start over
                       </button>
                     </div>
                   </div>
-                </div>
+
+                  {/* Card grid */}
+                  {topDiscovery.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-[#7A6A54] uppercase tracking-wide mb-3">
+                        {DISCOVERY_CATEGORIES.top.sectionLabel}
+                      </p>
+                      <div className="grid gap-3 grid-cols-1 xl:grid-cols-2">
+                        {topDiscovery.map((r) => (
+                          <DiscoveryCard
+                            key={r.username}
+                            result={r}
+                            profile={discoveryProfileMap.get(r.username)}
+                            cohortAvgER={discoveryAvgER}
+                            isSelected={selectedHandles.includes(r.username)}
+                            onSelect={activeHandles.length === 0 ? handleToggleSelect : undefined}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {trendingDiscovery.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-[#7A6A54] uppercase tracking-wide mb-3">
+                        {DISCOVERY_CATEGORIES.trending.sectionLabel}
+                      </p>
+                      <div className="grid gap-3 grid-cols-1 xl:grid-cols-2">
+                        {trendingDiscovery.map((r) => (
+                          <DiscoveryCard
+                            key={r.username}
+                            result={r}
+                            profile={discoveryProfileMap.get(r.username)}
+                            cohortAvgER={discoveryAvgER}
+                            isSelected={selectedHandles.includes(r.username)}
+                            onSelect={activeHandles.length === 0 ? handleToggleSelect : undefined}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Selection CTA */}
+                  {selectedHandles.length > 0 && activeHandles.length === 0 && (
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        onClick={() => setSelectedHandles([])}
+                        className="flex items-center gap-1.5 px-3 py-2 text-sm text-[#A09080] border border-[#3D2E1E] rounded-xl hover:text-[#F5E6D3] hover:border-[#5C4A30] transition-colors"
+                      >
+                        <X size={13} />
+                        Clear
+                      </button>
+                      <button
+                        onClick={handleAnalyzeReels}
+                        className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-[#E07B3A] text-[#1A1410] rounded-xl hover:bg-[#C96A2A] transition-colors"
+                      >
+                        <Video size={14} />
+                        Analyze {selectedHandles.length} creator{selectedHandles.length !== 1 ? 's' : ''} reels
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
+
+              {/* ── Inline reel analysis ──────────────────────────────── */}
+              {activeHandles.length > 0 && (
+                <>
+                  {/* Header bubble */}
+                  <div className="flex items-start gap-2">
+                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(167,139,250,0.12)] flex items-center justify-center mt-0.5">
+                      <Video size={14} className="text-[#A78BFA]" />
+                    </div>
+                    <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(245,237,214,0.08)] text-sm leading-relaxed max-w-[80%]">
+                      <span className="font-semibold text-primary">Analyzing reels</span>
+                      <p className="text-secondary mt-0.5">
+                        Scraping and analyzing reels for {activeHandles.map(h => `@${h}`).join(', ')} — this takes {activeHandles.length * 2}–{activeHandles.length * 3} min.
+                      </p>
+                    </div>
+                  </div>
+
+                  <InlineReelResults
+                    handles={activeHandles}
+                    creatorStates={creatorStates}
+                    synthesisStatus={synthesisStatus}
+                    synthesis={synthesis}
+                    synthesisError={synthesisError}
+                    onSuggest={(text) => {
+                      setInputText(text)
+                      textareaRef.current?.focus()
+                    }}
+                  />
+
+                  {isReelDone && (
+                    <button
+                      onClick={handleStartOver}
+                      className="self-start px-4 py-2 text-sm text-secondary border border-[rgba(245,237,214,0.10)] rounded-xl hover:bg-surface-raised transition-colors"
+                    >
+                      Start over
+                    </button>
+                  )}
+                </>
+              )}
+
             </div>
-
-            {/* Anchor for auto-scroll */}
             <div ref={messagesEndRef} />
           </div>
         )}
       </div>
 
-      {/* ── Input area ────────────────────────────────────────────────────── */}
-      {/* T18: pb-[env(safe-area-inset-bottom)] for iOS home bar */}
+      {/* ── Input area ────────────────────────────────────────────────── */}
       <div className="flex-shrink-0 bg-surface border-t border-[rgba(245,237,214,0.08)] px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))]">
         <div className="flex items-end gap-2">
-          {/* Textarea wrapper */}
           <div className="relative flex-1">
             <textarea
               ref={textareaRef}
@@ -413,7 +612,9 @@ export function ChatPage() {
               onKeyDown={handleKeyDown}
               onInput={handleTextareaInput}
               placeholder={
-                isInPipeline
+                isReelRunning
+                  ? 'Analyzing reels — this takes a few minutes…'
+                  : isInPipeline
                   ? 'Analysis in progress…'
                   : status === 'discovering'
                   ? 'Searching for accounts…'
@@ -428,7 +629,9 @@ export function ChatPage() {
               disabled={
                 (status !== 'chatting' && status !== 'confirming' && !activePipeline.followUpAllowed) ||
                 isConfirmingPending ||
-                isConfirmingLocked
+                isConfirmingLocked ||
+                isReelRunning ||
+                isAnswering
               }
               aria-label="Message input"
               className={`w-full px-3 py-2.5 text-sm bg-[#1A1410] text-primary border rounded-xl focus:outline-none focus:ring-1 focus:ring-[#E07B3A] focus:border-[#E07B3A] resize-none disabled:opacity-40 disabled:cursor-not-allowed leading-relaxed placeholder:text-muted ${
@@ -437,7 +640,6 @@ export function ChatPage() {
                   : 'border-[rgba(245,237,214,0.12)]'
               }`}
             />
-            {/* T6: char counter shown at 400+ */}
             {inputText.length >= 400 && (
               <span
                 className={`absolute bottom-2.5 right-2.5 text-[10px] font-mono tabular-nums ${
@@ -449,7 +651,6 @@ export function ChatPage() {
             )}
           </div>
 
-          {/* Send button */}
           <button
             onClick={handleSend}
             disabled={!canSend}

@@ -16,7 +16,7 @@ beforeEach(() => {
   useAnalysisStore.getState().reset()
 })
 
-function makeMsg(content: string, role: 'user' | 'assistant' = 'assistant'): ChatMessage {
+function makeMsg(content: string, role: 'user' | 'assistant' = 'assistant'): Omit<ChatMessage, 'id'> {
   return { role, content, timestamp: Date.now(), type: 'text' }
 }
 
@@ -72,7 +72,7 @@ describe('analysisStore — addMessage', () => {
   })
 
   it('preserves message role and type', () => {
-    const msg: ChatMessage = { role: 'user', content: 'Hello', timestamp: 1234, type: 'text' }
+    const msg: Omit<ChatMessage, 'id'> = { role: 'user', content: 'Hello', timestamp: 1234, type: 'text' }
     useAnalysisStore.getState().addMessage(msg)
     const stored = useAnalysisStore.getState().conversationMessages[0]
     expect(stored.role).toBe('user')
@@ -80,7 +80,7 @@ describe('analysisStore — addMessage', () => {
   })
 
   it('appends options-type messages with options array', () => {
-    const msg: ChatMessage = {
+    const msg: Omit<ChatMessage, 'id'> = {
       role: 'assistant',
       content: 'Pick a direction',
       timestamp: 1234,
@@ -145,7 +145,9 @@ describe('analysisStore — setParsedIntent', () => {
       location: 'Mumbai',
       knownHandles: [],
       depth: 'standard' as const,
+      clientName: undefined,
       pipelineType: 'competitor' as const,
+      routingConfidence: 'high' as const,
     }
     useAnalysisStore.getState().setParsedIntent(intent)
     expect(useAnalysisStore.getState().parsedIntent).toEqual(intent)

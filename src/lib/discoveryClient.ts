@@ -41,6 +41,10 @@ import { normalizeProfiles, type ApifyProfileRaw, type NormalizedProfile } from 
 import { startRun, pollRun, fetchDataset, chunk } from './apifyCore'
 import { filterByLocation, type FilterResult } from './locationFilter'
 
+// Re-export FilterResult so consumers (and tests) can import it from the
+// discoveryClient barrel without reaching into locationFilter directly.
+export type { FilterResult } from './locationFilter'
+
 // ----- Concurrency + caps -----
 
 const MAX_CONCURRENT = 3

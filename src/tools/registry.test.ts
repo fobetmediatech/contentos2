@@ -12,7 +12,7 @@ import { describe, it, expect } from 'vitest'
 import { PIPELINE_REGISTRY } from './registry'
 import { STEP_LABELS } from '../store/analysisStore'
 import { DISCOVERY_STEP_LABELS } from '../store/discoveryStore'
-import { PROCEED_LABEL, DISCOVERY_REDIRECT_TO_COMPETITOR } from '../lib/constants'
+import { PROCEED_LABEL, DISCOVERY_REDIRECT_TO_COMPETITOR, REEL_ANALYZE_LABEL } from '../lib/constants'
 import type { ResolvedIntent } from './types'
 
 // Minimal resolved intent fixture (competitor shape)
@@ -24,6 +24,7 @@ const competitorIntent: ResolvedIntent = {
   depth: 'standard',
   clientName: undefined,
   pipelineType: 'competitor',
+  routingConfidence: 'high',
 }
 
 // Discovery intent fixture
@@ -35,6 +36,19 @@ const discoveryIntent: ResolvedIntent = {
   depth: 'standard',
   clientName: undefined,
   pipelineType: 'discovery',
+  routingConfidence: 'high',
+}
+
+// Reel intent fixture (names handles to analyze)
+const reelIntent: ResolvedIntent = {
+  needsClarification: false,
+  niche: 'fitness creators',
+  location: undefined,
+  knownHandles: ['nike', 'garyvee'],
+  depth: 'standard',
+  clientName: undefined,
+  pipelineType: 'reel',
+  routingConfidence: 'high',
 }
 
 describe('PIPELINE_REGISTRY — competitor entry', () => {
@@ -124,9 +138,33 @@ describe('PIPELINE_REGISTRY — discovery entry', () => {
   })
 })
 
+describe('PIPELINE_REGISTRY — reel entry', () => {
+  const entry = PIPELINE_REGISTRY['reel']
+
+  it('exists in the registry', () => {
+    expect(entry).toBeDefined()
+  })
+
+  it('has id "reel"', () => {
+    expect(entry.id).toBe('reel')
+  })
+
+  it('confirmOptions() includes REEL_ANALYZE_LABEL', () => {
+    expect(entry.confirmOptions(reelIntent)).toContain(REEL_ANALYZE_LABEL)
+  })
+
+  it('confirmMessage() references the named handles', () => {
+    expect(entry.confirmMessage(reelIntent)).toContain('@nike')
+  })
+
+  it('has a non-empty steps array', () => {
+    expect(entry.steps.length).toBeGreaterThan(0)
+  })
+})
+
 describe('PIPELINE_REGISTRY — registry shape invariants', () => {
-  it('has exactly 2 entries (competitor + discovery)', () => {
-    expect(Object.keys(PIPELINE_REGISTRY)).toHaveLength(2)
+  it('has exactly 3 entries (competitor + discovery + reel)', () => {
+    expect(Object.keys(PIPELINE_REGISTRY)).toHaveLength(3)
   })
 
   it('every entry id matches its key', () => {

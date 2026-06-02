@@ -71,12 +71,21 @@ export function getKeyExpiry(apiKey: string): number | null {
  * Pick the next available Apify key (round-robin, skipping cooled-down keys).
  * Returns null if all keys are cooling down.
  */
+const ROTATION_KEY = 'apify_key_rotation_idx'
+
 export function pickAvailableKey(apifyKeys: string[]): string | null {
   const available = apifyKeys.filter((k) => k.trim() && !isKeyCoolingDown(k))
   if (available.length === 0) return null
-  // Simple round-robin: rotate by current second to spread load
-  const idx = Math.floor(Date.now() / 1000) % available.length
-  return available[idx]
+  // M10: round-robin via a persisted incrementing index. The old `Date.now()/1000 %`
+  // handed EVERY pick within the same wall-clock second the same key, so a burst of
+  // parallel profile scrapes (pLimit(3)) all hammered one key — defeating the whole
+  // point of multiple keys. Advancing per pick spreads the load. Read-then-write is
+  // synchronous (TOCTOU-safe, same as the cooldown map).
+  const raw = storage.get(ROTATION_KEY)
+  const prev = Number(raw)
+  const next = (Number.isFinite(prev) ? prev : 0) + 1
+  storage.set(ROTATION_KEY, String(next))
+  return available[next % available.length]
 }
 
 /**

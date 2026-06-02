@@ -15,7 +15,7 @@
 
 import { z } from 'zod'
 import { buildIntentPrompt } from './prompts'
-import { GeminiError } from './gemini'
+import { GeminiError, geminiHeaders } from './gemini'
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta'
 const MODEL = import.meta.env.VITE_GEMINI_MODEL ?? 'gemini-2.5-flash'
@@ -52,7 +52,7 @@ const IntentSchema = z.object({
   // .catch('competitor') gracefully handles null, undefined, and unknown enum
   // values (e.g. 'location') without triggering the validation-retry path.
   pipelineType: z
-    .enum(['competitor', 'discovery'])
+    .enum(['competitor', 'discovery', 'reel', 'content'])
     .catch('competitor'),
   // How confident Gemini is about the pipeline routing decision.
   // 'high' = clear from the message; 'medium' = judgment call or ambiguous.
@@ -78,11 +78,11 @@ async function fetchIntent(
   prompt: string,
   signal?: AbortSignal,
 ): Promise<unknown> {
-  const url = `${GEMINI_BASE}/models/${MODEL}:generateContent?key=${geminiKey}`
+  const url = `${GEMINI_BASE}/models/${MODEL}:generateContent`
 
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: geminiHeaders(geminiKey),
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
@@ -103,7 +103,7 @@ async function fetchIntent(
             knownHandles: { type: 'array', items: { type: 'string' } },
             depth: { type: 'string', enum: ['standard', 'deep'] },
             clientName: { type: 'string' },
-            pipelineType: { type: 'string', enum: ['competitor', 'discovery'] },
+            pipelineType: { type: 'string', enum: ['competitor', 'discovery', 'reel', 'content'] },
             routingConfidence: { type: 'string', enum: ['high', 'medium'] },
           },
           required: ['needsClarification'],
@@ -174,8 +174,9 @@ async function callGeminiForIntent(
   geminiKey: string,
   userMessage: string,
   signal?: AbortSignal,
+  retryNote?: string,
 ): Promise<unknown> {
-  const prompt = buildIntentPrompt(userMessage)
+  const prompt = buildIntentPrompt(userMessage, retryNote)
   let lastErr: unknown
 
   for (let attempt = 0; attempt <= INTENT_RETRIES; attempt++) {
@@ -243,11 +244,11 @@ export async function parseIntent(
   console.warn('[intentParser] validation failed, retrying:', result.error.message, 'raw:', raw)
 
   try {
-    const retryRaw = await callGeminiForIntent(
-      geminiKey,
-      `${userMessage}\n\n[Note: previous response failed schema validation. Issues: ${result.error.issues.map(i => `${i.path.join('.')}: ${i.code}`).join('; ')}. Please fix and respond with valid JSON only.]`,
-      signal,
-    )
+    // M7: pass the ORIGINAL user message (escaped once inside buildIntentPrompt) plus a
+    // SEPARATE structural retry note — never re-inject raw user text into a new prompt
+    // body. The note carries only `path: code` pairs, never field values.
+    const retryNote = `Previous response failed schema validation. Issues: ${result.error.issues.map(i => `${i.path.join('.')}: ${i.code}`).join('; ')}. Respond with valid JSON only.`
+    const retryRaw = await callGeminiForIntent(geminiKey, userMessage, signal, retryNote)
     const retryResult = ParsedIntentSchema.safeParse(retryRaw)
     if (retryResult.success) return retryResult.data
 
