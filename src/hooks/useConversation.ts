@@ -258,7 +258,11 @@ export function useConversation() {
 
     } catch (err) {
       let message = 'Search timed out — try again.'
-      if (err instanceof ApifyError) {
+      if (err instanceof GeminiError && err.code === 'AUTH_ERROR') {
+        // H10: hashtag generation now throws on a bad Gemini key instead of silently
+        // falling back to template hashtags — surface it so the user fixes the key.
+        message = 'Gemini API key is invalid or missing. Add it in Settings.'
+      } else if (err instanceof ApifyError) {
         // Don't forward err.message — it may contain internal URLs or key fragments.
         message = 'Scraping error — try again or check your Apify key.'
       } else if (err instanceof TypeError && String(err.message).includes('fetch')) {

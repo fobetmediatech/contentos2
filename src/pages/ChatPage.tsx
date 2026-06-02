@@ -129,16 +129,18 @@ export function ChatPage() {
     }
   }, [status, analysisError, addMessage, setStatus])
 
-  // Discovery error → surface as chat message then reset
+  // Discovery error → surface as chat message then reset.
+  // M9: all read values are in deps (addMessage/setStatus/resetDiscovery are stable
+  // Zustand refs). resetDiscovery flips status off 'error' immediately, so the guard
+  // stops a re-fire — no duplicate error bubble.
   useEffect(() => {
     if (discoveryStatus === 'error') {
       const errMsg = discoveryError ?? 'Discovery failed — please try again.'
-      addMessage({ role: 'assistant', content: errMsg, timestamp: Date.now(), type: 'error' })
+      addMessage({ role: 'assistant', content: errMsg, type: 'error' })
       setStatus('chatting')
       resetDiscovery()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [discoveryStatus, resetDiscovery])
+  }, [discoveryStatus, discoveryError, addMessage, setStatus, resetDiscovery])
 
   // Auto-focus textarea when entering confirming state
   useEffect(() => {
@@ -295,9 +297,9 @@ export function ChatPage() {
             <div role="log" aria-live="polite" aria-label="Conversation" className="flex flex-col gap-4">
 
               {/* Conversation messages */}
-              {conversationMessages.map((message, i) => (
+              {conversationMessages.map((message) => (
                 <ChatMessage
-                  key={`${message.timestamp}-${i}`}
+                  key={message.id}
                   message={message}
                   onOptionSelect={confirmSeeds}
                   optionsDisabled={status !== 'confirming' || isConfirmingPending}

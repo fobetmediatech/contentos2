@@ -113,11 +113,22 @@ export async function pollRun(
   while (Date.now() < deadline) {
     if (signal?.aborted) throw new ApifyError('ABORTED', 'Request aborted', 0)
 
-    const res = await fetch(`${BASE_URL}/actor-runs/${runId}`, {
-      credentials: 'omit',
-      headers: { Authorization: `Bearer ${apiKey}` },
-      signal,
-    })
+    let res: Response
+    try {
+      res = await fetch(`${BASE_URL}/actor-runs/${runId}`, {
+        credentials: 'omit',
+        headers: { Authorization: `Bearer ${apiKey}` },
+        signal,
+      })
+    } catch (err) {
+      // M3: an abort during the in-flight poll rejects with a DOMException(AbortError),
+      // not an ApifyError — translate it so callers' `instanceof ApifyError` checks hold
+      // and a timeout surfaces as the right message instead of "unexpected error".
+      if (signal?.aborted || (err as { name?: string })?.name === 'AbortError') {
+        throw new ApifyError('ABORTED', 'Request aborted', 0)
+      }
+      throw err
+    }
 
     if (!res.ok) throw new ApifyError('POLL_FAILED', `Poll failed: ${res.status}`, res.status)
 

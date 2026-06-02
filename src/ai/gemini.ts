@@ -156,7 +156,7 @@ async function _callGeminiWithRetry<T>(
     if (res.status === 429 || status === 'RESOURCE_EXHAUSTED') {
       if (attempt < 3) {
         const backoff = Math.pow(2, attempt) * 1000 // 1s, 2s, 4s
-        await sleep(backoff)
+        await abortableSleep(backoff, signal)
         return _callGeminiWithRetry<T>(apiKey, prompt, schema, options, attempt + 1)
       }
       throw new GeminiError('RATE_LIMITED', 'Gemini API rate limit exceeded after 3 retries.', false)
@@ -576,6 +576,15 @@ export async function callGeminiConfirmReply(
 
 // ----- Utilities -----
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  // M8: a 429 backoff (up to 4s) must be interruptible — otherwise abort() during the
+  // wait still fires the retry into a dead signal. Reject on abort instead.
+  if (signal?.aborted) return Promise.reject(new GeminiError('UNKNOWN', 'Aborted during backoff', false))
+  return new Promise<void>((resolve, reject) => {
+    const t = setTimeout(resolve, ms)
+    signal?.addEventListener('abort', () => {
+      clearTimeout(t)
+      reject(new GeminiError('UNKNOWN', 'Aborted during backoff', false))
+    }, { once: true })
+  })
 }

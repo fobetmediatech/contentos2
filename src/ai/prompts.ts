@@ -369,14 +369,20 @@ Return JSON: { "question": "...", "options": ["...", "...", "..."] }`
  *
  * Output: strict JSON with no markdown.
  */
-export function buildIntentPrompt(userMessage: string): string {
+export function buildIntentPrompt(userMessage: string, retryNote?: string): string {
   const safeMessage = userMessage.replace(/[\n\r]/g, ' ').trim().slice(0, 500)
+  // M7: fully escape user text via JSON.stringify (quotes, backslashes, control chars)
+  // instead of escaping only double-quotes — consistent with buildConfirmReplyPrompt.
+  // The retry note is a FIXED system instruction kept OUTSIDE the user-message block;
+  // we never re-inject raw user content into a fresh prompt body.
+  const escaped = JSON.stringify(safeMessage).slice(1, -1)
+  const retrySection = retryNote ? `\nSYSTEM NOTE (retry): ${retryNote}\n` : ''
   return `You are an intent parser for a social media competitor analysis tool.
 
 The user types a natural-language request. Extract the intent as JSON.
 
-USER MESSAGE: "${safeMessage.replace(/"/g, '\\"')}"
-
+USER MESSAGE: "${escaped}"
+${retrySection}
 EXTRACT:
 - niche (required): what type of accounts they want to find, in 2-5 words (e.g. "food creators", "fitness influencers", "travel bloggers", "marketing educators")
 - location (optional): city or region they mentioned (e.g. "Mumbai", "New York", "India")

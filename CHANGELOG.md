@@ -27,6 +27,9 @@ Content-copilot overhaul: three research tools callable independently by natural
 - **Build + lint were red; now green.** 11 `tsc` errors (stale test fixtures) and 19 eslint errors fixed; 452 unit tests pass.
 - **Bare-handles dead-end.** Pasting handles without `@` (e.g. `nike, adidas`) set the confirming state without a parsed intent, so confirming dead-ended on "Session expired." The fast path now synthesizes a competitor intent.
 - Reel synthesis output is coerced/guarded so a missing or mistyped LLM field can't crash the results card.
+- **Local businesses under-counted (H8).** The location filter read a `businessAddress` field the scraper never populates (dead branch); it now also matches the target city in the business's display name (`fullName`), e.g. "Mumbai Pizza Co".
+- **Abort handling.** A fetch aborted mid-poll surfaces as a clean timeout instead of "unexpected error" (M3); the Gemini 429 backoff is now interruptible (M8); the discovery-error effect no longer reads stale values from missing deps (M9).
+- **Stable chat message keys (M13)** — every message carries a monotonic id, replacing the `timestamp-index` React key that collided on same-millisecond messages and churned as the 50-message window slid.
 
 ### Security
 
@@ -35,6 +38,9 @@ Content-copilot overhaul: three research tools callable independently by natural
 - DEV-gated the Apify request-payload debug log.
 - Cross-tab `storage` listener patches only present fields, so a partial write from another tab can no longer wipe the user's keys.
 - Reel-analysis failures surface a friendly message instead of the raw error.
+- **Gemini auth errors surface (H10).** The hashtag generator no longer silently falls back to template hashtags on a bad/expired key — it reports the key problem so the user can fix it.
+- **Consistent prompt escaping (M7).** Intent-prompt user text is escaped via `JSON.stringify` (not just double-quotes), and the schema-validation retry passes a fixed structural note instead of re-injecting the raw user message.
+- **Real key rotation (M10).** Apify keys rotate by a persisted incrementing index instead of `floor(Date.now()/1000)`, so a burst of parallel scrapes within one second no longer all hit the same key.
 
 ## [0.3.0.3] — 2026-06-01
 

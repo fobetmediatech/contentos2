@@ -13,7 +13,7 @@
  *   - Allow only word chars, spaces, commas, hyphens
  */
 
-import { geminiHeaders } from '../ai/gemini'
+import { GeminiError, geminiHeaders } from '../ai/gemini'
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta'
 const MODEL = import.meta.env.VITE_GEMINI_MODEL ?? 'gemini-2.5-flash'
@@ -138,6 +138,17 @@ Return ONLY a JSON array of strings. No # prefix. No explanation. No markdown.`
   })
 
   if (!res.ok) {
+    // H10: detect an auth failure and throw a typed GeminiError so generateHashtags
+    // re-throws it (instead of silently falling back to template hashtags, which
+    // leaves the user with worse results and no clue their key is bad).
+    const body = await res.json().catch(() => null)
+    const status: string = body?.error?.status ?? ''
+    const isAuth =
+      res.status === 401 ||
+      status === 'UNAUTHENTICATED' ||
+      status === 'PERMISSION_DENIED' ||
+      (body?.error?.message ?? '').toLowerCase().includes('api key')
+    if (isAuth) throw new GeminiError('AUTH_ERROR', 'Invalid Gemini API key. Check Settings.', false)
     throw new Error(`Gemini hashtag call failed: ${res.status}`)
   }
 
@@ -214,6 +225,9 @@ export async function generateHashtags(
       console.log(`[hashtagGenerator] Gemini returned ${hashtags.length} hashtags:`, hashtags)
       return { hashtags, fromAI: true }
     } catch (err) {
+      // H10: a bad/expired Gemini key is a real problem the user must fix — don't mask
+      // it as "worse hashtags". Re-throw auth errors; fall back only on transient/parse.
+      if (err instanceof GeminiError && err.code === 'AUTH_ERROR') throw err
       console.warn('[hashtagGenerator] Gemini call failed, using rule fallback:', err)
     }
   }
