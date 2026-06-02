@@ -10,14 +10,15 @@
  * Serialized via global pLimit(1) — one Apify run at a time (free-tier concurrency protection).
  */
 
-import pLimit from 'p-limit'
-import { startRun, pollRun, fetchDataset, ApifyError } from './apifyCore'
+import { startRun, pollRun, fetchDataset, ApifyError, apifyRunLimiter } from './apifyCore'
 import { pickAvailableKey } from './keyRotator'
 import { ACTORS, buildReelScraperInput } from './actors'
 import type { ReelData } from '../store/reelAnalysisStore'
 
-// Global p-limit(1): serializes ALL Apify runs — free-tier concurrency protection
-const apifyLimiter = pLimit(1)
+// Shared global p-limit(1): serializes ALL Apify runs (this scrape + the reel-video
+// scrape) — free-tier concurrency protection. Imported from apifyCore so every
+// caller queues on the SAME gate.
+const apifyLimiter = apifyRunLimiter
 
 // ----- Error class -----
 

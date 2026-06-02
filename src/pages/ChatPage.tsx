@@ -65,7 +65,7 @@ export function ChatPage() {
   const { isReady } = useKeysStore()
   const { sendMessage, confirmSeeds, isConfirmingPending, isConfirmingLocked, isAnswering } = useConversation()
   const { answerClarification, isPending: clarificationPending } = useCompetitorAnalysis()
-  const { startAnalysis: startReelAnalysis, activeHandles, creatorStates, synthesisStatus, synthesis, synthesisError, reset: resetReel } = useReelAnalysis()
+  const { startAnalysis: startReelAnalysis, startDeepReport, activeHandles, creatorStates, synthesisStatus, synthesis, synthesisError, reset: resetReel } = useReelAnalysis()
 
   const [inputText, setInputText] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -582,6 +582,7 @@ export function ChatPage() {
                       setInputText(text)
                       textareaRef.current?.focus()
                     }}
+                    onDeepReport={(handles) => void startDeepReport(handles)}
                   />
 
                   {isReelDone && (

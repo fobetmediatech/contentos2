@@ -3,10 +3,15 @@ import pLimit from 'p-limit'
 import { useReelAnalysisStore } from '../store/reelAnalysisStore'
 import { useKeysStore } from '../store/keysStore'
 import { scrapeTopReels, NoReelsError } from '../lib/reelScraper'
-import { analyzeReel, synthesizeNiche, buildPerCreatorSummary, computeBenchmarks } from '../lib/reelAnalyzer'
+import { scrapeReelVideos } from '../lib/reelVideoClient'
+import { analyzeReel, analyzeReelDeep, synthesizeNiche, buildPerCreatorSummary, computeBenchmarks } from '../lib/reelAnalyzer'
+import type { DeepReelStatus } from '../store/reelAnalysisStore'
 
 // Cap Gemini concurrency across all creators in a run.
 const geminiLimiter = pLimit(5)
+// Deep (multimodal) fn-call concurrency. Conservative: the Vercel function uses a
+// SINGLE Gemini key (no server-side rotation), so this caps concurrent Gemini uploads.
+const deepLimiter = pLimit(3)
 
 /**
  * useReelAnalysis — orchestrates per-creator reel scraping + hook analysis, then
@@ -33,6 +38,7 @@ export function useReelAnalysis() {
     synthesisError,
     setActiveHandles,
     setCreatorState,
+    setDeepReel,
     setSynthesis,
     setSynthesisError,
     setSynthesisStatus,
@@ -121,8 +127,85 @@ export function useReelAnalysis() {
     }
   }
 
+  // ---- Deep (multimodal) report pipeline — Phase-1 enrichment ----
+  // Mirrors runCreatorPipeline but inserts the batch video step and analyses each
+  // reel via the Vercel function. Leaves the quick startAnalysis path untouched.
+  async function runCreatorDeepPipeline(handle: string, signal: AbortSignal) {
+    try {
+      const reels = await scrapeTopReels(handle, 10, apifyKeys, signal)
+      if (signal.aborted) return
+
+      // Seed every reel as pending so the UI shows the full set immediately.
+      const seededStatus: Record<string, DeepReelStatus> = {}
+      for (const r of reels) seededStatus[r.shortCode] = 'pending'
+      setCreatorState(handle, { reels, status: 'analyzing', deepStatus: seededStatus, deepAnalyses: {} })
+
+      // ONE batch Apify run resolves all the stable video URLs (Issue 1: batch, not per-reel).
+      const videos = await scrapeReelVideos(reels.map((r) => r.url), apifyKeys, signal)
+      if (signal.aborted) return
+
+      // Per reel: no video -> skipped; else deep-analyze via the function (capped concurrency).
+      // R2: one reel failing/skipping never blocks the others — the run still completes.
+      await Promise.all(
+        reels.map((reel) =>
+          deepLimiter(async () => {
+            if (signal.aborted) return
+            const videoUrl = videos.get(reel.shortCode)
+            if (!videoUrl) {
+              setDeepReel(handle, reel.shortCode, { status: 'skipped' })
+              return
+            }
+            setDeepReel(handle, reel.shortCode, { status: 'analyzing' })
+            try {
+              const analysis = await analyzeReelDeep(reel, videoUrl, signal)
+              if (signal.aborted) return
+              setDeepReel(handle, reel.shortCode, { status: 'done', analysis })
+            } catch {
+              if (signal.aborted) return
+              setDeepReel(handle, reel.shortCode, { status: 'failed' })
+            }
+          }),
+        ),
+      )
+      if (signal.aborted) return
+      setCreatorState(handle, { status: 'done' })
+    } catch (err) {
+      if (signal.aborted) return
+      if (err instanceof NoReelsError) {
+        setCreatorState(handle, { status: 'no-reels', error: 'No recent Reels found.' })
+      } else {
+        setCreatorState(handle, {
+          status: 'failed',
+          error: 'Analysis failed — the account may be private, or try again.',
+        })
+      }
+    }
+  }
+
+  /**
+   * Run the DEEP multimodal report pipeline for a set of handles:
+   * cancel-prior -> reset -> seed -> per-creator (scrape list -> batch video ->
+   * per-reel deep analysis). Progressive: the store updates per reel as each finishes.
+   * Phase 1 stops here (no synthesis); Phase 2 adds the playbook + cross-profile report.
+   */
+  const startDeepReport = async (handles: string[]) => {
+    if (handles.length === 0) return
+    abortRef.current?.abort()
+    reset()
+    const controller = new AbortController()
+    abortRef.current = controller
+
+    setActiveHandles(handles)
+    handles.forEach((handle) =>
+      setCreatorState(handle, { handle, status: 'scraping', reels: [], analyses: {}, deepStatus: {}, deepAnalyses: {} }),
+    )
+
+    await Promise.allSettled(handles.map((handle) => runCreatorDeepPipeline(handle, controller.signal)))
+  }
+
   return {
     startAnalysis,
+    startDeepReport,
     activeHandles,
     creatorStates,
     synthesisStatus,

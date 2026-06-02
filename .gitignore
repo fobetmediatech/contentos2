@@ -4,6 +4,9 @@ node_modules/
 # Build output (Vercel builds this itself — don't commit)
 dist/
 
+# Throwaway feasibility spikes (not production code)
+spike/
+
 # Local env files (never commit actual keys)
 .env
 .env.local

@@ -10,11 +10,21 @@
  * apifyClient.ts (which would couple the two pipelines together).
  */
 
+import pLimit from 'p-limit'
 import { markKeyCooldown } from './keyRotator'
 
 export const BASE_URL = 'https://api.apify.com/v2'
 export const POLL_INTERVAL_MS = 2000   // 2 seconds between polls
 export const MAX_POLL_MS = 110_000     // 110s hard limit (leaves 10s buffer for 150s total timeout)
+
+/**
+ * Global Apify run limiter — serializes ALL Apify actor runs across the app
+ * (reel list scrape, reel VIDEO scrape, etc.) to one at a time. Free-tier
+ * concurrency protection: a single shared gate so two callers can't run two
+ * actors at once. Shared so reelScraper + reelVideoClient queue together rather
+ * than each holding its own pLimit(1) (which would allow 2 concurrent runs).
+ */
+export const apifyRunLimiter = pLimit(1)
 
 // ----- Error class (shared between both clients) -----
 

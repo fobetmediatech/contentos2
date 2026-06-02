@@ -1,7 +1,14 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { ProgressSteps } from './ProgressSteps'
-import type { CreatorAnalysisState, ReelData, ReelAnalysis, SynthesisOutput } from '../store/reelAnalysisStore'
+import type {
+  CreatorAnalysisState,
+  ReelData,
+  ReelAnalysis,
+  SynthesisOutput,
+  StoredDeepReelAnalysis,
+  DeepReelStatus,
+} from '../store/reelAnalysisStore'
 
 const REEL_STEPS = ['Scraping reels', 'Analyzing hooks', 'Done']
 
@@ -20,11 +27,33 @@ interface Props {
   /** Prefill the chat input — used by the "remix for my niche" button to hand off
    *  the winning patterns to the content copilot. */
   onSuggest?: (text: string) => void
+  /** Kick off the DEEP multimodal report (Gemini watches the videos) for these handles. */
+  onDeepReport?: (handles: string[]) => void
 }
 
-export function InlineReelResults({ handles, creatorStates, synthesisStatus, synthesis, synthesisError, onSuggest }: Props) {
+export function InlineReelResults({ handles, creatorStates, synthesisStatus, synthesis, synthesisError, onSuggest, onDeepReport }: Props) {
+  // A deep run is active once any creator has per-reel deep status seeded.
+  const anyDeep = handles.some((h) => {
+    const s = creatorStates[h]
+    return s?.deepStatus && Object.keys(s.deepStatus).length > 0
+  })
+  const anyRunning = handles.some((h) => {
+    const s = creatorStates[h]
+    return s?.status === 'scraping' || s?.status === 'analyzing'
+  })
+
   return (
     <div className="w-full mt-2">
+      {/* Deep-report CTA — offer to enrich the quick results with real video analysis. */}
+      {onDeepReport && handles.length > 0 && !anyDeep && (
+        <button
+          onClick={() => onDeepReport(handles)}
+          disabled={anyRunning}
+          className="mb-6 w-full px-4 py-3 text-sm font-semibold rounded-xl bg-[#A78BFA]/15 text-[#C4B5FD] border border-[#A78BFA]/30 hover:bg-[#A78BFA]/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          ✦ Generate deep report — watch the videos (real spoken + visual hooks)
+        </button>
+      )}
       {synthesisStatus === 'running' && <SynthesisLoadingCard />}
       {synthesisStatus === 'done' && synthesis && <SynthesisCard synthesis={synthesis} onSuggest={onSuggest} />}
       {synthesisStatus === 'failed' && (
@@ -141,6 +170,33 @@ function CreatorSection({ state }: { state: CreatorAnalysisState }) {
     )
   }
 
+  // Deep report: once per-reel deep status is seeded, render the deep grid (progressive —
+  // reels flip from analyzing -> done/failed/skipped as the function calls return).
+  const deepStatus = state.deepStatus ?? {}
+  if (Object.keys(deepStatus).length > 0) {
+    const doneCount = Object.values(deepStatus).filter((s) => s === 'done').length
+    return (
+      <div className="mb-8">
+        <h3 className="text-[#F5EDD6] font-medium mb-3">
+          @{state.handle}
+          <span className="text-[#7A6A54] text-sm ml-2 font-normal">
+            {doneCount}/{state.reels.length} reels enriched
+          </span>
+        </h3>
+        <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
+          {state.reels.map((reel) => (
+            <DeepReelCard
+              key={reel.shortCode}
+              reel={reel}
+              status={deepStatus[reel.shortCode] ?? 'pending'}
+              analysis={state.deepAnalyses?.[reel.shortCode]}
+            />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   if (state.status === 'scraping' || state.status === 'analyzing') {
     return (
       <div className="mb-6">
@@ -211,6 +267,83 @@ function ReelCard({ reel, analysis }: { reel: ReelData; analysis?: ReelAnalysis 
             <p><span className="text-[#7A6A54]">Psychology:</span> {analysis.psychologyTrigger}</p>
             <p><span className="text-[#7A6A54]">Template:</span> {analysis.replicationTemplate}</p>
           </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ----- Deep (multimodal) reel rendering -----
+
+const DEEP_BADGES: Record<DeepReelStatus, { label: string; cls: string }> = {
+  pending: { label: 'queued', cls: 'bg-[#7A6A54]/15 text-[#7A6A54] border-[#7A6A54]/30' },
+  fetching: { label: 'fetching', cls: 'bg-[#E07B3A]/15 text-[#E07B3A] border-[#E07B3A]/30' },
+  analyzing: { label: 'analyzing…', cls: 'bg-[#E07B3A]/15 text-[#E07B3A] border-[#E07B3A]/30 animate-pulse' },
+  done: { label: 'done', cls: 'bg-[#A78BFA]/15 text-[#A78BFA] border-[#A78BFA]/30' },
+  failed: { label: 'failed', cls: 'bg-danger/15 text-danger border-danger/30' },
+  skipped: { label: 'no video', cls: 'bg-[#7A6A54]/15 text-[#7A6A54] border-[#7A6A54]/30' },
+}
+
+/**
+ * Deep per-reel card — renders the multimodal analysis (real spoken + visual hook,
+ * grounded in the video) with a live per-reel status badge. AI-generated content uses
+ * the violet tint per DESIGN.md.
+ */
+function DeepReelCard({ reel, status, analysis }: { reel: ReelData; status: DeepReelStatus; analysis?: StoredDeepReelAnalysis }) {
+  const [showFull, setShowFull] = useState(false)
+  const badge = DEEP_BADGES[status]
+
+  return (
+    <div className="bg-[#2C2218] border border-[rgba(245,237,214,0.08)] rounded-xl overflow-hidden flex">
+      {reel.displayUrl && (
+        <img
+          src={reel.displayUrl}
+          alt="Reel thumbnail"
+          className="w-24 shrink-0 aspect-square object-cover bg-[#1A1410]"
+          onError={(e) => { e.currentTarget.style.display = 'none' }}
+        />
+      )}
+      <div className="p-3 flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs text-[#7A6A54] font-mono">{formatViews(reel.videoViewCount)} views</p>
+          <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full border ${badge.cls}`}>{badge.label}</span>
+        </div>
+
+        {analysis ? (
+          <>
+            {analysis.spokenHookVerbatim && (
+              <p className="text-xs text-[#F5EDD6] mt-1.5 leading-snug">🎙 "{analysis.spokenHookVerbatim}"</p>
+            )}
+            {analysis.visualOpening && (
+              <p className="text-xs text-[#C4A882] mt-1 leading-snug">{analysis.visualOpening}</p>
+            )}
+            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+              <span className="text-xs px-2 py-0.5 rounded-full bg-[#A78BFA]/10 text-[#A78BFA] border border-[#A78BFA]/20">
+                {analysis.hookArchetype}
+              </span>
+              <span className="text-xs text-[#7A6A54] font-mono">hook {analysis.hookScore}/10</span>
+            </div>
+            <button onClick={() => setShowFull((f) => !f)} className="text-xs text-[#E07B3A] mt-2 hover:underline">
+              {showFull ? 'Hide breakdown' : 'Show breakdown'}
+            </button>
+            {showFull && (
+              <div className="mt-2 text-xs text-[#C4A882] space-y-1">
+                <p><span className="text-[#7A6A54]">Hook:</span> {analysis.hookBreakdown}</p>
+                <p><span className="text-[#7A6A54]">Pacing:</span> {analysis.pacingEditing}</p>
+                <p><span className="text-[#7A6A54]">Audio:</span> {analysis.audioStrategy}</p>
+                <p><span className="text-[#7A6A54]">Retention:</span> {analysis.retentionMechanism}</p>
+                <p><span className="text-[#7A6A54]">Template:</span> {analysis.replicationTemplate}</p>
+                <p><span className="text-[#A78BFA]">Replicate:</span> {analysis.whatToReplicate}</p>
+                <p><span className="text-danger">Avoid:</span> {analysis.whatToAvoid}</p>
+              </div>
+            )}
+          </>
+        ) : status === 'failed' ? (
+          <p className="text-xs text-danger mt-1.5">Couldn't analyze this reel.</p>
+        ) : status === 'skipped' ? (
+          <p className="text-xs text-[#7A6A54] mt-1.5">No downloadable video.</p>
+        ) : (
+          <p className="text-xs text-[#7A6A54] mt-1.5 italic">Watching the video…</p>
         )}
       </div>
     </div>
