@@ -30,6 +30,7 @@ Content-copilot overhaul: three research tools callable independently by natural
 - **Local businesses under-counted (H8).** The location filter read a `businessAddress` field the scraper never populates (dead branch); it now also matches the target city in the business's display name (`fullName`), e.g. "Mumbai Pizza Co".
 - **Abort handling.** A fetch aborted mid-poll surfaces as a clean timeout instead of "unexpected error" (M3); the Gemini 429 backoff is now interruptible (M8); the discovery-error effect no longer reads stale values from missing deps (M9).
 - **Stable chat message keys (M13)** — every message carries a monotonic id, replacing the `timestamp-index` React key that collided on same-millisecond messages and churned as the 50-message window slid.
+- **Per-request abort isolation (M1/M2).** `useConversation` no longer multiplexes one `AbortController` (and shared nudge/timeout refs) across parse/discovery/confirm/content — each request tracks its own controller and timers in a `Set`, so a rapid second send or a discovery→competitor redirect can't abort the wrong request or cancel another run's 90s timeout. Unmount aborts the whole set.
 
 ### Security
 

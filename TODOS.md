@@ -229,12 +229,11 @@ _38 tasks total (12 CEO-phase + 2 pre-L1 gates + 11 design-phase + 13 eng-phase)
 
 Shipped in v0.4.0.0: green baseline + security hardening, reel/hooks as an independent NL tool, the content copilot, and deeper HookMap analysis. The full repo audit lives in `.planning/audit-findings.md` (42 findings: 3 Critical + 11 High + 16 Medium + 12 Low). Criticals C1–C3 + H9/H11 + the build/lint baseline shipped in this release. Remaining, deferred:
 
-**Closed in v0.4.0.0** (cleanup increment): AUDIT-H8 (business filter now matches the city in `fullName` instead of a dead `businessAddress` branch), AUDIT-H10 (Gemini auth errors surface instead of silent template fallback), AUDIT-M7 (`JSON.stringify` escaping + structural-only retry note), AUDIT-M10 (persisted-index key rotation), plus M3 (abort → `ABORTED` in `pollRun`), M8 (abort-aware Gemini backoff), M9 (discovery-error effect deps), M13 (stable monotonic message keys).
+**Closed in v0.4.0.0** (cleanup increment): AUDIT-H8 (business filter now matches the city in `fullName` instead of a dead `businessAddress` branch), AUDIT-H10 (Gemini auth errors surface instead of silent template fallback), AUDIT-M7 (`JSON.stringify` escaping + structural-only retry note), AUDIT-M10 (persisted-index key rotation), plus M1/M2 (per-request abort + timer isolation in `useConversation`), M3 (abort → `ABORTED` in `pollRun`), M8 (abort-aware Gemini backoff), M9 (discovery-error effect deps), M13 (stable monotonic message keys).
 
 Still open:
 
 - [ ] **AUDIT-H6** · Orphaned `/results` + `/discover/results` pages — results render inline now, nothing navigates there. Decide: wire navigation or delete them + the `resultsPath` registry field. **Priority: Medium.**
-- [ ] **AUDIT-M1 / M2** · `useConversation` multiplexes one `discoveryAbortRef` across parse/discovery/confirm/follow-up and shares nudge/timeout refs — a rapid second send can abort the wrong request or orphan a timer. Give each concern its own ref. **Priority: Medium.**
 - [ ] **AUDIT-M11 / M12 / M14 / M15** · Clarification fallback copy divergence (M11); `confirmErrorCount` lock has no auto-recovery (M12); pipeline-switch recursion has no depth guard (M14); discovery final pool slices unsorted lists (M15). **Priority: Medium/Low.**
 - [ ] **SHIP-P3** · After a reel run, status returns to `'chatting'`, so a typed follow-up re-runs intent parsing rather than the content copilot. The "remix" button is the intended grounded handoff, and a content-classified follow-up still gets reel grounding — so minor. **Priority: Low.**
 - [ ] **AUDIT-DOCS** · `TODOS.md` (this file), `AGENTS.md`, `CLAUDE.md` reference deleted `InputPage`/`ProgressPage` and the abandoned indigo/Inter/slate design system. Prune stale references. **Priority: Low.**

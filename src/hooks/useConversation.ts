@@ -19,10 +19,11 @@
  *   selecting DISCOVERY_REDIRECT_TO_COMPETITOR. This calls runCompetitorDiscovery()
  *   which re-scrapes seeds from hashtags — never passes an empty handles array.
  *
- * AbortController lifecycle (T20):
- *   A new controller is created for each sendMessage() call.
- *   The ref is stored so unmounting ChatPage can abort in-flight discovery.
- *   useEffect cleanup calls controller.abort() on unmount.
+ * AbortController lifecycle (M2):
+ *   Each in-flight request (parse, discovery, confirm-reply, content) gets its OWN
+ *   AbortController, tracked in a Set — requests no longer share one ref (which could
+ *   abort the wrong one). useEffect cleanup aborts the whole set on unmount; pending
+ *   timers are tracked the same way so a concurrent run can't clobber them (M1).
  *
  * Clarification loop guard (T21):
  *   After 1 needsClarification turn, we force progression to avoid an infinite loop.
@@ -161,28 +162,53 @@ export function useConversation() {
   const [confirmErrorCount, setConfirmErrorCount] = useState(0)
   const confirmErrorCountRef = useRef(0)
 
-  // T20: AbortController ref for discovery — cleaned up on unmount
-  const discoveryAbortRef = useRef<AbortController | null>(null)
-
-  // Soft-nudge timer ref — cleared on abort or completion
-  const nudgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // Hard-abort timeout ref — stored as ref so unmount cleanup can clear it.
-  // A bare local variable inside runCompetitorDiscovery is unreachable from the
-  // useEffect cleanup; storing it here guarantees it is always cancelled on unmount
-  // even if the async function is mid-flight.
-  const discoveryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // M2: every in-flight request gets its OWN AbortController, tracked here. The old
+  // single discoveryAbortRef multiplexed parse / discovery / confirm-reply / follow-up
+  // through one slot, so a new request (or unmount) could abort a DIFFERENT request than
+  // intended. We isolate per request and abort the whole set on unmount.
+  const activeControllers = useRef<Set<AbortController>>(new Set())
+  // M1: pending timers, tracked so each invocation clears its OWN. The old shared
+  // nudge/hard-abort refs let a second runCompetitorDiscovery overwrite the first's
+  // timers — the first's finally then cleared the SECOND's, cancelling its 90s timeout.
+  const activeTimers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set())
 
   // D6: single-flight guard — prevents Enter + button click firing sendMessage
   // twice in the same render frame before status transitions to 'discovering'.
   const isSendingRef = useRef(false)
 
-  // T20: cleanup on unmount
+  // Create + track an AbortController; release (untrack) it when the op settles.
+  const trackController = (): AbortController => {
+    const c = new AbortController()
+    activeControllers.current.add(c)
+    return c
+  }
+  const releaseController = (c: AbortController): void => {
+    activeControllers.current.delete(c)
+  }
+  // setTimeout that auto-untracks when it fires; clearTracked() cancels + untracks early.
+  const trackTimeout = (fn: () => void, ms: number): ReturnType<typeof setTimeout> => {
+    const t = setTimeout(() => {
+      activeTimers.current.delete(t)
+      fn()
+    }, ms)
+    activeTimers.current.add(t)
+    return t
+  }
+  const clearTracked = (t: ReturnType<typeof setTimeout> | null): void => {
+    if (t === null) return
+    clearTimeout(t)
+    activeTimers.current.delete(t)
+  }
+
+  // Cleanup on unmount: abort every in-flight request and clear every pending timer.
   useEffect(() => {
+    const controllers = activeControllers.current
+    const timers = activeTimers.current
     return () => {
-      discoveryAbortRef.current?.abort()
-      if (nudgeTimerRef.current) clearTimeout(nudgeTimerRef.current)
-      if (discoveryTimeoutRef.current) clearTimeout(discoveryTimeoutRef.current)
+      controllers.forEach((c) => c.abort())
+      controllers.clear()
+      timers.forEach((t) => clearTimeout(t))
+      timers.clear()
     }
   }, [])
 
@@ -200,15 +226,12 @@ export function useConversation() {
     geminiKey: string,
     apifyKey: string,
   ) => {
-    const discoveryController = new AbortController()
-    // Overwrites the parseController stored by sendMessage() — safe because
-    // runCompetitorDiscovery() is always called after parseIntent() has resolved.
-    discoveryAbortRef.current = discoveryController
-    // Store in ref so the useEffect cleanup (and re-runs) can cancel it on unmount.
-    discoveryTimeoutRef.current = setTimeout(() => discoveryController.abort(), DISCOVERY_TIMEOUT_MS)
-
-    // T9: soft nudge at 60s
-    nudgeTimerRef.current = setTimeout(() => {
+    // M2: own controller (tracked for unmount-abort, not a shared ref).
+    const discoveryController = trackController()
+    // M1: timers are LOCAL to this invocation — a concurrent run can't overwrite them,
+    // and the finally clears exactly these two (the set also clears them on unmount).
+    const hardTimeout = trackTimeout(() => discoveryController.abort(), DISCOVERY_TIMEOUT_MS)
+    const nudgeTimer = trackTimeout(() => {
       if (store.status === 'discovering') {
         store.addMessage({
           role: 'assistant',
@@ -274,9 +297,10 @@ export function useConversation() {
       store.addMessage({ role: 'assistant', content: message, type: 'error' })
       store.setStatus('chatting')
     } finally {
-      // Always clear both timers — whether the discovery succeeded, failed, or was aborted.
-      if (discoveryTimeoutRef.current) clearTimeout(discoveryTimeoutRef.current)
-      if (nudgeTimerRef.current) clearTimeout(nudgeTimerRef.current)
+      // Clear exactly THIS invocation's timers + release its controller (M1/M2).
+      clearTracked(hardTimeout)
+      clearTracked(nudgeTimer)
+      releaseController(discoveryController)
     }
   }
 
@@ -369,10 +393,10 @@ export function useConversation() {
       store.addMessage({ role: 'assistant', content: GEMINI_KEY_MISSING_MSG, type: 'error' })
       return
     }
-    // Abort any in-flight content/confirm call before starting a new one.
-    discoveryAbortRef.current?.abort()
-    const controller = new AbortController()
-    discoveryAbortRef.current = controller
+    // M2: own tracked controller. sendMessage's single-flight (isSendingRef) already
+    // prevents a second content turn from overlapping this one, so there's no prior
+    // call to abort — the set handles unmount.
+    const controller = trackController()
     setIsAnswering(true)
     try {
       const reply = await callGeminiContent(geminiKey, userMessage, buildContentContext(), controller.signal)
@@ -386,8 +410,8 @@ export function useConversation() {
       }
       store.addMessage({ role: 'assistant', content, type: 'error' })
     } finally {
-      // Only clear the flag if this call is still the active one (not superseded).
-      if (discoveryAbortRef.current === controller) setIsAnswering(false)
+      releaseController(controller)
+      setIsAnswering(false)
     }
   }
 
@@ -468,15 +492,20 @@ export function useConversation() {
           return
         }
 
-        // 3. Gemini fallback — maps free text to the closest option string
-        const confirmController = new AbortController()
-        discoveryAbortRef.current = confirmController  // allow abort on navigate/unmount (AE4)
-        const mappedOption = await callGeminiConfirmReply(
-          geminiKey,
-          safeText,
-          availableOptions,
-          confirmController.signal,
-        )
+        // 3. Gemini fallback — maps free text to the closest option string.
+        // M2: own tracked controller, released once the call settles.
+        const confirmController = trackController()
+        let mappedOption: string
+        try {
+          mappedOption = await callGeminiConfirmReply(
+            geminiKey,
+            safeText,
+            availableOptions,
+            confirmController.signal,
+          )
+        } finally {
+          releaseController(confirmController)
+        }
         store.addMessage({
           role: 'assistant',
           content: `Got it — running with "${mappedOption}"…`,
@@ -627,11 +656,8 @@ export function useConversation() {
       // Step 1: parse intent
       store.setStatus('discovering')  // show typing indicator immediately
 
-      // Sequential guarantee: parseIntent() is fully awaited before
-      // runCompetitorDiscovery() runs and overwrites this ref with its own
-      // discoveryController — the parse phase is always complete by then.
-      const parseController = new AbortController()
-      discoveryAbortRef.current = parseController
+      // M2: own tracked controller for the parse phase, released when it settles.
+      const parseController = trackController()
 
       let intent: ParsedIntent
       try {
@@ -657,6 +683,8 @@ export function useConversation() {
         })
         store.setStatus('chatting')
         return
+      } finally {
+        releaseController(parseController)
       }
 
       // Handle needsClarification (T21: max 1 turn)
