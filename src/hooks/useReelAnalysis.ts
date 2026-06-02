@@ -99,7 +99,7 @@ export function useReelAnalysis() {
    * Run the full reel-analysis pipeline for a set of handles:
    * cancel-prior → reset → seed states → scrape+analyze all (parallel) → synthesize.
    */
-  const startAnalysis = async (handles: string[]) => {
+  const startAnalysis = async (handles: string[], externalSignal?: AbortSignal) => {
     if (handles.length === 0) return
 
     // New run: cancel any in-flight run, reset state, seed fresh.
@@ -107,6 +107,14 @@ export function useReelAnalysis() {
     reset()
     const controller = new AbortController()
     abortRef.current = controller
+
+    // Let the agent loop (T8) supersede this run via an external signal. Reel already
+    // returns silently on abort (per-creator `if (signal.aborted) return`), so forwarding
+    // the external abort onto this run's controller is all that's needed — no error painted.
+    if (externalSignal) {
+      if (externalSignal.aborted) controller.abort()
+      else externalSignal.addEventListener('abort', () => controller.abort(), { once: true })
+    }
 
     setActiveHandles(handles)
     handles.forEach((handle) =>

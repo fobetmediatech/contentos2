@@ -57,10 +57,12 @@ export class GeminiError extends Error {
 // ----- Raw Gemini response types -----
 
 interface GeminiPart {
-  text: string
+  text?: string
   /** Gemini 2.5 Flash returns thought parts (internal reasoning) alongside output.
    *  Filter these out — they are not the JSON response. */
   thought?: boolean
+  /** Present when the model calls a tool (function-calling mode). */
+  functionCall?: { name: string; args?: Record<string, unknown> }
 }
 
 interface GeminiCandidate {
@@ -78,6 +80,46 @@ interface GeminiResponse {
     message: string
     status: string
   }
+}
+
+// ----- Shared low-level helpers (used by every Gemini call) -----
+
+/** True if a non-OK Gemini response is a rate-limit (429 / RESOURCE_EXHAUSTED). */
+function isRateLimited(httpStatus: number, body: GeminiResponse): boolean {
+  return httpStatus === 429 || body.error?.status === 'RESOURCE_EXHAUSTED'
+}
+
+/**
+ * Map a non-OK, NON-429 Gemini response to a GeminiError. 429 is control flow
+ * (retry vs throw) and is handled by each caller BEFORE calling this. Messages are
+ * preserved verbatim from the original inline handlers so existing tests still pass.
+ */
+function mapGeminiHttpError(httpStatus: number, body: GeminiResponse): GeminiError {
+  const status = body.error?.status ?? ''
+  const msg = body.error?.message ?? ''
+  if (httpStatus === 400 || status === 'INVALID_ARGUMENT') {
+    return new GeminiError('INVALID_PROMPT', `Bad prompt: ${msg}`, false)
+  }
+  if (httpStatus === 500 || status === 'INTERNAL') {
+    return new GeminiError('INTERNAL_ERROR', 'Gemini internal error. Try again in a moment.', true)
+  }
+  if (httpStatus === 503 || status === 'UNAVAILABLE') {
+    return new GeminiError('UNAVAILABLE', 'Gemini service temporarily unavailable.', true)
+  }
+  const isAuth =
+    httpStatus === 401 ||
+    status === 'UNAUTHENTICATED' ||
+    status === 'PERMISSION_DENIED' ||
+    msg.toLowerCase().includes('api key')
+  if (isAuth) {
+    return new GeminiError('AUTH_ERROR', 'Invalid Gemini API key. Check Settings.', false)
+  }
+  return new GeminiError('UNKNOWN', `Unexpected Gemini error: ${httpStatus} ${msg}`, true)
+}
+
+/** Join a candidate's text parts, filtering out 2.5-Flash thought parts. */
+function joinThoughtFilteredText(parts: GeminiPart[] | undefined): string {
+  return (parts ?? []).filter((p) => !p.thought).map((p) => p.text ?? '').join('')
 }
 
 // ----- Generic schema-constrained Gemini call with retry -----
@@ -162,29 +204,8 @@ async function _callGeminiWithRetry<T>(
       throw new GeminiError('RATE_LIMITED', 'Gemini API rate limit exceeded after 3 retries.', false)
     }
 
-    if (res.status === 400 || status === 'INVALID_ARGUMENT') {
-      throw new GeminiError('INVALID_PROMPT', `Bad prompt: ${body.error?.message}`, false)
-    }
-
-    if (res.status === 500 || status === 'INTERNAL') {
-      throw new GeminiError('INTERNAL_ERROR', 'Gemini internal error. Try again in a moment.', true)
-    }
-
-    if (res.status === 503 || status === 'UNAVAILABLE') {
-      throw new GeminiError('UNAVAILABLE', 'Gemini service temporarily unavailable.', true)
-    }
-
-    // Auth error detection (mirrors callGeminiFollowUp pattern)
-    const isAuthError =
-      res.status === 401 ||
-      status === 'UNAUTHENTICATED' ||
-      status === 'PERMISSION_DENIED' ||
-      (body.error?.message ?? '').toLowerCase().includes('api key')
-    if (isAuthError) {
-      throw new GeminiError('AUTH_ERROR', 'Invalid Gemini API key. Check Settings.', false)
-    }
-
-    throw new GeminiError('UNKNOWN', `Unexpected Gemini error: ${res.status} ${body.error?.message}`, true)
+    // Non-429 errors map uniformly (shared with callGeminiContent + callGeminiWithTools).
+    throw mapGeminiHttpError(res.status, body)
   }
 
   const json = (await res.json()) as GeminiResponse
@@ -473,19 +494,10 @@ export async function callGeminiContent(
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as GeminiResponse
-    const status = body.error?.status ?? ''
-    if (res.status === 429 || status === 'RESOURCE_EXHAUSTED') {
+    if (isRateLimited(res.status, body)) {
       throw new GeminiError('RATE_LIMITED', 'Gemini rate limit hit — wait a moment and try again.', false)
     }
-    const isAuthError =
-      res.status === 401 ||
-      status === 'UNAUTHENTICATED' ||
-      status === 'PERMISSION_DENIED' ||
-      (body.error?.message ?? '').toLowerCase().includes('api key')
-    if (isAuthError) {
-      throw new GeminiError('AUTH_ERROR', 'Invalid Gemini API key. Check Settings.', false)
-    }
-    throw new GeminiError('UNKNOWN', `Follow-up failed: ${res.status}`, true)
+    throw mapGeminiHttpError(res.status, body)
   }
 
   const json = (await res.json()) as GeminiResponse
@@ -494,12 +506,7 @@ export async function callGeminiContent(
     throw new GeminiError('SAFETY_BLOCK', 'Gemini blocked the follow-up response.', false)
   }
 
-  const candidate = json.candidates[0]
-  const text = (candidate.content?.parts ?? [])
-    .filter((p) => !p.thought)
-    .map((p) => p.text ?? '')
-    .join('')
-    .trim()
+  const text = joinThoughtFilteredText(json.candidates[0].content?.parts).trim()
 
   if (!text) {
     throw new GeminiError('SAFETY_BLOCK', 'Gemini returned an empty follow-up response.', false)
@@ -572,6 +579,102 @@ export async function callGeminiConfirmReply(
 
   console.warn('[callGeminiConfirmReply] returning fallback option — Gemini returned unrecognised selection')
   return availableOptions[0]
+}
+
+// ----- Function-calling primitive (Phase 1b agent loop) -----
+
+/** One tool the model may call. `parameters` is a JSON-Schema object (Gemini's OpenAPI subset). */
+export interface GeminiFunctionDeclaration {
+  name: string
+  description: string
+  parameters: Record<string, unknown>
+}
+
+/** A conversation turn in Gemini's `contents` format. */
+export interface GeminiTurn {
+  role: 'user' | 'model'
+  parts: GeminiPart[]
+}
+
+/** Result of one agent turn: the model either CALLS a tool or REPLIES with text. */
+export type GeminiToolResult =
+  | { kind: 'call'; name: string; args: Record<string, unknown> }
+  | { kind: 'text'; text: string }
+
+/**
+ * Function-calling turn for the Phase-1b agent loop. Sends the conversation + the
+ * available tools; the model decides to CALL a tool or REPLY with text (e.g. a
+ * clarifying question). Returns a discriminated result — the loop dispatches calls
+ * and renders text.
+ *
+ * Transport only: arg-schema validation + the malformed-call repair loop live in the
+ * agent loop (T8), where per-tool Zod schemas exist. 429 is retried with abort-aware
+ * backoff (max 3); other HTTP errors map via the shared mapGeminiHttpError.
+ */
+export async function callGeminiWithTools(
+  apiKey: string,
+  contents: GeminiTurn[],
+  tools: GeminiFunctionDeclaration[],
+  options?: { temperature?: number; thinkingBudget?: number; signal?: AbortSignal; systemInstruction?: string },
+): Promise<GeminiToolResult> {
+  return _callGeminiWithToolsRetry(apiKey, contents, tools, options, 0)
+}
+
+async function _callGeminiWithToolsRetry(
+  apiKey: string,
+  contents: GeminiTurn[],
+  tools: GeminiFunctionDeclaration[],
+  options: Parameters<typeof callGeminiWithTools>[3],
+  attempt: number,
+): Promise<GeminiToolResult> {
+  const { temperature = 0.3, thinkingBudget, signal, systemInstruction } = options ?? {}
+  const url = `${GEMINI_BASE}/models/${MODEL}:generateContent`
+
+  const generationConfig: Record<string, unknown> = { temperature }
+  if (thinkingBudget !== undefined) generationConfig.thinkingConfig = { thinkingBudget }
+
+  const reqBody: Record<string, unknown> = {
+    contents,
+    tools: [{ functionDeclarations: tools }],
+    generationConfig,
+  }
+  if (systemInstruction) reqBody.systemInstruction = { parts: [{ text: systemInstruction }] }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: geminiHeaders(apiKey),
+    body: JSON.stringify(reqBody),
+    signal,
+  })
+
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({ error: { code: res.status, message: res.statusText, status: 'UNKNOWN' } }))) as GeminiResponse
+    if (isRateLimited(res.status, body)) {
+      if (attempt < 3) {
+        await abortableSleep(Math.pow(2, attempt) * 1000, signal) // 1s, 2s, 4s
+        return _callGeminiWithToolsRetry(apiKey, contents, tools, options, attempt + 1)
+      }
+      throw new GeminiError('RATE_LIMITED', 'Gemini API rate limit exceeded after 3 retries.', false)
+    }
+    throw mapGeminiHttpError(res.status, body)
+  }
+
+  const json = (await res.json()) as GeminiResponse
+  if (!json.candidates || json.candidates.length === 0) {
+    throw new GeminiError('SAFETY_BLOCK', 'Gemini blocked the response (content policy).', false)
+  }
+
+  const parts = json.candidates[0].content?.parts ?? []
+  // Prefer a tool call if the model emitted one; otherwise fall back to text.
+  const call = parts.find((p) => p.functionCall)?.functionCall
+  if (call?.name) {
+    return { kind: 'call', name: call.name, args: call.args ?? {} }
+  }
+  const text = joinThoughtFilteredText(parts).trim()
+  if (!text) {
+    throw new GeminiError('SAFETY_BLOCK', 'Gemini returned neither a tool call nor text.', false)
+  }
+  return { kind: 'text', text }
 }
 
 // ----- Utilities -----

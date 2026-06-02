@@ -28,6 +28,8 @@ import { analyzeCompetitors, generateClarificationQuestion } from '../ai/gemini'
 import { markKeyCooldown } from '../lib/keyRotator'
 import { ApifyError } from '../lib/apifyClient'
 import { GeminiError } from '../ai/gemini'
+import { friendlyApify, friendlyGemini } from '../lib/errorMessages'
+import { linkAbort } from '../lib/abortControl'
 
 const TIMEOUT_MS = 150_000
 const MIN_COMPETITOR_RESULTS = 8
@@ -40,13 +42,13 @@ export function useCompetitorAnalysis() {
   // ── Phase 1: Discovery + clarification question generation ────────────────
 
   const discoverMutation = useMutation({
-    mutationFn: async (params: AnalysisParams) => {
+    mutationFn: async ({ params, externalSignal }: { params: AnalysisParams; externalSignal?: AbortSignal }) => {
       const apifyKey = pickKey()
       if (!apifyKey) throw new Error('No Apify keys available. All keys are in cooldown.')
       if (!geminiKey?.trim()) throw new Error('Gemini API key is not configured.')
 
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS)
+      // linkAbort: internal 150s timeout + an optional external (agent-loop) signal.
+      const abort = linkAbort(TIMEOUT_MS, externalSignal)
 
       try {
         startAnalysis(params)
@@ -56,7 +58,7 @@ export function useCompetitorAnalysis() {
         const { inputProfiles, candidateProfiles } = await discoverCompetitors(
           params.handles,
           apifyKey,
-          controller.signal,
+          abort.signal,
           params.depth,
         )
 
@@ -80,7 +82,7 @@ export function useCompetitorAnalysis() {
               referenceProfile,
               candidateProfiles,
               params.nicheContext,
-              controller.signal,
+              abort.signal,
             )
           : { question: 'Which direction best fits your client?', options: ['Exact niche match', 'Broader category'] }
 
@@ -90,12 +92,14 @@ export function useCompetitorAnalysis() {
         return { inputProfiles, candidateProfiles }
 
       } catch (err) {
+        // Superseded by the agent loop (latest-wins steer) — silent, not a failure.
+        if (abort.wasSuperseded()) return undefined
         console.error('[analysis:discover] failed:', err)
-        const message = buildErrorMessage(err, controller, apifyKey, pickKey)
+        const message = buildErrorMessage(err, abort.signal, apifyKey, pickKey)
         setError(message)
         throw new Error(message, { cause: err })
       } finally {
-        clearTimeout(timeout)
+        abort.cleanup()
       }
     },
     retry: 0,
@@ -105,15 +109,14 @@ export function useCompetitorAnalysis() {
   // ── Phase 2: Ranking with clarification answer injected ───────────────────
 
   const analyzeMutation = useMutation({
-    mutationFn: async ({ answer, nicheContext }: { answer: string; nicheContext: string }) => {
+    mutationFn: async ({ answer, nicheContext, externalSignal }: { answer: string; nicheContext: string; externalSignal?: AbortSignal }) => {
       if (!geminiKey?.trim()) throw new Error('Gemini API key is not configured.')
 
       // Read pendingDiscovery synchronously from store at call time — avoids stale closure.
       const discovery = useAnalysisStore.getState().pendingDiscovery
       if (!discovery) throw new Error('No discovery data available — please restart the analysis.')
 
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS)
+      const abort = linkAbort(TIMEOUT_MS, externalSignal)
 
       try {
         setStep(5)
@@ -125,7 +128,7 @@ export function useCompetitorAnalysis() {
           geminiKey,
           inputProfiles,
           candidateProfiles,
-          controller.signal,
+          abort.signal,
           nicheContext || undefined,
           answer || undefined,
         )
@@ -139,7 +142,7 @@ export function useCompetitorAnalysis() {
             geminiKey,
             inputProfiles,
             candidateProfiles,
-            controller.signal,
+            abort.signal,
           )
         }
 
@@ -157,12 +160,13 @@ export function useCompetitorAnalysis() {
         return output
 
       } catch (err) {
+        if (abort.wasSuperseded()) return undefined
         console.error('[analysis:analyze] failed:', err)
-        const message = buildErrorMessage(err, controller, null, () => null)
+        const message = buildErrorMessage(err, abort.signal, null, () => null)
         setError(message)
         throw new Error(message, { cause: err })
       } finally {
-        clearTimeout(timeout)
+        abort.cleanup()
       }
     },
     retry: 0,
@@ -172,8 +176,8 @@ export function useCompetitorAnalysis() {
   // ── Public API ─────────────────────────────────────────────────────────────
 
   /** Kick off Phase 1 (discovery + question generation). */
-  const analyze = (params: AnalysisParams) => {
-    discoverMutation.mutate(params)
+  const analyze = (params: AnalysisParams, externalSignal?: AbortSignal) => {
+    discoverMutation.mutate({ params, externalSignal })
   }
 
   /**
@@ -181,11 +185,11 @@ export function useCompetitorAnalysis() {
    * Stores the answer and immediately fires Phase 2 (ranking).
    * Pass an empty string to proceed without refinement ("Looks right, proceed as-is").
    */
-  const answerClarification = (answer: string) => {
+  const answerClarification = (answer: string, externalSignal?: AbortSignal) => {
     storeAnswerClarification(answer)
     const currentParams = useAnalysisStore.getState().params
     if (!currentParams) return
-    analyzeMutation.mutate({ answer, nicheContext: currentParams.nicheContext })
+    analyzeMutation.mutate({ answer, nicheContext: currentParams.nicheContext, externalSignal })
   }
 
   return {
@@ -199,37 +203,17 @@ export function useCompetitorAnalysis() {
 
 // ── Error message builder ──────────────────────────────────────────────────
 
-// SECURITY (C2/H11): fixed, friendly messages keyed by error code. Raw error.message
-// is never shown to the user — Apify bodies can echo request internals/handles.
-const APIFY_FRIENDLY: Record<string, string> = {
-  RUN_START_FAILED: 'Scraping failed to start — try again or check your Apify key.',
-  POLL_FAILED: 'Lost connection to Apify while scraping — try again.',
-  RUN_FAILED: 'The scrape failed on Apify — try again with different handles.',
-  RUN_TIMEOUT: 'Scraping took too long on Apify — try again with fewer handles.',
-  RUN_ABORTED: 'The scrape was stopped — try again.',
-  POLL_TIMEOUT: 'Scraping took too long — try again with fewer handles.',
-  DATASET_FETCH_FAILED: "Couldn't fetch results from Apify — try again.",
-  ABORTED: 'Scraping was cancelled.',
-}
-
-const GEMINI_FRIENDLY: Record<string, string> = {
-  AUTH_ERROR: 'Gemini API key is invalid or missing — update it in Settings.',
-  RATE_LIMITED: 'Gemini rate limit hit — wait a few seconds and try again.',
-  SAFETY_BLOCK: 'The AI declined this request — try different inputs.',
-  INVALID_PROMPT: 'AI analysis failed on the input — try again.',
-  PARSE_ERROR: 'The AI returned an unexpected response — try again.',
-  INTERNAL_ERROR: 'Gemini had an internal error — try again in a moment.',
-  UNAVAILABLE: 'Gemini is temporarily unavailable — try again shortly.',
-  UNKNOWN: 'AI analysis failed — try again.',
-}
+// Friendly, code-keyed error strings now live in lib/errorMessages.ts (shared with the
+// Phase-1b agent-loop tool-failure handling). SECURITY (C2/H11): never forward raw
+// error.message — Apify/Gemini bodies can echo request internals/handles.
 
 function buildErrorMessage(
   err: unknown,
-  controller: AbortController,
+  signal: AbortSignal,
   apifyKey: string | null,
   pickKey: () => string | null,
 ): string {
-  if (controller.signal.aborted) {
+  if (signal.aborted) {
     return 'Analysis timed out after 150 seconds. Try with fewer handles or check your Apify key.'
   }
   if (err instanceof ApifyError) {
@@ -241,10 +225,10 @@ function buildErrorMessage(
     }
     // SECURITY (C2): map error code → fixed friendly string. Never forward
     // err.message — it can carry the raw Apify response body.
-    return APIFY_FRIENDLY[err.code] ?? 'Scraping failed — try again or check your Apify key.'
+    return friendlyApify(err.code)
   }
   if (err instanceof GeminiError) {
-    return GEMINI_FRIENDLY[err.code] ?? 'AI analysis failed — try again.'
+    return friendlyGemini(err.code)
   }
   if (err instanceof TypeError && (err.message === 'Failed to fetch' || err.message.includes('fetch'))) {
     return `Network blocked — could not reach Apify API. If you're using Brave browser, click the Brave shield icon in the address bar and turn off "Block trackers & ads" for localhost, then try again.`
