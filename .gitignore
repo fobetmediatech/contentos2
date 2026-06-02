@@ -19,3 +19,4 @@ spike/
 # gstack
 .claude/skills/gstack/
 .gstack/
+.vercel

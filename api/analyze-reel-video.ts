@@ -14,12 +14,15 @@
  * unit-tests with a mocked global fetch (no vercel dev needed).
  */
 
-import { buildDeepReelPrompt, DEEP_REEL_SCHEMA, type DeepReelAnalysis } from '../src/ai/prompts/deepReelAnalysis'
-import { HOOK_ARCHETYPES } from '../src/ai/prompts/reelAnalysis'
-import { analyzeVideoWithGemini, GeminiFilesError } from './_lib/geminiFiles'
+// Self-contained: NO runtime imports from ../src (the function is ESM; cross-boundary
+// src specifiers don't resolve at runtime). .js extensions are required by Node ESM.
+import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { buildDeepReelPrompt, DEEP_REEL_SCHEMA, HOOK_ARCHETYPES, type DeepReelAnalysis } from './_lib/deepReelPrompt.js'
+import { analyzeVideoWithGemini, GeminiFilesError } from './_lib/geminiFiles.js'
 
-// Vercel: run on Node (NOT edge) — we fetch binary video + drive the Files API.
-export const config = { runtime: 'nodejs', maxDuration: 120 }
+// Node serverless (the default for @vercel/node) — we fetch binary video + drive the
+// Files API. One reel is well under the 120s budget.
+export const config = { maxDuration: 120 }
 
 // Phase-1 SSRF allowlist: the client only ever sends the stable Apify-hosted URL.
 const ALLOWED_HOSTS = new Set(['api.apify.com'])
@@ -65,7 +68,7 @@ export async function analyzeReelVideo(input: AnalyzeReelInput, geminiApiKey: st
   if (!/^(video\/|application\/octet-stream)/i.test(contentType)) {
     throw new HandlerError(`Unexpected content-type: ${contentType}`, 422)
   }
-  const buf = new Uint8Array(await res.arrayBuffer())
+  const buf = await res.arrayBuffer()
   if (buf.byteLength === 0) throw new HandlerError('Empty video body', 502)
   if (buf.byteLength > MAX_VIDEO_BYTES) throw new HandlerError('Video too large', 413)
 
@@ -120,43 +123,56 @@ export function coerceDeepAnalysis(raw: unknown): DeepReelAnalysis {
   }
 }
 
-const json = (body: unknown, status = 200): Response =>
-  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+/** Parse the request body whether Vercel pre-parsed JSON (object) or left it a string. */
+function parseBody(raw: unknown): Partial<AnalyzeReelInput> {
+  if (raw && typeof raw === 'object') return raw as Partial<AnalyzeReelInput>
+  if (typeof raw === 'string' && raw.length > 0) return JSON.parse(raw) as Partial<AnalyzeReelInput>
+  return {}
+}
 
 /**
- * Vercel handler — gate (method + shared secret), parse, delegate to the core,
- * map errors to clean statuses. Never echoes the Gemini key or raw upstream bodies.
+ * Vercel Node handler (req, res) — gate (method + shared secret), parse, delegate to the
+ * core, map errors to clean statuses. Never echoes the Gemini key or raw upstream bodies.
  */
-export default async function handler(req: Request): Promise<Response> {
-  if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
+export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' })
+    return
+  }
 
   // Gate: require the shared secret IF configured (enforced in prod where the env is set).
   const expectedSecret = process.env.REEL_FN_SECRET
-  if (expectedSecret) {
-    if (req.headers.get('x-reel-secret') !== expectedSecret) return json({ error: 'Forbidden' }, 403)
+  if (expectedSecret && req.headers['x-reel-secret'] !== expectedSecret) {
+    res.status(403).json({ error: 'Forbidden' })
+    return
   }
 
   const geminiApiKey = process.env.GEMINI_API_KEY
-  if (!geminiApiKey) return json({ error: 'Server not configured' }, 500)
+  if (!geminiApiKey) {
+    res.status(500).json({ error: 'Server not configured' })
+    return
+  }
 
   let input: AnalyzeReelInput
   try {
-    const body = (await req.json()) as Partial<AnalyzeReelInput>
-    if (!body?.downloadedVideoUrl || !body?.shortCode) {
-      return json({ error: 'downloadedVideoUrl and shortCode are required' }, 400)
+    const body = parseBody(req.body)
+    if (!body.downloadedVideoUrl || !body.shortCode) {
+      res.status(400).json({ error: 'downloadedVideoUrl and shortCode are required' })
+      return
     }
     input = { downloadedVideoUrl: body.downloadedVideoUrl, shortCode: body.shortCode, caption: body.caption }
   } catch {
-    return json({ error: 'Invalid JSON body' }, 400)
+    res.status(400).json({ error: 'Invalid JSON body' })
+    return
   }
 
   try {
     const analysis = await analyzeReelVideo(input, geminiApiKey)
-    return json({ shortCode: input.shortCode, analysis })
+    res.status(200).json({ shortCode: input.shortCode, analysis })
   } catch (err) {
     const status = err instanceof HandlerError || err instanceof GeminiFilesError ? err.status : 500
     // Map to a stable, non-leaky message for the client (which marks the reel failed/skipped).
     const message = err instanceof HandlerError || err instanceof GeminiFilesError ? err.message : 'Analysis failed'
-    return json({ error: message }, status)
+    res.status(status).json({ error: message })
   }
 }

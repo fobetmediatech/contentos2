@@ -14,7 +14,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const analyzeVideoMock = vi.hoisted(() => vi.fn())
 
-vi.mock('./_lib/geminiFiles', () => ({
+vi.mock('./_lib/geminiFiles.js', () => ({
   analyzeVideoWithGemini: analyzeVideoMock,
   GeminiFilesError: class GeminiFilesError extends Error {
     status: number
@@ -119,51 +119,76 @@ describe('coerceDeepAnalysis', () => {
 })
 
 // --------------------------------------------------------------------------
-describe('handler', () => {
-  const post = (body: unknown, headers: Record<string, string> = {}) =>
-    new Request('https://app.test/api/analyze-reel-video', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', ...headers },
-      body: JSON.stringify(body),
-    })
+// Vercel (req, res) handler. Mock minimal req/res; req.body is the pre-parsed object
+// (Vercel parses application/json), matching production.
+interface MockRes {
+  statusCode: number
+  body: unknown
+  status: (s: number) => MockRes
+  json: (b: unknown) => MockRes
+}
+function mockRes(): MockRes {
+  const res: MockRes = {
+    statusCode: 200,
+    body: undefined,
+    status(s) {
+      this.statusCode = s
+      return this
+    },
+    json(b) {
+      this.body = b
+      return this
+    },
+  }
+  return res
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockReq = (method: string, body?: unknown, headers: Record<string, string> = {}): any => ({ method, body, headers })
 
+describe('handler', () => {
   it('405 on non-POST', async () => {
-    const res = await handler(new Request('https://app.test/api/analyze-reel-video', { method: 'GET' }))
-    expect(res.status).toBe(405)
+    const res = mockRes()
+    await handler(mockReq('GET'), res as never)
+    expect(res.statusCode).toBe(405)
   })
 
   it('403 when the shared secret is configured but missing/wrong', async () => {
     process.env.REEL_FN_SECRET = 'shh'
     vi.stubGlobal('fetch', videoFetch())
-    const res = await handler(post({ downloadedVideoUrl: APIFY_URL, shortCode: 'a' }))
-    expect(res.status).toBe(403)
+    const res = mockRes()
+    await handler(mockReq('POST', { downloadedVideoUrl: APIFY_URL, shortCode: 'a' }), res as never)
+    expect(res.statusCode).toBe(403)
   })
 
   it('400 on missing required fields', async () => {
     vi.stubGlobal('fetch', videoFetch())
-    const res = await handler(post({ shortCode: 'a' }))
-    expect(res.status).toBe(400)
+    const res = mockRes()
+    await handler(mockReq('POST', { shortCode: 'a' }), res as never)
+    expect(res.statusCode).toBe(400)
   })
 
   it('500 when GEMINI_API_KEY is not configured', async () => {
     delete process.env.GEMINI_API_KEY
-    const res = await handler(post({ downloadedVideoUrl: APIFY_URL, shortCode: 'a' }))
-    expect(res.status).toBe(500)
+    const res = mockRes()
+    await handler(mockReq('POST', { downloadedVideoUrl: APIFY_URL, shortCode: 'a' }), res as never)
+    expect(res.statusCode).toBe(500)
   })
 
   it('200 happy path returns shortCode + analysis', async () => {
     vi.stubGlobal('fetch', videoFetch())
-    const res = await handler(post({ downloadedVideoUrl: APIFY_URL, shortCode: 'DX1', caption: 'hi' }))
-    expect(res.status).toBe(200)
-    const body = (await res.json()) as { shortCode: string; analysis: { hookArchetype: string } }
+    const res = mockRes()
+    await handler(mockReq('POST', { downloadedVideoUrl: APIFY_URL, shortCode: 'DX1', caption: 'hi' }), res as never)
+    expect(res.statusCode).toBe(200)
+    const body = res.body as { shortCode: string; analysis: { hookArchetype: string } }
     expect(body.shortCode).toBe('DX1')
     expect(body.analysis.hookArchetype).toBe('Curiosity gap')
   })
 
   it('maps a core HandlerError to its status', async () => {
     vi.stubGlobal('fetch', videoFetch())
-    const res = await handler(post({ downloadedVideoUrl: 'https://evil.example.com/x.mp4', shortCode: 'a' }))
-    expect(res.status).toBe(400)
+    const res = mockRes()
+    await handler(mockReq('POST', { downloadedVideoUrl: 'https://evil.example.com/x.mp4', shortCode: 'a' }), res as never)
+    expect(res.statusCode).toBe(400)
     expect(HandlerError).toBeDefined()
   })
 })

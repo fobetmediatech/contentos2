@@ -32,7 +32,7 @@ interface FileResource {
 }
 
 export interface AnalyzeVideoArgs {
-  bytes: Uint8Array
+  bytes: ArrayBuffer
   mimeType: string
   apiKey: string
   prompt: string
@@ -88,7 +88,9 @@ export async function analyzeVideoWithGemini(args: AnalyzeVideoArgs): Promise<An
       'X-Goog-Upload-Offset': '0',
       'X-Goog-Upload-Command': 'upload, finalize',
     },
-    body: bytes,
+    // Wrap in a Blob: a Uint8Array isn't a typed BodyInit under the merged DOM+node libs,
+    // though undici accepts it at runtime. Blob is byte-identical and properly typed.
+    body: new Blob([bytes]),
   })
   if (!up.ok) throw new GeminiFilesError(`Files API upload failed (${up.status})`, up.status)
   let file = ((await up.json()) as { file: FileResource }).file
