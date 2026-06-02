@@ -18,20 +18,38 @@ const mocks = vi.hoisted(() => {
     scrapeTopReels: vi.fn(),
     scrapeReelVideos: vi.fn(),
     analyzeReelDeep: vi.fn(),
+    getCachedDeep: vi.fn(),
+    setCachedDeep: vi.fn(),
     NoReelsErrorMock,
   }
 })
 
 vi.mock('../lib/reelScraper', () => ({ scrapeTopReels: mocks.scrapeTopReels, NoReelsError: mocks.NoReelsErrorMock }))
 vi.mock('../lib/reelVideoClient', () => ({ scrapeReelVideos: mocks.scrapeReelVideos }))
-// startDeepReport only calls analyzeReelDeep from reelAnalyzer; stub the rest so the
-// real module (and its Gemini client import) never loads in the test.
+vi.mock('../lib/deepReelCache', () => ({ getCachedDeep: mocks.getCachedDeep, setCachedDeep: mocks.setCachedDeep }))
+// startDeepReport calls analyzeReelDeep + the report builders from reelAnalyzer; stub
+// them all so the real module (and its Gemini client import) never loads in the test.
+// The report step runs after creators finish — stubbed to a no-op so the per-creator
+// status assertions are what's under test (report rendering is covered elsewhere).
 vi.mock('../lib/reelAnalyzer', () => ({
   analyzeReel: vi.fn(),
   analyzeReelDeep: mocks.analyzeReelDeep,
   synthesizeNiche: vi.fn(),
   buildPerCreatorSummary: vi.fn(),
   computeBenchmarks: vi.fn(),
+  buildDeepPlaybook: vi.fn(() => ({
+    handle: '',
+    reelCount: 0,
+    archetypeDistribution: [],
+    dominantArchetype: '',
+    avgHookScore: 0,
+    medianViews: 0,
+    consistencyScore: 0,
+    signatureTemplate: '',
+    topExemplar: null,
+  })),
+  buildDeepReportTable: vi.fn(() => ({ archetypeDistribution: [], comparison: [], topExemplars: [] })),
+  synthesizeDeepReport: vi.fn(async () => ({ whoIsWinning: '', nicheFormula: '', gaps: [], replicate: [], avoid: [], test: [] })),
 }))
 
 import { useReelAnalysis } from './useReelAnalysis'
@@ -72,6 +90,9 @@ const deepResult = (): StoredDeepReelAnalysis => ({
 beforeEach(() => {
   vi.clearAllMocks()
   useReelAnalysisStore.getState().reset()
+  // Default: cache miss (clearAllMocks keeps implementations, so re-establish each test).
+  mocks.getCachedDeep.mockResolvedValue(undefined)
+  mocks.setCachedDeep.mockResolvedValue(undefined)
 })
 afterEach(cleanup)
 
@@ -129,5 +150,16 @@ describe('useReelAnalysis.startDeepReport — R2 partial-failure', () => {
 
     const states = await run(['nike'])
     expect(states.nike.status).toBe('no-reels')
+  })
+
+  it('cache hit: restores from cache, skips the video scrape AND the analysis (R3 free re-run)', async () => {
+    mocks.scrapeTopReels.mockResolvedValue([reel('a')])
+    mocks.getCachedDeep.mockResolvedValue(deepResult()) // cached
+
+    const states = await run(['nike'])
+    expect(states.nike.status).toBe('done')
+    expect(states.nike.deepStatus).toEqual({ a: 'done' })
+    expect(mocks.scrapeReelVideos).not.toHaveBeenCalled()
+    expect(mocks.analyzeReelDeep).not.toHaveBeenCalled()
   })
 })

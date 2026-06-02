@@ -9,6 +9,8 @@ import type {
   StoredDeepReelAnalysis,
   DeepReelStatus,
 } from '../store/reelAnalysisStore'
+import type { DeepNicheReport } from '../ai/prompts/deepReelAnalysis'
+import { copyToClipboard, downloadMarkdown, formatDeepReportMarkdown } from '../shared/utils/export'
 
 const REEL_STEPS = ['Scraping reels', 'Analyzing hooks', 'Done']
 
@@ -29,9 +31,12 @@ interface Props {
   onSuggest?: (text: string) => void
   /** Kick off the DEEP multimodal report (Gemini watches the videos) for these handles. */
   onDeepReport?: (handles: string[]) => void
+  /** Cross-profile niche report (Phase 2) — rendered above the per-creator sections. */
+  deepReport?: DeepNicheReport | null
+  deepReportStatus?: 'idle' | 'running' | 'done' | 'failed'
 }
 
-export function InlineReelResults({ handles, creatorStates, synthesisStatus, synthesis, synthesisError, onSuggest, onDeepReport }: Props) {
+export function InlineReelResults({ handles, creatorStates, synthesisStatus, synthesis, synthesisError, onSuggest, onDeepReport, deepReport, deepReportStatus }: Props) {
   // A deep run is active once any creator has per-reel deep status seeded.
   const anyDeep = handles.some((h) => {
     const s = creatorStates[h]
@@ -44,6 +49,18 @@ export function InlineReelResults({ handles, creatorStates, synthesisStatus, syn
 
   return (
     <div className="w-full mt-2">
+      {/* Cross-profile niche report (Phase 2) — the headline deliverable, above everything. */}
+      {deepReportStatus === 'running' && (
+        <div className="mb-8 px-5 py-5 bg-[#1E1A2E] border border-[#A78BFA]/20 rounded-xl animate-pulse">
+          <p className="text-sm text-[#A78BFA]">Synthesizing the niche report…</p>
+        </div>
+      )}
+      {deepReportStatus === 'done' && deepReport && <DeepReportCard report={deepReport} />}
+      {deepReportStatus === 'failed' && (
+        <div className="mb-8 px-4 py-3 bg-[#2C1818] border border-danger/30 rounded-xl text-sm text-danger">
+          Niche report synthesis failed — the per-creator analyses below are still available.
+        </div>
+      )}
       {/* Deep-report CTA — offer to enrich the quick results with real video analysis. */}
       {onDeepReport && handles.length > 0 && !anyDeep && (
         <button
@@ -345,6 +362,104 @@ function DeepReelCard({ reel, status, analysis }: { reel: ReelData; status: Deep
         ) : (
           <p className="text-xs text-[#7A6A54] mt-1.5 italic">Watching the video…</p>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ----- Cross-profile niche report (Phase 2) -----
+
+function ReportList({ title, items, titleClass }: { title: string; items: string[]; titleClass: string }) {
+  if (items.length === 0) return null
+  return (
+    <div>
+      <h3 className={`text-xs font-semibold uppercase tracking-wide mb-2 ${titleClass}`}>{title}</h3>
+      <ul className="space-y-1.5">
+        {items.map((t, i) => (
+          <li key={i} className="text-sm text-[#C4A882] leading-snug">{t}</li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/**
+ * The client-ready niche report: who's winning + the winning formula (Gemini synthesis),
+ * the cross-creator archetype mix + comparison table + top exemplars (code-computed), and
+ * actionable replicate/avoid/test/gaps. AI-synthesized copy uses the violet tint.
+ */
+function DeepReportCard({ report }: { report: DeepNicheReport }) {
+  return (
+    <div className="mb-8 px-5 py-5 bg-[#1E1A2E] border border-[#A78BFA]/20 rounded-xl">
+      <h2 className="text-lg font-semibold text-[#F5EDD6] mb-1">Niche report</h2>
+      {report.whoIsWinning && <p className="text-sm text-[#C4A882] mb-3 leading-snug">{report.whoIsWinning}</p>}
+
+      {report.nicheFormula && (
+        <div className="mb-4 px-3 py-2 bg-[#13101E] rounded-lg">
+          <p className="text-xs text-[#A78BFA] uppercase tracking-wide mb-1">Winning formula</p>
+          <p className="text-sm text-[#F5EDD6] leading-snug">{report.nicheFormula}</p>
+        </div>
+      )}
+
+      {report.archetypeDistribution.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-4">
+          {report.archetypeDistribution.slice(0, 6).map((d, i) => (
+            <div key={i} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#A78BFA]/10 border border-[#A78BFA]/20 text-sm text-[#A78BFA]">
+              <span>{d.archetype}</span>
+              <span className="text-[#A78BFA]/60 text-xs">×{d.count}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {report.comparison.length > 0 && (
+        <div className="mb-4 overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-[#7A6A54] text-left">
+                <th className="py-1 pr-3 font-medium">Creator</th>
+                <th className="py-1 pr-3 font-medium">Reels</th>
+                <th className="py-1 pr-3 font-medium">Avg hook</th>
+                <th className="py-1 pr-3 font-medium">Median views</th>
+                <th className="py-1 font-medium">Dominant</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.comparison.map((r) => (
+                <tr key={r.handle} className="border-t border-[rgba(245,237,214,0.06)]">
+                  <td className="py-1 pr-3 text-[#F5EDD6]">@{r.handle}</td>
+                  <td className="py-1 pr-3 font-mono text-[#C4A882]">{r.reelCount}</td>
+                  <td className="py-1 pr-3 font-mono text-[#C4A882]">{r.avgHookScore}</td>
+                  <td className="py-1 pr-3 font-mono text-[#C4A882]">{formatViews(r.medianViews)}</td>
+                  <td className="py-1 text-[#C4A882]">{r.dominantArchetype}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-4">
+        <ReportList title="Replicate" items={report.replicate} titleClass="text-[#A78BFA]" />
+        <ReportList title="Avoid" items={report.avoid} titleClass="text-danger" />
+        <ReportList title="Test" items={report.test} titleClass="text-[#E07B3A]" />
+        <ReportList title="Gaps / opportunities" items={report.gaps} titleClass="text-[#C4A882]" />
+      </div>
+
+      {/* Export — the client-ready deliverable. */}
+      <div className="flex gap-2 mt-5">
+        <button
+          onClick={() => void copyToClipboard(formatDeepReportMarkdown(report, report.comparison.map((c) => c.handle)))}
+          className="px-3 py-2 text-xs font-semibold rounded-lg bg-[#A78BFA]/15 text-[#C4B5FD] border border-[#A78BFA]/30 hover:bg-[#A78BFA]/25 transition-colors"
+        >
+          Copy report (markdown)
+        </button>
+        <button
+          onClick={() => downloadMarkdown(formatDeepReportMarkdown(report, report.comparison.map((c) => c.handle)), 'niche-report.md')}
+          className="px-3 py-2 text-xs font-semibold rounded-lg bg-[#2C2218] text-[#C4A882] border border-[rgba(245,237,214,0.12)] hover:border-[#E07B3A]/40 transition-colors"
+        >
+          Download .md
+        </button>
       </div>
     </div>
   )

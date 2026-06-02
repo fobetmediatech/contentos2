@@ -13,6 +13,7 @@ import { InlineReelResults } from './InlineReelResults'
 // unmount between tests manually or the DOM accumulates across cases.
 afterEach(cleanup)
 import type { CreatorAnalysisState, ReelData, ReelAnalysis, StoredDeepReelAnalysis } from '../store/reelAnalysisStore'
+import type { DeepNicheReport } from '../ai/prompts/deepReelAnalysis'
 
 const reel = (shortCode: string, views = 1000): ReelData => ({
   shortCode,
@@ -101,5 +102,42 @@ describe('InlineReelResults — deep report', () => {
     }
     render(<InlineReelResults handles={['nike']} creatorStates={creatorStates} {...base} onDeepReport={vi.fn()} />)
     expect(screen.queryByText(/Generate deep report/)).toBeNull()
+  })
+})
+
+const report = (): DeepNicheReport => ({
+  whoIsWinning: 'nike dominates with bold-claim hooks',
+  nicheFormula: 'Open with a contrarian claim, pay it off in 3 seconds',
+  gaps: ['underused: question hooks'],
+  replicate: ['cold-open mid-action'],
+  avoid: ['slow logo intros'],
+  test: ['try a 1s pattern interrupt'],
+  archetypeDistribution: [
+    { archetype: 'Bold claim', count: 5 },
+    { archetype: 'Curiosity gap', count: 3 },
+  ],
+  comparison: [{ handle: 'nike', reelCount: 8, avgHookScore: 7.5, medianViews: 12000, dominantArchetype: 'Bold claim' }],
+  topExemplars: [{ handle: 'nike', shortCode: 'x', hookArchetype: 'Bold claim', hookScore: 9, spokenHookVerbatim: 'stop', visualOpening: 'a fast zoom', views: 50000 }],
+})
+
+describe('InlineReelResults — niche report (Phase 2)', () => {
+  it('renders the report card: who-winning, formula, comparison row, replicate', () => {
+    render(<InlineReelResults handles={[]} creatorStates={{}} {...base} deepReportStatus="done" deepReport={report()} />)
+    expect(screen.getByText('Niche report')).toBeTruthy()
+    expect(screen.getByText(/nike dominates/)).toBeTruthy()
+    expect(screen.getByText(/Open with a contrarian claim/)).toBeTruthy()
+    expect(screen.getByText('@nike')).toBeTruthy()
+    expect(screen.getByText('cold-open mid-action')).toBeTruthy()
+    expect(screen.getAllByText('Bold claim').length).toBeGreaterThan(0)
+  })
+
+  it('shows the running state', () => {
+    render(<InlineReelResults handles={[]} creatorStates={{}} {...base} deepReportStatus="running" deepReport={null} />)
+    expect(screen.getByText(/Synthesizing the niche report/)).toBeTruthy()
+  })
+
+  it('shows the failed state', () => {
+    render(<InlineReelResults handles={[]} creatorStates={{}} {...base} deepReportStatus="failed" deepReport={null} />)
+    expect(screen.getByText(/Niche report synthesis failed/)).toBeTruthy()
   })
 })

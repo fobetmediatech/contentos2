@@ -12,7 +12,15 @@
 
 import { callGeminiWithSchema } from '../ai/gemini'
 import { buildReelAnalysisPrompt, REEL_ANALYSIS_SCHEMA, buildSynthesisPrompt, SYNTHESIS_SCHEMA } from '../ai/prompts/reelAnalysis'
-import type { DeepReelAnalysis } from '../ai/prompts/deepReelAnalysis'
+import { buildDeepReportPrompt, DEEP_REPORT_SCHEMA } from '../ai/prompts/deepReelAnalysis'
+import type {
+  DeepReelAnalysis,
+  DeepCreatorPlaybook,
+  DeepReportSynthesis,
+  DeepReportComparisonRow,
+  DeepReportExemplar,
+  DeepNicheReport,
+} from '../ai/prompts/deepReelAnalysis'
 import type {
   ReelData,
   ReelAnalysis,
@@ -231,6 +239,146 @@ export function computeBenchmarks(reels: ReelData[]): SynthesisOutput['benchmark
     medianViews: computeMedian(reels.map((r) => r.videoViewCount)),
     likesViewsRatio: totalViews > 0 ? totalLikes / totalViews : 0,
     commentsLikesRatio: totalLikes > 0 ? totalComments / totalLikes : 0,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// buildDeepPlaybook (Phase 2)
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a per-creator deep playbook from the video-grounded DeepReelAnalysis set.
+ *
+ * Pure / code-computed (no LLM): archetype distribution, dominant + secondary archetype,
+ * mean hook score, median views, a consistency score (how concentrated the archetype mix
+ * is), and the standout exemplar (highest hookScore, views as tiebreak) whose
+ * replicationTemplate becomes the creator's signature template.
+ *
+ * @param deepAnalyses  shortCode -> StoredDeepReelAnalysis (only `done` reels)
+ * @param reels         the creator's reels (for view counts, keyed by shortCode)
+ */
+export function buildDeepPlaybook(
+  handle: string,
+  deepAnalyses: Record<string, StoredDeepReelAnalysis>,
+  reels: ReelData[],
+): DeepCreatorPlaybook {
+  const entries = Object.entries(deepAnalyses)
+  const reelCount = entries.length
+  const viewsByShort = new Map(reels.map((r) => [r.shortCode, r.videoViewCount]))
+
+  // Archetype frequency, sorted desc.
+  const freq: Record<string, number> = {}
+  for (const [, a] of entries) freq[a.hookArchetype] = (freq[a.hookArchetype] ?? 0) + 1
+  const archetypeDistribution = Object.entries(freq)
+    .map(([archetype, count]) => ({ archetype, count }))
+    .sort((x, y) => y.count - x.count)
+
+  const dominantArchetype = archetypeDistribution[0]?.archetype ?? ''
+  const secondaryArchetype =
+    archetypeDistribution.length >= 2 && archetypeDistribution[1].archetype !== dominantArchetype
+      ? archetypeDistribution[1].archetype
+      : undefined
+
+  const avgHookScore = reelCount > 0 ? entries.reduce((s, [, a]) => s + a.hookScore, 0) / reelCount : 0
+  const consistencyScore = reelCount > 0 ? (archetypeDistribution[0]?.count ?? 0) / reelCount : 0
+  const medianViews = computeMedian(entries.map(([sc]) => viewsByShort.get(sc) ?? 0))
+
+  // Standout exemplar: highest hookScore, views as tiebreak.
+  let topExemplar: DeepCreatorPlaybook['topExemplar'] = null
+  let bestRank = -1
+  for (const [shortCode, a] of entries) {
+    const views = viewsByShort.get(shortCode) ?? 0
+    const rank = a.hookScore * 1e12 + views
+    if (rank > bestRank) {
+      bestRank = rank
+      topExemplar = {
+        shortCode,
+        hookArchetype: a.hookArchetype,
+        hookScore: a.hookScore,
+        spokenHookVerbatim: a.spokenHookVerbatim,
+        visualOpening: a.visualOpening,
+        views,
+      }
+    }
+  }
+  const signatureTemplate = topExemplar ? deepAnalyses[topExemplar.shortCode].replicationTemplate : ''
+
+  return {
+    handle,
+    reelCount,
+    archetypeDistribution,
+    dominantArchetype,
+    secondaryArchetype,
+    avgHookScore,
+    medianViews,
+    consistencyScore,
+    signatureTemplate,
+    topExemplar,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Cross-profile niche report (Phase 2)
+// ---------------------------------------------------------------------------
+
+type DeepReportTable = Pick<DeepNicheReport, 'archetypeDistribution' | 'comparison' | 'topExemplars'>
+
+/**
+ * Code-computed half of the niche report: cross-creator archetype distribution, a
+ * comparison row per creator, and the top exemplar reels across all creators (sorted
+ * by hookScore, views as tiebreak). Deterministic — no LLM (mirrors computeBenchmarks).
+ */
+export function buildDeepReportTable(playbooks: DeepCreatorPlaybook[]): DeepReportTable {
+  const freq: Record<string, number> = {}
+  for (const p of playbooks) {
+    for (const d of p.archetypeDistribution) freq[d.archetype] = (freq[d.archetype] ?? 0) + d.count
+  }
+  const archetypeDistribution = Object.entries(freq)
+    .map(([archetype, count]) => ({ archetype, count }))
+    .sort((a, b) => b.count - a.count)
+
+  const comparison: DeepReportComparisonRow[] = playbooks.map((p) => ({
+    handle: p.handle,
+    reelCount: p.reelCount,
+    avgHookScore: Number(p.avgHookScore.toFixed(1)),
+    medianViews: p.medianViews,
+    dominantArchetype: p.dominantArchetype,
+  }))
+
+  const topExemplars: DeepReportExemplar[] = []
+  for (const p of playbooks) {
+    if (p.topExemplar) topExemplars.push({ handle: p.handle, ...p.topExemplar })
+  }
+  topExemplars.sort((a, b) => b.hookScore * 1e12 + b.views - (a.hookScore * 1e12 + a.views))
+
+  return { archetypeDistribution, comparison, topExemplars }
+}
+
+/**
+ * Gemini-synthesized half of the niche report: who's winning + why, the niche's winning
+ * formula, gaps, and actionable replicate/avoid/test. Coerces/guards the LLM output
+ * (mirrors synthesizeNiche) so a missing/mistyped field can't crash the report.
+ */
+export async function synthesizeDeepReport(
+  playbooks: DeepCreatorPlaybook[],
+  geminiKey: string,
+  signal?: AbortSignal,
+): Promise<DeepReportSynthesis> {
+  const raw = await callGeminiWithSchema<Partial<DeepReportSynthesis>>(
+    geminiKey,
+    buildDeepReportPrompt(playbooks),
+    DEEP_REPORT_SCHEMA,
+    { temperature: 0.4, signal },
+  )
+  const str = (v: unknown): string => (typeof v === 'string' ? v : '')
+  const arr = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])
+  return {
+    whoIsWinning: str(raw.whoIsWinning),
+    nicheFormula: str(raw.nicheFormula),
+    gaps: arr(raw.gaps),
+    replicate: arr(raw.replicate),
+    avoid: arr(raw.avoid),
+    test: arr(raw.test),
   }
 }
 

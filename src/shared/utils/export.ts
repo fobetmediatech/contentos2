@@ -9,6 +9,7 @@
 
 import type { CompetitorAnalysisResult, DiscoveryResult } from '../../ai/prompts'
 import type { NormalizedProfile } from '../../lib/transformers'
+import type { DeepNicheReport } from '../../ai/prompts/deepReelAnalysis'
 import { COMPETITOR_CATEGORIES, DISCOVERY_CATEGORIES } from './categories'
 
 interface ExportData {
@@ -89,10 +90,10 @@ export function generateCSV(data: ExportData): string {
 }
 
 /**
- * Trigger a file download in the browser.
+ * Trigger a text-file download in the browser (generic; CSV + markdown wrap this).
  */
-export function downloadCSV(csv: string, filename: string): void {
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+export function downloadTextFile(content: string, filename: string, mime: string): void {
+  const blob = new Blob([content], { type: `${mime};charset=utf-8;` })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
@@ -103,6 +104,14 @@ export function downloadCSV(csv: string, filename: string): void {
   document.body.removeChild(link)
   // Delay revoke so browser has time to initiate the download
   setTimeout(() => URL.revokeObjectURL(url), 100)
+}
+
+export function downloadCSV(csv: string, filename: string): void {
+  downloadTextFile(csv, filename, 'text/csv')
+}
+
+export function downloadMarkdown(md: string, filename: string): void {
+  downloadTextFile(md, filename, 'text/markdown')
 }
 
 /**
@@ -234,4 +243,58 @@ export function generateDiscoveryCSV(data: DiscoveryCSVData): string {
     })
 
   return [headers.join(','), ...rows].join('\n')
+}
+
+// ──────────────────────────────────────────────────────────
+// Deep reel report export (Phase 2) — client-ready markdown
+// ──────────────────────────────────────────────────────────
+
+/**
+ * Format the cross-profile niche report as a client-ready markdown document:
+ * who's-winning + winning formula (synthesis), the cross-creator hook mix, a creator
+ * comparison table, top hooks, and actionable replicate/avoid/test/gaps.
+ */
+export function formatDeepReportMarkdown(report: DeepNicheReport, sourceHandles: string[]): string {
+  const lines: string[] = []
+  const push = (s = '') => lines.push(s)
+
+  push('# Reel Intelligence — Niche Report')
+  if (sourceHandles.length > 0) push(`\nCreators analyzed: ${sourceHandles.map((h) => '@' + h).join(', ')}`)
+  if (report.whoIsWinning) push(`\n## Who's winning\n\n${report.whoIsWinning}`)
+  if (report.nicheFormula) push(`\n## Winning formula\n\n${report.nicheFormula}`)
+
+  if (report.archetypeDistribution.length > 0) {
+    push('\n## Hook patterns across the niche\n')
+    for (const d of report.archetypeDistribution) push(`- ${d.archetype} ×${d.count}`)
+  }
+
+  if (report.comparison.length > 0) {
+    push('\n## Creator comparison\n')
+    push('| Creator | Reels | Avg hook | Median views | Dominant archetype |')
+    push('|---|---|---|---|---|')
+    for (const r of report.comparison) {
+      push(`| @${r.handle} | ${r.reelCount} | ${r.avgHookScore} | ${formatFollowers(r.medianViews)} | ${r.dominantArchetype} |`)
+    }
+  }
+
+  if (report.topExemplars.length > 0) {
+    push('\n## Top hooks\n')
+    report.topExemplars.slice(0, 8).forEach((e, i) => {
+      const spoken = e.spokenHookVerbatim ? ` — "${e.spokenHookVerbatim}"` : ''
+      const visual = e.visualOpening ? ` — ${e.visualOpening}` : ''
+      push(`${i + 1}. @${e.handle} — ${e.hookArchetype} (hook ${e.hookScore}/10, ${formatFollowers(e.views)} views)${spoken}${visual}`)
+    })
+  }
+
+  const section = (title: string, items: string[]) => {
+    if (items.length === 0) return
+    push(`\n## ${title}\n`)
+    for (const it of items) push(`- ${it}`)
+  }
+  section('Replicate', report.replicate)
+  section('Avoid', report.avoid)
+  section('Test', report.test)
+  section('Gaps / opportunities', report.gaps)
+
+  return lines.join('\n')
 }
