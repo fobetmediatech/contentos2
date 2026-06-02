@@ -1,8 +1,9 @@
 /**
  * Reel Analyzer — orchestrates per-reel AI classification and cross-creator synthesis.
  *
- * Two main exports:
- *   analyzeReel       — classify a single reel via Gemini (hook archetype, retention, psychology)
+ * Main exports:
+ *   analyzeReel       — quick caption-only classification via Gemini (hook archetype, retention)
+ *   analyzeReelDeep   — DEEP multimodal analysis via the Vercel function (watches the video)
  *   synthesizeNiche   — synthesize cross-creator niche insights from per-creator summaries
  *
  * Plus a helper:
@@ -11,7 +12,69 @@
 
 import { callGeminiWithSchema } from '../ai/gemini'
 import { buildReelAnalysisPrompt, REEL_ANALYSIS_SCHEMA, buildSynthesisPrompt, SYNTHESIS_SCHEMA } from '../ai/prompts/reelAnalysis'
-import type { ReelData, ReelAnalysis, PerCreatorSummary, SynthesisOutput } from '../store/reelAnalysisStore'
+import type { DeepReelAnalysis } from '../ai/prompts/deepReelAnalysis'
+import type {
+  ReelData,
+  ReelAnalysis,
+  PerCreatorSummary,
+  SynthesisOutput,
+  StoredDeepReelAnalysis,
+} from '../store/reelAnalysisStore'
+
+/** Same-origin Vercel function that does the multimodal video analysis (server-side). */
+const ANALYZE_REEL_FN = '/api/analyze-reel-video'
+
+/** Thrown when the deep-analysis function call fails; carries the HTTP status. */
+export class DeepAnalysisError extends Error {
+  status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'DeepAnalysisError'
+    this.status = status
+  }
+}
+
+/**
+ * Deep, video-grounded analysis of a single reel.
+ *
+ * POSTs the STABLE downloadedVideo URL (resolved client-side by reelVideoClient)
+ * to the Vercel function, which fetches the bytes + runs Gemini multimodal and
+ * returns a DeepReelAnalysis. commentsLikesRatio is computed here (client-side,
+ * deterministic), matching the quick-path convention.
+ *
+ * Throws DeepAnalysisError on failure so the orchestrator can mark the reel failed
+ * (never surfaces raw server text to the UI).
+ */
+export async function analyzeReelDeep(
+  reel: ReelData,
+  downloadedVideoUrl: string,
+  signal?: AbortSignal,
+): Promise<StoredDeepReelAnalysis> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const secret = import.meta.env.VITE_REEL_FN_SECRET
+  if (secret) headers['x-reel-secret'] = secret
+
+  let res: Response
+  try {
+    res = await fetch(ANALYZE_REEL_FN, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ downloadedVideoUrl, shortCode: reel.shortCode, caption: reel.caption }),
+      signal,
+    })
+  } catch (err) {
+    if (signal?.aborted || (err as { name?: string })?.name === 'AbortError') {
+      throw new DeepAnalysisError('Aborted', 0)
+    }
+    throw new DeepAnalysisError('Deep analysis request failed', 0)
+  }
+
+  if (!res.ok) throw new DeepAnalysisError('Deep analysis failed', res.status)
+
+  const body = (await res.json()) as { analysis: DeepReelAnalysis }
+  const commentsLikesRatio = reel.commentsCount / Math.max(1, reel.likesCount)
+  return { ...body.analysis, commentsLikesRatio }
+}
 
 // ---------------------------------------------------------------------------
 // analyzeReel

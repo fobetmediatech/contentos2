@@ -21,7 +21,13 @@
 export const ACTORS = {
   PROFILE_SCRAPER: 'apify~instagram-profile-scraper',
   HASHTAG_SCRAPER: 'apify~instagram-hashtag-scraper',
+  // REEL_SCRAPER scrapes a PROFILE to LIST reels (caption + metrics + permalink).
+  // It does NOT download videos. Despite the name it is the generic instagram-scraper.
   REEL_SCRAPER: 'apify~instagram-scraper',
+  // REEL_VIDEO_SCRAPER is a DIFFERENT actor that, given DIRECT reel URLs, can
+  // download each reel's video (includeDownloadedVideo) to a stable Apify URL.
+  // Use it ONLY with direct /reel/<shortcode>/ URLs (profile scrapes get IG-blocked).
+  REEL_VIDEO_SCRAPER: 'apify~instagram-reel-scraper',
 } as const
 
 /**
@@ -46,6 +52,22 @@ export function buildReelScraperInput(handle: string, limit: number): Record<str
     directUrls: [`https://www.instagram.com/${handle.replace(/^@/, '')}/`],
     resultsType: 'posts',
     resultsLimit: limit,
+  }
+}
+
+/**
+ * Build the input payload for the Reel VIDEO Scraper actor (apify~instagram-reel-scraper).
+ *
+ * Pass DIRECT reel URLs (the `username` field accepts reel URLs, processed individually).
+ * `includeDownloadedVideo` makes the actor store each reel's video as a stable, public
+ * api.apify.com record (Phase-0 spike: 200 video/mp4, CORS-*, no token, retained days).
+ *
+ * @param reelUrls  Direct /reel/<shortcode>/ permalink URLs (from scrapeTopReels)
+ */
+export function buildReelVideoScraperInput(reelUrls: string[]): Record<string, unknown> {
+  return {
+    username: reelUrls,
+    includeDownloadedVideo: true,
   }
 }
 

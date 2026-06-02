@@ -6,10 +6,22 @@
  */
 
 import { create } from 'zustand'
+import type { DeepReelAnalysis } from '../ai/prompts/deepReelAnalysis'
 
 // ----- Creator status -----
 
 export type CreatorStatus = 'idle' | 'scraping' | 'analyzing' | 'done' | 'no-reels' | 'failed'
+
+// ----- Deep (multimodal) per-reel status -----
+// Phase-1 reel-intelligence: the enrichment runs per reel, so each reel carries
+// its own lifecycle independent of the creator-level status (R2: partial results
+// never block on one failure).
+export type DeepReelStatus = 'pending' | 'fetching' | 'analyzing' | 'done' | 'failed' | 'skipped'
+
+/** A DeepReelAnalysis with the client-computed commentsLikesRatio attached. */
+export interface StoredDeepReelAnalysis extends DeepReelAnalysis {
+  commentsLikesRatio: number
+}
 
 // ----- Data types -----
 
@@ -41,8 +53,13 @@ export interface CreatorAnalysisState {
   handle: string
   status: CreatorStatus
   reels: ReelData[]
-  analyses: Record<string, ReelAnalysis>  // keyed by shortCode
+  analyses: Record<string, ReelAnalysis>  // keyed by shortCode (quick caption-only path)
   error?: string
+  // ----- Deep (multimodal) enrichment — Phase-1 reel intelligence -----
+  // Optional: only the deep-report run populates these; the quick path leaves
+  // them undefined. Both reset wholesale (reset() sets creatorStates: {}).
+  deepStatus?: Record<string, DeepReelStatus>          // keyed by shortCode
+  deepAnalyses?: Record<string, StoredDeepReelAnalysis> // keyed by shortCode
 }
 
 export interface SynthesisOutput {
@@ -78,6 +95,12 @@ interface ReelAnalysisState {
   setSelectedHandles: (handles: string[]) => void
   setActiveHandles: (handles: string[]) => void
   setCreatorState: (handle: string, partial: Partial<CreatorAnalysisState>) => void
+  /** Merge a single reel's deep status and/or analysis into a creator's deep maps. */
+  setDeepReel: (
+    handle: string,
+    shortCode: string,
+    partial: { status?: DeepReelStatus; analysis?: StoredDeepReelAnalysis },
+  ) => void
   setSynthesis: (output: SynthesisOutput) => void
   setSynthesisStatus: (status: ReelAnalysisState['synthesisStatus']) => void
   setSynthesisError: (msg: string) => void
@@ -114,6 +137,22 @@ export const useReelAnalysisStore = create<ReelAnalysisState>()((set) => ({
         },
       },
     })),
+
+  setDeepReel: (handle, shortCode, partial) =>
+    set((prev) => {
+      const creator = prev.creatorStates[handle]
+      if (!creator) return {} // never create a creator from a deep update — orchestrator seeds it first
+      const deepStatus = { ...creator.deepStatus }
+      const deepAnalyses = { ...creator.deepAnalyses }
+      if (partial.status) deepStatus[shortCode] = partial.status
+      if (partial.analysis) deepAnalyses[shortCode] = partial.analysis
+      return {
+        creatorStates: {
+          ...prev.creatorStates,
+          [handle]: { ...creator, deepStatus, deepAnalyses },
+        },
+      }
+    }),
 
   setSynthesis: (output) => set({ synthesis: output, synthesisStatus: 'done' }),
 
