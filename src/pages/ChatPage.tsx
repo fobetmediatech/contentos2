@@ -307,8 +307,10 @@ export function ChatPage() {
                 <ChatMessage
                   key={message.id}
                   message={message}
-                  onOptionSelect={confirmSeeds}
-                  optionsDisabled={status !== 'confirming' || isConfirmingPending}
+                  // Agent mode: a clarification pill is just the user's next message (TD1).
+                  // Legacy mode: pills confirm competitor seeds.
+                  onOptionSelect={AGENT_LOOP ? agentConv.sendMessage : confirmSeeds}
+                  optionsDisabled={AGENT_LOOP ? agentConv.isThinking : status !== 'confirming' || isConfirmingPending}
                 />
               ))}
 

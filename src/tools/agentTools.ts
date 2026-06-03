@@ -33,7 +33,7 @@ export type ToolValidation =
 /** The next thing the agent loop should do, derived from one Gemini tool result. */
 export type AgentAction =
   | { type: 'message'; text: string }
-  | { type: 'ask'; question: string }
+  | { type: 'ask'; question: string; options?: string[] }
   | { type: 'answer'; message: string }
   | { type: 'dispatch'; name: 'discover_competitors' | 'discover_by_location' | 'analyze_reels'; args: Record<string, unknown> }
   | { type: 'repair'; detail: string }
@@ -52,7 +52,12 @@ export function decideAction(result: GeminiToolResult): AgentAction {
     return { type: 'repair', detail: v.detail }
   }
   if (v.name === 'ask_clarification') {
-    return { type: 'ask', question: String((v.args as { question: string }).question) }
+    const a = v.args as { question: string; options?: string[] }
+    return {
+      type: 'ask',
+      question: String(a.question),
+      ...(a.options && a.options.length > 0 ? { options: a.options } : {}),
+    }
   }
   if (v.name === 'answer_content') {
     return { type: 'answer', message: String((v.args as { message: string }).message) }
@@ -94,6 +99,11 @@ const normalizeHandles = (arr: string[] | null | undefined): string[] =>
 const argSchemas: Record<AgentToolName, z.ZodTypeAny> = {
   ask_clarification: z.object({
     question: z.string().min(1),
+    // 2-4 tappable answer chips (TD1). Trim, drop empties, cap at 4 so the UI stays clean.
+    options: z
+      .array(z.string())
+      .nullish()
+      .transform((a) => (a ?? []).map((s) => s.trim()).filter(Boolean).slice(0, 4)),
   }),
 
   discover_competitors: z
@@ -152,7 +162,7 @@ export function validateToolCall(name: string, args: Record<string, unknown>): T
 export const AGENT_SYSTEM_PROMPT = `You are the research agent for Content OS, an Instagram creator-research tool for Indian creators, social-media managers, and brand marketers. Each turn, either CALL exactly one tool or ASK one short clarifying question — never both.
 
 Routing:
-- ask_clarification: ONLY when you genuinely cannot tell WHICH creators to find (a vague niche like "good accounts", "the best ones"). Name 2-3 concrete directions so the user can answer in a tap. Do NOT ask when the niche is specific or @handles are named.
+- ask_clarification: ONLY when you genuinely cannot tell WHICH creators to find (a vague niche like "good accounts", "the best ones"). ALWAYS include 2-4 short tappable options (the likely answers, each ≤3 words) so the user can reply in one tap. Do NOT ask when the niche is specific or @handles are named.
 - discover_competitors: find the top accounts in a niche regardless of location, or accounts similar to named @handles. "top X in <city>" / "best X in <city>" is competitor (the city is a filter).
 - discover_by_location: ONLY when the goal is explicitly geographic ("creators based in <city>", "local <niche> in <city>").
 - analyze_reels: break down the hook patterns of specific named @handles.
@@ -168,7 +178,14 @@ export const AGENT_TOOLS: GeminiFunctionDeclaration[] = [
       'Ask the user ONE short, specific question when their request is too ambiguous to act on (e.g. a vague niche like "good accounts"). Name 2-3 concrete directions so they can answer in a tap. Use ONLY when you genuinely cannot tell what to search.',
     parameters: {
       type: 'object',
-      properties: { question: { type: 'string', description: 'The clarifying question to show the user.' } },
+      properties: {
+        question: { type: 'string', description: 'The clarifying question to show the user.' },
+        options: {
+          type: 'array',
+          items: { type: 'string' },
+          description: '2-4 short, tappable answer options (the likely answers, each ≤3 words) so the user can reply in one tap.',
+        },
+      },
       required: ['question'],
     },
   },

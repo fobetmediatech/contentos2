@@ -40,6 +40,17 @@ describe('validateToolCall', () => {
     }
   })
 
+  it('normalizes ask_clarification options (trim, drop empties, cap at 4)', () => {
+    const r = validateToolCall('ask_clarification', {
+      question: 'Which niche?',
+      options: ['  Fitness ', '', 'Food', 'Travel', 'Tech', 'Fashion'],
+    })
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect((r.args as { options: string[] }).options).toEqual(['Fitness', 'Food', 'Travel', 'Tech'])
+    }
+  })
+
   it('accepts discover_competitors with handles and NO niche (niche OR handles)', () => {
     const r = validateToolCall('discover_competitors', { knownHandles: ['nike.training'] })
     expect(r.ok).toBe(true)
@@ -91,6 +102,15 @@ describe('decideAction', () => {
   it('renders a free-text reply (no tool call) as a message', () => {
     const a = decideAction({ kind: 'text', text: 'Which city did you mean?' })
     expect(a).toEqual({ type: 'message', text: 'Which city did you mean?' })
+  })
+
+  it('carries tappable options through the ask action when present', () => {
+    const r: GeminiToolResult = {
+      kind: 'call',
+      name: 'ask_clarification',
+      args: { question: 'Which niche?', options: ['Fitness', 'Food'] },
+    }
+    expect(decideAction(r)).toEqual({ type: 'ask', question: 'Which niche?', options: ['Fitness', 'Food'] })
   })
 
   it('routes ask_clarification → ask', () => {

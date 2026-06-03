@@ -143,7 +143,12 @@ export function useAgentConversation() {
           return
         }
         clarifyTurnsRef.current += 1
-        bot(action.question)
+        // TD1: render tappable pills when the agent offered options; plain bubble otherwise.
+        if (action.options && action.options.length > 0) {
+          store.addMessage({ role: 'assistant', content: action.question, type: 'options', options: action.options })
+        } else {
+          bot(action.question)
+        }
         return
 
       case 'answer': {

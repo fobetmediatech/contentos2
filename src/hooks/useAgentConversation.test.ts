@@ -109,6 +109,15 @@ describe('useAgentConversation', () => {
     expect(analyzeMock).not.toHaveBeenCalled()
   })
 
+  it('renders tappable pills when ask_clarification includes options (TD1)', async () => {
+    result({ kind: 'call', name: 'ask_clarification', args: { question: 'Which niche?', options: ['Fitness', 'Food'] } })
+    const { result: hook } = renderHook(() => useAgentConversation())
+    await act(async () => { await hook.current.sendMessage('find me good accounts') })
+    const last = lastBot() as { content: string; type: string; options?: string[] }
+    expect(last.type).toBe('options')
+    expect(last.options).toEqual(['Fitness', 'Food'])
+  })
+
   it('dispatches competitor analysis with named handles + threads the abort signal', async () => {
     result({ kind: 'call', name: 'discover_competitors', args: { knownHandles: ['nike.training'] } })
     const { result: hook } = renderHook(() => useAgentConversation())
