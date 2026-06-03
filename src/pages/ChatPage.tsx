@@ -18,10 +18,10 @@ import { useActivePipeline } from '../hooks/useActivePipeline'
 import { useReelAnalysis } from '../hooks/useReelAnalysis'
 import { ChatMessage, ProgressBubble, TypingIndicator } from '../components/ChatMessage'
 import { ClarificationCard } from '../components/ClarificationCard'
-import { CompetitorCard } from '../components/CompetitorCard'
+import { CompetitorResultMessage } from '../components/CompetitorResultMessage'
 import { DiscoveryCard } from '../components/DiscoveryCard'
 import { InlineReelResults } from '../components/InlineReelResults'
-import { COMPETITOR_CATEGORIES, DISCOVERY_CATEGORIES } from '../shared/utils/categories'
+import { DISCOVERY_CATEGORIES } from '../shared/utils/categories'
 import { MIN_LOCATION_RESULTS } from '../hooks/useLocationDiscovery'
 
 // Tool chips shown in the empty state — one per independent tool, so all three
@@ -73,6 +73,7 @@ export function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const analysisErrorHandledRef = useRef(false)
+  const competitorResultArmedRef = useRef(false) // armed while a competitor run is live; fires once on done
 
   // Selection state — shared across competitor + discovery results
   const [selectedHandles, setSelectedHandles] = useState<string[]>([])
@@ -129,6 +130,34 @@ export function ChatPage() {
       resetDiscovery()
     }
   }, [discoveryStatus, discoveryError, addMessage, setStatus, resetDiscovery])
+
+  // Results-as-messages (Phase 2): when a competitor run finishes, SNAPSHOT it into the
+  // conversation as a `type:'result'` message (persists + interleaves), then flip status back
+  // to 'chatting'. Armed only while a real run is live (running/clarifying) so it fires exactly
+  // once per run and never on a stale/restored status. Profiles are trimmed to the ranked
+  // competitors to keep the persisted payload small.
+  useEffect(() => {
+    if (status === 'running' || status === 'clarifying') {
+      competitorResultArmedRef.current = true
+    } else if (status === 'done' && competitorResultArmedRef.current) {
+      competitorResultArmedRef.current = false
+      const handles = new Set(competitors.map((c) => c.username))
+      addMessage({
+        role: 'assistant',
+        type: 'result',
+        content: `Found ${competitors.length} competitor${competitors.length !== 1 ? 's' : ''}${niche ? ` in ${niche}` : ''}.`,
+        result: {
+          kind: 'competitor',
+          competitors,
+          summary,
+          niche,
+          profiles: inputProfiles.filter((p) => handles.has(p.username)),
+          didExpand: analysisDidExpand,
+        },
+      })
+      setStatus('chatting')
+    }
+  }, [status, competitors, summary, niche, inputProfiles, analysisDidExpand, addMessage, setStatus])
 
   // Scroll to bottom whenever messages or pipeline state changes
   useEffect(() => {
@@ -196,15 +225,8 @@ export function ChatPage() {
   const showInlineContent = isAnalysisRunning || isAnalysisClarifying || isAnalysisDone ||
     isDiscoveryRunning || isDiscoveryDone
 
-  // Profile maps + cohort ER for card rendering
-  const profileMap = new Map(inputProfiles.map((p) => [p.username, p]))
-  const allERValues = competitors
-    .map((c) => profileMap.get(c.username)?.engagementRate)
-    .filter((er): er is number => er !== null && er !== undefined)
-  const cohortAvgER = allERValues.length > 0
-    ? allERValues.reduce((a, b) => a + b, 0) / allERValues.length
-    : 3.0
-
+  // Discovery profile map + cohort ER for card rendering (competitor equivalents now live in
+  // CompetitorResultMessage, derived from the result payload).
   const discoveryProfileMap = new Map(discoveryProfiles.map((p) => [p.username, p]))
   const discoveryERValues = discoveryResults
     .map((r) => discoveryProfileMap.get(r.username)?.engagementRate)
@@ -213,8 +235,6 @@ export function ChatPage() {
     ? discoveryERValues.reduce((a, b) => a + b, 0) / discoveryERValues.length
     : 3.0
 
-  const topCompetitors = competitors.filter((c) => c.category === 'top').sort((a, b) => a.rank - b.rank)
-  const trendingCompetitors = competitors.filter((c) => c.category === 'trending').sort((a, b) => a.rank - b.rank)
   const topDiscovery = discoveryResults.filter((r) => r.category === 'top').sort((a, b) => a.rank - b.rank)
   const trendingDiscovery = discoveryResults.filter((r) => r.category === 'trending').sort((a, b) => a.rank - b.rank)
 
@@ -279,15 +299,30 @@ export function ChatPage() {
             <div role="log" aria-live="polite" aria-label="Conversation" className="flex flex-col gap-4">
 
               {/* Conversation messages */}
-              {conversationMessages.map((message) => (
-                <ChatMessage
-                  key={message.id}
-                  message={message}
-                  // A clarification pill is just the user's next message (TD1).
-                  onOptionSelect={agentConv.sendMessage}
-                  optionsDisabled={agentConv.isThinking}
-                />
-              ))}
+              {conversationMessages.map((message) =>
+                message.type === 'result' && message.result?.kind === 'competitor' ? (
+                  // Results-as-messages: a finished competitor run renders inline, in place,
+                  // and survives reload (the payload is persisted in conversationMessages).
+                  <CompetitorResultMessage
+                    key={message.id}
+                    payload={message.result}
+                    selectedHandles={selectedHandles}
+                    onToggleSelect={handleToggleSelect}
+                    onClearSelection={() => setSelectedHandles([])}
+                    onAnalyzeReels={handleAnalyzeReels}
+                    onStartOver={handleStartOver}
+                    reelActive={activeHandles.length > 0}
+                  />
+                ) : (
+                  <ChatMessage
+                    key={message.id}
+                    message={message}
+                    // A clarification pill is just the user's next message (TD1).
+                    onOptionSelect={agentConv.sendMessage}
+                    optionsDisabled={agentConv.isThinking}
+                  />
+                ),
+              )}
 
               {/* Typing indicators */}
               {agentConv.isThinking && <TypingIndicator />}
@@ -332,109 +367,7 @@ export function ChatPage() {
                 />
               )}
 
-              {/* ── Competitor analysis results ───────────────────────── */}
-              {isAnalysisDone && (
-                <>
-                  {/* Completion bubble */}
-                  <div className="flex items-start gap-2">
-                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(224,123,58,0.12)] flex items-center justify-center mt-0.5">
-                      <Bot size={14} className="text-[#E07B3A]" />
-                    </div>
-                    <div className="flex flex-col gap-2 max-w-[80%]">
-                      <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(245,237,214,0.08)] text-sm leading-relaxed">
-                        <div className="flex items-center gap-2 mb-1">
-                          <CheckCircle size={14} className="text-success flex-shrink-0" />
-                          <span className="font-semibold text-primary">Analysis complete</span>
-                        </div>
-                        <p className="text-secondary">
-                          Found {competitors.length} competitor{competitors.length !== 1 ? 's' : ''}
-                          {niche ? ` in the ${niche} space` : ''}.
-                          Ranked by engagement, location fit, and partnership readiness.
-                        </p>
-                        {analysisDidExpand && (
-                          <p className="text-xs text-warning mt-1.5">
-                            Sparse niche — results may be limited. Try a different reference account for a broader pool.
-                          </p>
-                        )}
-                      </div>
-                      <button
-                        onClick={handleStartOver}
-                        className="self-start px-4 py-2 text-sm text-secondary border border-[rgba(245,237,214,0.10)] rounded-xl hover:bg-surface-raised transition-colors"
-                      >
-                        Start over
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* AI summary — violet AI tint + Gemini eyebrow per DESIGN.md */}
-                  {summary && (
-                    <div className="px-4 py-3 bg-[rgba(167,139,250,0.08)] border border-[#A78BFA]/20 rounded-xl">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-[#A78BFA] mb-1">✦ Gemini</p>
-                      <p className="text-sm text-[#C4B5FD] leading-relaxed">{summary}</p>
-                    </div>
-                  )}
-
-                  {/* Card grid */}
-                  {topCompetitors.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold text-[#7A6A54] uppercase tracking-wide mb-3">
-                        {COMPETITOR_CATEGORIES.top.sectionLabel}
-                      </p>
-                      <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
-                        {topCompetitors.map((c) => (
-                          <CompetitorCard
-                            key={c.username}
-                            competitor={c}
-                            profile={profileMap.get(c.username)}
-                            cohortAvgER={cohortAvgER}
-                            isSelected={selectedHandles.includes(c.username)}
-                            onSelect={activeHandles.length === 0 ? handleToggleSelect : undefined}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {trendingCompetitors.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold text-[#7A6A54] uppercase tracking-wide mb-3">
-                        {COMPETITOR_CATEGORIES.trending.sectionLabel}
-                      </p>
-                      <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
-                        {trendingCompetitors.map((c) => (
-                          <CompetitorCard
-                            key={c.username}
-                            competitor={c}
-                            profile={profileMap.get(c.username)}
-                            cohortAvgER={cohortAvgER}
-                            isSelected={selectedHandles.includes(c.username)}
-                            onSelect={activeHandles.length === 0 ? handleToggleSelect : undefined}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Selection CTA */}
-                  {selectedHandles.length > 0 && activeHandles.length === 0 && (
-                    <div className="flex items-center gap-2 pt-1">
-                      <button
-                        onClick={() => setSelectedHandles([])}
-                        className="flex items-center gap-1.5 px-3 py-2 text-sm text-[#A09080] border border-[#3D2E1E] rounded-xl hover:text-[#F5E6D3] hover:border-[#5C4A30] transition-colors"
-                      >
-                        <X size={13} />
-                        Clear
-                      </button>
-                      <button
-                        onClick={handleAnalyzeReels}
-                        className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-[#E07B3A] text-[#1A1410] rounded-xl hover:bg-[#C96A2A] transition-colors"
-                      >
-                        <Video size={14} />
-                        Analyze {selectedHandles.length} creator{selectedHandles.length !== 1 ? 's' : ''} reels
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
+              {/* Competitor results now render inline as a type:'result' message (Phase 2). */}
 
               {/* ── Discovery results ─────────────────────────────────── */}
               {isDiscoveryDone && (

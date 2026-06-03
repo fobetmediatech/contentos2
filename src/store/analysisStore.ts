@@ -56,16 +56,33 @@ export interface PendingDiscovery {
   clarificationQuestion: ClarificationQuestion
 }
 
+/**
+ * Phase 2 (results-as-messages): a completed pipeline result, snapshotted INTO the
+ * conversation as a message so it persists across reloads and interleaves with the chat
+ * (multiple searches each keep their results in place) instead of rendering from transient
+ * store status. Stage 1 = competitor; discovery + reel follow the same shape.
+ */
+export type ResultPayload = {
+  kind: 'competitor'
+  competitors: CompetitorAnalysisResult[]
+  summary: string
+  niche: string
+  profiles: NormalizedProfile[]
+  didExpand: boolean
+}
+
 export interface ChatMessage {
   /** Stable unique id for React keys — monotonic, assigned by addMessage. */
   id: string
   role: 'user' | 'assistant'
   content: string
   timestamp: number
-  /** Controls rendering: text = plain bubble, options = pill choices, error = red bubble */
-  type?: 'text' | 'options' | 'error'
+  /** Controls rendering: text = plain bubble, options = pill choices, error = red bubble, result = inline result cards */
+  type?: 'text' | 'options' | 'error' | 'result'
   /** Present when type === 'options' */
   options?: string[]
+  /** Present when type === 'result' — the snapshotted pipeline result rendered inline. */
+  result?: ResultPayload
 }
 
 export interface AnalysisState {
