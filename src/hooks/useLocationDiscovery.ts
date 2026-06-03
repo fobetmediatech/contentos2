@@ -28,7 +28,7 @@ import { ApifyError } from '../lib/apifyCore'
 import { GeminiError } from '../ai/gemini'
 import { linkAbort } from '../lib/abortControl'
 import { useCorpusStore } from '../store/corpusStore'
-import { dropDismissedCandidates } from '../lib/corpus'
+import { dropDismissedCandidates, selectPreferenceExemplars } from '../lib/corpus'
 import { ALL_DISMISSED_MESSAGE } from '../lib/errorMessages'
 
 const TIMEOUT_MS = 150_000
@@ -156,6 +156,12 @@ export function useLocationDiscovery() {
 
         // Step 5: AI analysis — pass pool composition so Gemini has grounded context
         setStep(5)
+        // 3b (Phase 3): bias discovery ranking toward saved traits, away from dismissed.
+        // No-op on a cold corpus; safeNiche drives same-niche weighting.
+        const preferenceExemplars = selectPreferenceExemplars(
+          Object.values(useCorpusStore.getState().creators),
+          safeNiche,
+        )
         let output = await analyzeDiscovery(
           geminiKey,
           safeCity,
@@ -164,6 +170,7 @@ export function useLocationDiscovery() {
           abort.signal,
           creatorCount,
           businessCount,
+          preferenceExemplars,
         )
 
         // Zero-result guard: if Gemini returned nothing, retry without city/niche context

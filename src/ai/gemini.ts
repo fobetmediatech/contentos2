@@ -384,8 +384,9 @@ export async function analyzeDiscovery(
   signal?: AbortSignal,
   creatorCount?: number,
   businessCount?: number,
+  preferenceExemplars?: PreferenceExemplars,
 ): Promise<DiscoveryOutput> {
-  const prompt = buildDiscoveryPrompt(city, niche, candidateProfiles, creatorCount, businessCount)
+  const prompt = buildDiscoveryPrompt(city, niche, candidateProfiles, creatorCount, businessCount, preferenceExemplars)
   const parsed = await callGeminiWithSchema<DiscoveryOutput>(
     geminiKey,
     prompt,

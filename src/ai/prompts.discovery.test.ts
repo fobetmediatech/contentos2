@@ -15,6 +15,12 @@
 import { describe, it, expect } from 'vitest'
 import { buildDiscoveryPrompt } from './prompts'
 import type { NormalizedProfile } from '../lib/transformers'
+import type { PreferenceExemplars } from '../lib/corpus'
+
+const exemplars = (): PreferenceExemplars => ({
+  saved: [{ username: 'savedguy', followersCount: 50_000, engagementRate: 7.2, niches: ['food'], verified: true, sameNiche: true }],
+  dismissed: [{ username: 'nope', followersCount: 2_000_000, engagementRate: 0.4, niches: ['celebrity'], verified: true, sameNiche: false }],
+})
 
 function makeProfile(overrides: Partial<NormalizedProfile> = {}): NormalizedProfile {
   return {
@@ -35,6 +41,19 @@ function makeProfile(overrides: Partial<NormalizedProfile> = {}): NormalizedProf
     ...overrides,
   }
 }
+
+describe('buildDiscoveryPrompt — preference injection (Phase 3, 3b)', () => {
+  it('injects the PREFERENCE block when exemplars are provided', () => {
+    const prompt = buildDiscoveryPrompt('Mumbai', 'food', [makeProfile()], 7, 3, exemplars())
+    expect(prompt).toContain('@savedguy')
+    expect(prompt.toLowerCase()).toContain('tiebreaker')
+  })
+
+  it('omits the PREFERENCE block when no exemplars are provided', () => {
+    const prompt = buildDiscoveryPrompt('Mumbai', 'food', [makeProfile()], 7, 3)
+    expect(prompt.toLowerCase()).not.toContain('preference signal')
+  })
+})
 
 describe('buildDiscoveryPrompt — pool composition line', () => {
   it('injects pool composition line when both creatorCount and businessCount are provided', () => {

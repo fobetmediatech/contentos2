@@ -276,6 +276,7 @@ export function buildDiscoveryPrompt(
   candidates: NormalizedProfile[],
   creatorCount?: number,
   businessCount?: number,
+  preferenceExemplars?: PreferenceExemplars,
 ): string {
   const topCategory = DISCOVERY_CATEGORIES.top
   const trendingCategory = DISCOVERY_CATEGORIES.trending
@@ -298,6 +299,10 @@ export function buildDiscoveryPrompt(
     ? `\nCANDIDATE POOL COMPOSITION: ${creatorCount} creator accounts (type: creator) + ${businessCount} business accounts (type: business) in this list.\n`
     : ''
 
+  // Preference block (3b) — same lowest-priority tiebreaker as the competitor prompt, reused.
+  // Empty when the corpus has no verdicts, so a cold corpus leaves the prompt unchanged.
+  const preferenceSection = preferenceExemplars ? buildPreferenceBlock(preferenceExemplars) : ''
+
   return `You are a social media analyst specializing in creator discovery for brand partnerships.
 
 TASK: Find the top 10 ${niche}-related Instagram accounts based in ${city} from the list below.
@@ -317,7 +322,7 @@ SELECTION CRITERIA:
 - "${topCategory.label}" (Top 5): ${topCategory.taxonomy}
 - "${trendingCategory.label}" (Trending 5): ${trendingCategory.taxonomy}
 - If fewer than 5 good accounts exist in a category, reduce that category's count rather than padding with off-niche accounts.
-
+${preferenceSection}
 CANDIDATE PROFILES:
 ${candidateSummary}
 
