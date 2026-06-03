@@ -33,12 +33,22 @@ const mockStores = {
 
 vi.mock('../store/analysisStore', async (io) => ({
   ...(await io<typeof import('../store/analysisStore')>()),
+  // Faithful to Zustand: the HOOK returns a render-time SNAPSHOT (a copy captured when the
+  // hook is called), so it goes stale after addMessage within the same tick — exactly the
+  // real footgun. getState() returns LIVE state. buildHistory MUST use getState() to see the
+  // just-added message; if it reads the hook snapshot it'll be one message behind.
   useAnalysisStore: Object.assign(
     vi.fn(() => ({
-      get conversationMessages() { return mockState.conversationMessages },
+      conversationMessages: mockState.conversationMessages.slice(),
       addMessage,
     })),
-    { getState: () => ({ status: mockStores.analysisStatus, setStatus: mockStores.setStatus }) },
+    {
+      getState: () => ({
+        get conversationMessages() { return mockState.conversationMessages },
+        status: mockStores.analysisStatus,
+        setStatus: mockStores.setStatus,
+      }),
+    },
   ),
 }))
 
@@ -101,6 +111,31 @@ beforeEach(() => {
 })
 
 describe('useAgentConversation', () => {
+  it('sends the LATEST user message to the model (no stale-snapshot off-by-one)', async () => {
+    // Regression: buildHistory read the render-time store snapshot, which is one message
+    // stale after addMessage — so the first turn sent EMPTY contents (Gemini 400) and later
+    // turns answered the PREVIOUS message. It must read live state (getState).
+    result({ kind: 'text', text: 'ok' })
+    const { result: hook } = renderHook(() => useAgentConversation())
+    await act(async () => { await hook.current.sendMessage('top vegan creators') })
+    const contents = callTools.mock.calls[0][1] as Array<{ role: string; parts: { text: string }[] }>
+    expect(contents.length).toBeGreaterThan(0) // not empty → no 400 on first turn
+    const last = contents[contents.length - 1]
+    expect(last.role).toBe('user')
+    expect(last.parts[0].text).toBe('top vegan creators')
+  })
+
+  it('does NOT show "Switched" when there was no live work (no false steer)', async () => {
+    // Regression: a completed turn leaves a non-aborted controller in currentRun, so the
+    // next message wrongly read that as a supersede and printed "Switched" every time.
+    result({ kind: 'text', text: 'Hello!' })
+    const { result: hook } = renderHook(() => useAgentConversation())
+    await act(async () => { await hook.current.sendMessage('hi') })
+    await act(async () => { await hook.current.sendMessage('hello again') })
+    const switched = mockState.conversationMessages.filter((m) => m.content.startsWith('Switched'))
+    expect(switched).toHaveLength(0)
+  })
+
   it('renders the agent question when the model calls ask_clarification', async () => {
     result({ kind: 'call', name: 'ask_clarification', args: { question: 'Which kind of accounts?' } })
     const { result: hook } = renderHook(() => useAgentConversation())

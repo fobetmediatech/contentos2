@@ -624,7 +624,12 @@ export function ChatPage() {
               onKeyDown={handleKeyDown}
               onInput={handleTextareaInput}
               placeholder={
-                isReelRunning
+                // Agent mode: input is always live and the agent handles every state, so the
+                // placeholder is static — it must NOT track legacy pipeline status (which lingers
+                // stale, e.g. "Analyzing reels…" when nothing is running).
+                AGENT_LOOP
+                  ? 'Describe a niche, location, or paste handles…'
+                  : isReelRunning
                   ? 'Analyzing reels — this takes a few minutes…'
                   : isInPipeline
                   ? 'Analysis in progress…'

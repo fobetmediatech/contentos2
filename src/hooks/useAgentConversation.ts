@@ -44,6 +44,7 @@ export function useAgentConversation() {
   const { startAnalysis: startReelAnalysis } = useReelAnalysis()
 
   const [isThinking, setIsThinking] = useState(false)
+  const thinkingRef = useRef(false) // ref mirror of isThinking, readable synchronously in sendMessage
   const clarifyTurnsRef = useRef(0)
   // ONE controller per active run. It deliberately OUTLIVES the turn: a pipeline dispatch is
   // fire-and-forget (analyze/discover return before the scrape finishes), so the controller
@@ -69,12 +70,34 @@ export function useAgentConversation() {
   const bot = (content: string, type: 'text' | 'error' = 'text') =>
     store.addMessage({ role: 'assistant', content, type })
 
-  /** Windowed Gemini history from the conversation (errors + empties dropped). */
-  const buildHistory = (): GeminiTurn[] =>
-    store.conversationMessages
-      .filter((m) => m.type !== 'error' && m.content)
+  /**
+   * Windowed Gemini history (errors + empties dropped).
+   *
+   * Reads LIVE state via getState(), NOT the render-time `store` snapshot. Zustand snapshots
+   * don't update within the same synchronous tick, so right after `store.addMessage(userMsg)`
+   * the `store` closure is one message stale — which sent EMPTY contents on the first turn
+   * (Gemini 400) and made every later turn answer the PREVIOUS message. getState() always
+   * reflects the message we just added. Also drop any leading model turns so `contents`
+   * starts with a user turn (the API requires it).
+   */
+  const buildHistory = (): GeminiTurn[] => {
+    const turns = useAnalysisStore
+      .getState()
+      .conversationMessages.filter((m) => m.type !== 'error' && m.content)
       .slice(-HISTORY_WINDOW)
-      .map((m) => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.content }] }))
+      .map((m): GeminiTurn => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.content }] }))
+    while (turns.length > 0 && turns[0].role === 'model') turns.shift()
+    return turns
+  }
+
+  /** True when there is genuinely live work to interrupt — a turn thinking or a scrape running. */
+  const isAnyPipelineRunning = (): boolean => {
+    const a = useAnalysisStore.getState()
+    if (a.status === 'running' || a.status === 'clarifying' || a.status === 'discovering') return true
+    if (useDiscoveryStore.getState().status === 'running') return true
+    const r = useReelAnalysisStore.getState()
+    return r.activeHandles.length > 0 && r.synthesisStatus !== 'done' && r.synthesisStatus !== 'failed'
+  }
 
   const agentError = (err: unknown): string =>
     err instanceof GeminiError ? friendlyGemini(err.code) : 'Something went wrong — try again.'
@@ -83,11 +106,14 @@ export function useAgentConversation() {
     const safeText = text.replace(/[\n\r]/g, ' ').trim().slice(0, 500)
     if (!safeText) return
 
-    // Latest-wins: a new message supersedes the previous run — abort its planning call AND
-    // any scrape it dispatched (the pipeline shares this same signal via T7's externalSignal).
-    const superseded = !!currentRun.current && !currentRun.current.signal.aborted
+    // Latest-wins: always abort the previous run's controller (cancels an in-flight planning
+    // call AND any scrape it dispatched via T7's shared signal). But only treat it as a STEER
+    // — the cleanup + "Switched" note — when there was genuinely live work to interrupt. A
+    // completed turn leaves a non-aborted controller in currentRun, so its mere presence is
+    // NOT a steer; that false-positive showed "Switched" after almost every message.
+    const steering = thinkingRef.current || isAnyPipelineRunning()
     currentRun.current?.abort()
-    if (superseded) {
+    if (steering) {
       stopLingeringProgress()
       bot('Switched — picking up your new request.') // TD4 steer feedback
     }
@@ -101,9 +127,10 @@ export function useAgentConversation() {
 
     const controller = new AbortController()
     currentRun.current = controller
+    thinkingRef.current = true
     setIsThinking(true)
     try {
-      const history = buildHistory() // includes the message just added
+      const history = buildHistory() // live state — includes the user message just added above
       const callModel = (h: GeminiTurn[], repairNote?: string) =>
         callGeminiWithTools(
           geminiKey,
@@ -122,9 +149,12 @@ export function useAgentConversation() {
       bot(agentError(err), 'error')
     } finally {
       // Keep currentRun pointing at this controller so a fire-and-forget scrape stays
-      // cancellable by the next message. Only the LATEST turn owns isThinking — a superseded
-      // turn's finally must not clear the indicator the new turn just turned on.
-      if (currentRun.current === controller) setIsThinking(false)
+      // cancellable by the next message. Only the LATEST turn owns the thinking state — a
+      // superseded turn's finally must not clear the indicator the new turn just turned on.
+      if (currentRun.current === controller) {
+        thinkingRef.current = false
+        setIsThinking(false)
+      }
     }
   }
 

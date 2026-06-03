@@ -656,15 +656,27 @@ async function _callGeminiWithToolsRetry(
       }
       throw new GeminiError('RATE_LIMITED', 'Gemini API rate limit exceeded after 3 retries.', false)
     }
+    // Diagnostic (console only — raw body is NEVER shown to the user, per C2/H11).
+    console.error('[gemini:tools] HTTP error', res.status, body.error?.status, body.error?.message)
     throw mapGeminiHttpError(res.status, body)
   }
 
   const json = (await res.json()) as GeminiResponse
   if (!json.candidates || json.candidates.length === 0) {
+    console.error('[gemini:tools] blocked / no candidates', json)
     throw new GeminiError('SAFETY_BLOCK', 'Gemini blocked the response (content policy).', false)
   }
 
-  const parts = json.candidates[0].content?.parts ?? []
+  const candidate = json.candidates[0]
+  // Known intermittent function-calling hiccup: the model attempts a tool call but malforms
+  // it, so the candidate comes back with finishReason MALFORMED_FUNCTION_CALL and (usually)
+  // no usable parts. Treat it as a retryable parse error, NOT a content-policy "decline".
+  if (candidate.finishReason === 'MALFORMED_FUNCTION_CALL') {
+    console.error('[gemini:tools] malformed function call', candidate.finishReason)
+    throw new GeminiError('PARSE_ERROR', 'Gemini returned a malformed function call.', true)
+  }
+
+  const parts = candidate.content?.parts ?? []
   // Prefer a tool call if the model emitted one; otherwise fall back to text.
   const call = parts.find((p) => p.functionCall)?.functionCall
   if (call?.name) {
@@ -672,6 +684,7 @@ async function _callGeminiWithToolsRetry(
   }
   const text = joinThoughtFilteredText(parts).trim()
   if (!text) {
+    console.error('[gemini:tools] empty output', candidate.finishReason)
     throw new GeminiError('SAFETY_BLOCK', 'Gemini returned neither a tool call nor text.', false)
   }
   return { kind: 'text', text }

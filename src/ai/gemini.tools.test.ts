@@ -83,6 +83,13 @@ describe('callGeminiWithTools — function-calling primitive', () => {
     await expect(callGeminiWithTools('key', CONTENTS, TOOLS)).rejects.toMatchObject({ code: 'SAFETY_BLOCK' })
   })
 
+  it('maps MALFORMED_FUNCTION_CALL → retryable PARSE_ERROR, not a "decline"', async () => {
+    // The model tried to call a tool but malformed it: candidate comes back with this
+    // finishReason and no usable parts. Must be a retryable parse error, not SAFETY_BLOCK.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse([], 'MALFORMED_FUNCTION_CALL')))
+    await expect(callGeminiWithTools('key', CONTENTS, TOOLS)).rejects.toMatchObject({ code: 'PARSE_ERROR', retryable: true })
+  })
+
   it('sends functionDeclarations + systemInstruction in the request body', async () => {
     const fetchMock = vi.fn().mockResolvedValue(makeResponse([{ text: 'ok' }]))
     vi.stubGlobal('fetch', fetchMock)
