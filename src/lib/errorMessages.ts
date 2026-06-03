@@ -11,6 +11,7 @@
  */
 
 export const APIFY_FRIENDLY: Record<string, string> = {
+  QUOTA_EXCEEDED: 'Apify monthly usage limit reached — add a key from another account in Settings, upgrade your plan, or wait for the monthly reset.',
   RUN_START_FAILED: 'Scraping failed to start — try again or check your Apify key.',
   POLL_FAILED: 'Lost connection to Apify while scraping — try again.',
   RUN_FAILED: 'The scrape failed on Apify — try again with different handles.',

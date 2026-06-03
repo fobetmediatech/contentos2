@@ -93,6 +93,37 @@ describe('startRun', () => {
       code: 'RUN_START_FAILED',
     })
   })
+
+  it('throws QUOTA_EXCEEDED on a 403 monthly-limit body', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        text: () =>
+          Promise.resolve('{"error":{"type":"platform-feature-disabled","message":"Monthly usage hard limit exceeded"}}'),
+      }),
+    )
+    await expect(startRun('actor-id', {}, 'api-key')).rejects.toMatchObject({
+      code: 'QUOTA_EXCEEDED',
+      status: 403,
+    })
+  })
+
+  it('throws RUN_START_FAILED on a 403 that is not a usage/limit error', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        text: () => Promise.resolve('forbidden'),
+      }),
+    )
+    await expect(startRun('actor-id', {}, 'api-key')).rejects.toMatchObject({
+      code: 'RUN_START_FAILED',
+      status: 403,
+    })
+  })
 })
 
 // ----- pollRun -----
