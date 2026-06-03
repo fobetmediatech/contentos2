@@ -4,6 +4,7 @@ import type { NormalizedProfile } from '../lib/transformers'
 import { COMPETITOR_CATEGORIES } from '../shared/utils/categories'
 import { useCorpusStore } from '../store/corpusStore'
 import { recognition } from '../lib/corpus'
+import { FeedbackControl } from './FeedbackControl'
 
 interface CompetitorCardProps {
   competitor: CompetitorAnalysisResult
@@ -131,6 +132,12 @@ export function CompetitorCard({ competitor, profile, cohortAvgER, isSelected, o
       <p className="mt-3 text-sm text-[#C4A882] leading-relaxed">
         {competitor.rationale}
       </p>
+
+      {/* Feedback (Phase 3) — save/dismiss trains future rankings toward your taste. */}
+      <div className="mt-3 pt-2 border-t border-[rgba(245,237,214,0.06)] flex items-center justify-between">
+        <span className="text-[11px] text-[#7A6A54]">More like this?</span>
+        <FeedbackControl username={competitor.username} />
+      </div>
     </div>
   )
 }

@@ -70,4 +70,21 @@ describe('corpusStore', () => {
     ])
     expect(await repo.listContentFor('alice')).toHaveLength(1)
   })
+
+  it('setFeedback writes through to the repo and mirrors the verdict into state', async () => {
+    const repo = createMemoryCorpus()
+    const store = makeCorpusStore(repo)
+    await store.getState().remember([input('alice', 100)])
+    await store.getState().setFeedback('alice', 'saved', 500)
+    expect(store.getState().creators.alice.feedback).toBe('saved')   // mirrored for instant UI
+    expect((await repo.get('alice'))?.feedback).toBe('saved')        // genuinely persisted
+  })
+
+  it('setFeedback on an unknown creator leaves state untouched', async () => {
+    const repo = createMemoryCorpus()
+    const store = makeCorpusStore(repo)
+    await store.getState().setFeedback('ghost', 'saved', 500)
+    expect(store.getState().count).toBe(0)
+    expect(store.getState().creators.ghost).toBeUndefined()
+  })
 })

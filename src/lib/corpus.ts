@@ -15,6 +15,10 @@ import type { NormalizedProfile } from './transformers'
 
 export type Pipeline = 'competitor' | 'discovery'
 
+/** The user's verdict on a creator — the Phase 3 self-training signal. `saved` = more like
+ *  this; `dismissed` = not relevant. Absent = neutral (no verdict yet). */
+export type Feedback = 'saved' | 'dismissed'
+
 /** One appearance of a creator in a search result. */
 export interface Sighting {
   /** Timestamp (ms) of the search that surfaced this creator. */
@@ -56,6 +60,11 @@ export interface CreatorRecord {
   /** Total sightings ever — NOT capped (sightings[] is capped, this count is not). */
   timesSeen: number
   sightings: Sighting[]
+  /** The user's verdict (Phase 3). Absent = neutral. Survives re-sightings (mergeCreator
+   *  preserves it) so a saved/dismissed call sticks even as the creator resurfaces. */
+  feedback?: Feedback
+  /** When the verdict was last set (ms) — drives recency for few-shot exemplar selection. */
+  feedbackAt?: number
 }
 
 /** The unit fed into the corpus: a profile snapshot + the sighting that surfaced it. */
@@ -97,6 +106,9 @@ export interface CorpusRepository {
   remember(inputs: CreatorInput[]): Promise<CreatorRecord[]>
   get(username: string): Promise<CreatorRecord | undefined>
   getMany(usernames: string[]): Promise<CreatorRecord[]>
+  /** Set (feedback) or clear (null) the user's verdict on a remembered creator. Returns the
+   *  updated record, or undefined when the creator isn't in the corpus (never mints one). */
+  setFeedback(username: string, feedback: Feedback | null, at: number): Promise<CreatorRecord | undefined>
   list(opts?: { sort?: CorpusSort; limit?: number }): Promise<CreatorRecord[]>
   count(): Promise<number>
   /** Upsert analyzed content (reels) by id — re-analysis overwrites. */
@@ -161,6 +173,27 @@ export function mergeCreator(existing: CreatorRecord | undefined, incoming: Crea
   }
 }
 
+/**
+ * Pure: set or clear the user's feedback verdict on a record. `null` resets to neutral
+ * (both fields undefined). Everything else — identity, metrics, sightings, bookkeeping — is
+ * untouched, so a verdict is orthogonal to the objective memory it annotates.
+ */
+export function applyFeedback(record: CreatorRecord, feedback: Feedback | null, at: number): CreatorRecord {
+  if (feedback === null) {
+    return { ...record, feedback: undefined, feedbackAt: undefined }
+  }
+  return { ...record, feedback, feedbackAt: at }
+}
+
+/**
+ * The verdict after a feedback button is clicked: tapping the verdict you already have clears
+ * it (returns null → neutral); tapping the other one switches to it. Pure — drives the card
+ * toggle so the two buttons behave like a tri-state (neutral / saved / dismissed).
+ */
+export function nextFeedback(current: Feedback | undefined, clicked: Feedback): Feedback | null {
+  return current === clicked ? null : clicked
+}
+
 /** Numeric key for a sort dimension — all dimensions sort descending. */
 function sortValue(r: CreatorRecord, sort: CorpusSort): number {
   switch (sort) {
@@ -222,6 +255,13 @@ export function createMemoryCorpus(): CorpusRepository {
       return usernames
         .map((u) => store.get(u))
         .filter((r): r is CreatorRecord => r !== undefined)
+    },
+    async setFeedback(username, feedback, at) {
+      const existing = store.get(username)
+      if (!existing) return undefined // never mint a profileless record from a verdict alone
+      const updated = applyFeedback(existing, feedback, at)
+      store.set(username, updated)
+      return updated
     },
     async list(opts) {
       return sortCreators([...store.values()], opts?.sort, opts?.limit)

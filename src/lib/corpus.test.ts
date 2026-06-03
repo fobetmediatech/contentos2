@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { mergeCreator, createMemoryCorpus, recognition, creatorContexts, SIGHTINGS_CAP } from './corpus'
+import { mergeCreator, createMemoryCorpus, recognition, creatorContexts, SIGHTINGS_CAP, applyFeedback, nextFeedback } from './corpus'
 import type { CreatorRecord, Sighting, ContentRecord } from './corpus'
 import type { NormalizedProfile } from './transformers'
 
@@ -207,6 +207,77 @@ describe('createMemoryCorpus — content', () => {
     const list = await c.listContentFor('alice')
     expect(list).toHaveLength(1)
     expect(list[0].hookArchetype).toBe('new')
+  })
+})
+
+describe('feedback (Phase 3 — self-training signal)', () => {
+  it('applyFeedback sets the signal + timestamp, preserving everything else', () => {
+    const rec = mergeCreator(undefined, { profile: profile('alice'), sighting: sighting(100) })
+    const saved = applyFeedback(rec, 'saved', 500)
+    expect(saved.feedback).toBe('saved')
+    expect(saved.feedbackAt).toBe(500)
+    expect(saved.username).toBe('alice')          // identity preserved
+    expect(saved.timesSeen).toBe(1)               // bookkeeping untouched
+    expect(saved.sightings).toEqual(rec.sightings)
+  })
+
+  it('applyFeedback(null) clears the signal back to neutral', () => {
+    const rec = applyFeedback(
+      mergeCreator(undefined, { profile: profile('alice'), sighting: sighting(100) }),
+      'dismissed',
+      500,
+    )
+    const cleared = applyFeedback(rec, null, 900)
+    expect(cleared.feedback).toBeUndefined()
+    expect(cleared.feedbackAt).toBeUndefined()
+  })
+
+  it('mergeCreator preserves feedback when the creator is seen again', () => {
+    // A saved creator who resurfaces in a later search must keep their verdict —
+    // re-seeing them is not a reason to forget what the user told us.
+    const first = mergeCreator(undefined, { profile: profile('alice'), sighting: sighting(100) })
+    const saved = applyFeedback(first, 'saved', 500)
+    const reSeen = mergeCreator(saved, {
+      profile: profile('alice', { followersCount: 2000 }),
+      sighting: sighting(900, { niche: 'travel' }),
+    })
+    expect(reSeen.feedback).toBe('saved')         // verdict survives the re-sighting
+    expect(reSeen.feedbackAt).toBe(500)
+    expect(reSeen.timesSeen).toBe(2)              // still accumulates
+    expect(reSeen.followersCount).toBe(2000)      // metrics still refresh
+  })
+
+  it('setFeedback marks a remembered creator and persists it', async () => {
+    const corpus = createMemoryCorpus()
+    await corpus.remember([{ profile: profile('alice'), sighting: sighting(100) }])
+    const updated = await corpus.setFeedback('alice', 'saved', 500)
+    expect(updated?.feedback).toBe('saved')
+    expect((await corpus.get('alice'))?.feedback).toBe('saved')   // persisted
+    expect((await corpus.get('alice'))?.feedbackAt).toBe(500)
+  })
+
+  it('setFeedback(null) clears a creator\'s feedback', async () => {
+    const corpus = createMemoryCorpus()
+    await corpus.remember([{ profile: profile('alice'), sighting: sighting(100) }])
+    await corpus.setFeedback('alice', 'dismissed', 500)
+    await corpus.setFeedback('alice', null, 900)
+    expect((await corpus.get('alice'))?.feedback).toBeUndefined()
+  })
+
+  it('setFeedback on an unknown creator is a no-op (never mints a profileless record)', async () => {
+    const corpus = createMemoryCorpus()
+    const res = await corpus.setFeedback('ghost', 'saved', 500)
+    expect(res).toBeUndefined()
+    expect(await corpus.count()).toBe(0)
+  })
+
+  it('nextFeedback toggles the active verdict off, and switches otherwise', () => {
+    // The click semantics behind the card buttons: tapping the verdict you already have
+    // clears it (toggle off); tapping the other one switches.
+    expect(nextFeedback(undefined, 'saved')).toBe('saved')        // neutral → set
+    expect(nextFeedback('saved', 'saved')).toBeNull()             // tap active → clear
+    expect(nextFeedback('saved', 'dismissed')).toBe('dismissed')  // switch verdict
+    expect(nextFeedback('dismissed', 'dismissed')).toBeNull()     // tap active → clear
   })
 })
 

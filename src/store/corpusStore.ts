@@ -12,7 +12,7 @@
 
 import { create } from 'zustand'
 import { corpus } from '../lib/corpusIdb'
-import type { CorpusRepository, CreatorInput, CreatorRecord, ContentRecord } from '../lib/corpus'
+import type { CorpusRepository, CreatorInput, CreatorRecord, ContentRecord, Feedback } from '../lib/corpus'
 
 export interface CorpusState {
   /** Remembered creators keyed by username — the synchronous mirror of the corpus. */
@@ -25,6 +25,9 @@ export interface CorpusState {
   remember: (inputs: CreatorInput[]) => Promise<CreatorRecord[]>
   /** Persist analyzed reel content tied to creators (the corpus content half). */
   rememberContent: (records: ContentRecord[]) => Promise<void>
+  /** Set (or clear, with null) the user's verdict on a remembered creator, mirroring the
+   *  updated record into synchronous state so cards re-render instantly (Phase 3). */
+  setFeedback: (username: string, feedback: Feedback | null, at: number) => Promise<CreatorRecord | undefined>
 }
 
 function keyBy(records: CreatorRecord[]): Record<string, CreatorRecord> {
@@ -52,6 +55,12 @@ export function makeCorpusStore(repo: CorpusRepository) {
       // Content isn't mirrored into synchronous state (no UI reads it live yet) — straight
       // write-through to the repo. A future Memory page reads it via repo.listContentFor.
       await repo.rememberContent(records)
+    },
+    setFeedback: async (username, feedback, at) => {
+      const updated = await repo.setFeedback(username, feedback, at)
+      // Mirror only on a real update (unknown creator → repo returns undefined → state untouched).
+      if (updated) set({ creators: { ...get().creators, [updated.username]: updated } })
+      return updated
     },
   }))
 }

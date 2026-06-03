@@ -129,4 +129,22 @@ describe('createIdbCorpus', () => {
     await c.clear()
     expect(await c.listContentFor('alice')).toEqual([])
   })
+
+  it('setFeedback persists a verdict that survives a fresh instance', async () => {
+    const writer = createIdbCorpus()
+    await writer.remember([{ profile: profile('alice'), sighting: sighting(100) }])
+    const updated = await writer.setFeedback('alice', 'saved', 500)
+    expect(updated?.feedback).toBe('saved')
+
+    const reader = createIdbCorpus() // next page load
+    const rec = await reader.get('alice')
+    expect(rec?.feedback).toBe('saved')
+    expect(rec?.feedbackAt).toBe(500)
+  })
+
+  it('setFeedback on an unknown creator is a no-op (returns undefined, mints nothing)', async () => {
+    const c = createIdbCorpus()
+    expect(await c.setFeedback('ghost', 'saved', 500)).toBeUndefined()
+    expect(await c.count()).toBe(0)
+  })
 })
