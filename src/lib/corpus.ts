@@ -188,10 +188,12 @@ export function sortCreators(records: CreatorRecord[], sort: CorpusSort = 'lastS
  */
 export function recognition(record: CreatorRecord | undefined): { label: string; detail: string } | null {
   if (!record || record.timesSeen < 2) return null
-  const contexts = Array.from(
-    new Set(record.sightings.flatMap((s) => [s.niche, s.city].filter((x): x is string => !!x))),
-  )
-  return { label: `Seen ${record.timesSeen}×`, detail: contexts.join(' · ') }
+  return { label: `Seen ${record.timesSeen}×`, detail: creatorContexts(record).join(' · ') }
+}
+
+/** The distinct niches + cities a creator has surfaced in, across all sightings. */
+export function creatorContexts(record: CreatorRecord): string[] {
+  return Array.from(new Set(record.sightings.flatMap((s) => [s.niche, s.city].filter((x): x is string => !!x))))
 }
 
 /**

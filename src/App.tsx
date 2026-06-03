@@ -7,6 +7,7 @@ import { DiscoveryResultsPage } from './pages/DiscoveryResultsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { ReelAnalysisPage } from './pages/ReelAnalysisPage'
 import { ReportPage } from './pages/ReportPage'
+import { MemoryPage } from './pages/MemoryPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -40,6 +41,9 @@ export default function App() {
 
             {/* Deep niche report (full-page, client-ready view) */}
             <Route path="report" element={<ReportPage />} />
+
+            {/* Creator/content memory — browse everything the corpus has remembered */}
+            <Route path="memory" element={<MemoryPage />} />
 
             {/* Settings */}
             <Route path="settings" element={<SettingsPage />} />

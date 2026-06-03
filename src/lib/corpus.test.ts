@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { mergeCreator, createMemoryCorpus, recognition, SIGHTINGS_CAP } from './corpus'
+import { mergeCreator, createMemoryCorpus, recognition, creatorContexts, SIGHTINGS_CAP } from './corpus'
 import type { CreatorRecord, Sighting, ContentRecord } from './corpus'
 import type { NormalizedProfile } from './transformers'
 
@@ -245,5 +245,18 @@ describe('recognition', () => {
     )
     expect(r?.label).toBe('Seen 3×')
     expect(r?.detail).toBe('fitness · cafes · Pune')
+  })
+
+  it('creatorContexts returns distinct niches + cities across sightings', () => {
+    const r = rec(3, [
+      sighting(100, { niche: 'fitness' }),
+      sighting(200, { niche: 'cafes', city: 'Pune' }),
+      sighting(300, { niche: 'fitness' }),
+    ])
+    expect(creatorContexts(r)).toEqual(['fitness', 'cafes', 'Pune'])
+  })
+
+  it('creatorContexts is empty when no sighting carries a niche/city', () => {
+    expect(creatorContexts(rec(1, [{ at: 1, pipeline: 'competitor' }]))).toEqual([])
   })
 })

@@ -15,6 +15,7 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
   const location = useLocation()
   const isSettings = location.pathname === '/settings'
   const isChat = location.pathname === '/'
+  const isMemory = location.pathname === '/memory'
   const corpusCount = useCorpusStore((s) => s.count)
 
   // Hydrate the creator memory once for the whole app — the shell is always mounted, so the
@@ -38,16 +39,20 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
 
           {/* Nav links */}
           <nav className="flex items-center gap-1">
-            {/* Creator memory count — ambient signal that the OS is learning. Not a link
-                (no Memory page yet); reads as a status indicator with a tooltip. */}
+            {/* Creator memory count — links to the Memory page (the corpus browse view). */}
             {corpusCount > 0 && (
-              <span
+              <Link
+                to="/memory"
                 title="Creators remembered across your searches"
-                className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md text-secondary"
+                className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md transition-colors ${
+                  isMemory
+                    ? 'bg-surface-raised text-primary font-medium'
+                    : 'text-secondary hover:text-primary hover:bg-surface-raised'
+                }`}
               >
                 <Brain size={14} className="text-[#E07B3A]" />
                 <span className="tabular-nums">{corpusCount}</span>
-              </span>
+              </Link>
             )}
 
             <Link
