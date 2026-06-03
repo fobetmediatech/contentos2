@@ -27,7 +27,10 @@ export function FeedbackControl({ username, className = '' }: Props) {
 
   const set = (clicked: Feedback) => (e: MouseEvent) => {
     e.stopPropagation() // never let a verdict tap also toggle card selection
-    void useCorpusStore.getState().setFeedback(username, nextFeedback(current, clicked), Date.now())
+    // Read the LIVE verdict (not the render-time `current`) so a rapid second tap, before the
+    // store re-renders, still toggles correctly instead of acting on a stale value.
+    const live = useCorpusStore.getState().creators[username]?.feedback
+    void useCorpusStore.getState().setFeedback(username, nextFeedback(live, clicked), Date.now())
   }
 
   const base = 'p-1.5 rounded-lg transition-colors'

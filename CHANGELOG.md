@@ -22,7 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Infrastructure
 
-- The self-training logic is covered test-first — feedback model + merge-preservation, both repository implementations, the toggle semantics, exemplar selection (niche token-overlap, recency, cap), the prompt-block assembly, and both pipelines' filter/bias wiring — 559 tests.
+- The self-training logic is covered test-first — feedback model + merge-preservation, both repository implementations, the toggle semantics, exemplar selection (niche token-overlap, recency, cap), the prompt-block assembly, and both pipelines' filter/bias wiring — 560 tests.
 - Pure helpers (`dropDismissedCandidates`, `selectPreferenceExemplars`, `buildPreferenceBlock`) keep the pipelines as thin call-sites, so the same tiebreaker block serves both competitor and discovery ranking.
 
 ## [2.0.0.0] — 2026-06-03

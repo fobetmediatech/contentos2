@@ -23,12 +23,17 @@ function fmtPreferenceFollowers(n: number): string {
   return String(n)
 }
 
+// niche strings are free-text Gemini output stored in the corpus — strip newlines + cap length
+// before embedding, same as bio/username elsewhere, so a poisoned stored niche can't break out
+// of its line and inject prompt instructions (indirect prompt injection).
+const sanitizeForPrompt = (s: string, max: number) => s.replace(/[\n\r]/g, ' ').slice(0, max)
+
 function preferenceExemplarLine(e: PreferenceExemplar): string {
   const er = e.engagementRate != null ? `${e.engagementRate.toFixed(1)}%` : 'N/A'
   const verified = e.verified ? ', verified' : ''
-  const niche = e.niches.length > 0 ? e.niches.join('/') : 'unknown'
+  const niche = e.niches.length > 0 ? e.niches.map((n) => sanitizeForPrompt(n, 40)).join('/') : 'unknown'
   const weight = e.sameNiche ? ' [SAME NICHE — weight heavily]' : ' [other niche — weak style hint]'
-  return `- @${e.username} | ${fmtPreferenceFollowers(e.followersCount)} followers | ER ${er}${verified} | niche: ${niche}${weight}`
+  return `- @${sanitizeForPrompt(e.username, 40)} | ${fmtPreferenceFollowers(e.followersCount)} followers | ER ${er}${verified} | niche: ${niche}${weight}`
 }
 
 /**

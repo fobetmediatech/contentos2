@@ -29,7 +29,7 @@ import { GeminiError } from '../ai/gemini'
 import { linkAbort } from '../lib/abortControl'
 import { useCorpusStore } from '../store/corpusStore'
 import { dropDismissedCandidates, selectPreferenceExemplars } from '../lib/corpus'
-import { ALL_DISMISSED_MESSAGE } from '../lib/errorMessages'
+import { ALL_DISMISSED_MESSAGE, friendlyGemini } from '../lib/errorMessages'
 
 const TIMEOUT_MS = 150_000
 // Minimum post-filter results before triggering a second hashtag batch
@@ -226,7 +226,9 @@ export function useLocationDiscovery() {
             message = `Scraping error — try again or check your Apify key.`
           }
         } else if (err instanceof GeminiError) {
-          message = `AI error (${err.code}): ${err.message}`
+          // SECURITY (C2/H11): map the code to a fixed string — never forward err.message,
+          // which can echo the raw Gemini response body (prompt text / key fragments).
+          message = friendlyGemini(err.code)
         } else if (err instanceof TypeError && err.message.includes('fetch')) {
           message = `Network blocked — could not reach Apify API. If you're using Brave, disable shields for this page.`
         } else if (err instanceof Error) {
