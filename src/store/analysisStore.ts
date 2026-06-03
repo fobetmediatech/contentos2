@@ -16,6 +16,7 @@
  */
 
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import type { NormalizedProfile } from '../lib/transformers'
 import type { CompetitorAnalysisResult, AnalysisOutput, ClarificationQuestion } from '../ai/prompts'
 import type { ParsedIntent } from '../ai/intentParser'
@@ -141,8 +142,11 @@ const initialState = {
 // `${timestamp}-${index}` key collided on same-millisecond messages and churned when
 // the 50-message slice slid. Module-scope so ids stay unique across store resets.
 let _msgSeq = 0
+// Per-load epoch (base36) so message ids stay unique across reloads even though _msgSeq
+// resets. Without this, restored persisted ids (msg-…-0, …-1) would collide with fresh ones.
+const _idEpoch = Date.now().toString(36)
 
-export const useAnalysisStore = create<AnalysisState>()((set) => ({
+export const useAnalysisStore = create<AnalysisState>()(persist((set) => ({
   ...initialState,
 
   startAnalysis: (params) =>
@@ -183,11 +187,19 @@ export const useAnalysisStore = create<AnalysisState>()((set) => ({
     set((state) => ({
       conversationMessages: [
         ...state.conversationMessages,
-        { ...message, id: message.id ?? `msg-${_msgSeq++}`, timestamp: message.timestamp ?? Date.now() },
+        // id includes a per-load epoch so persisted ids (restored on reload) never collide
+        // with fresh ones — _msgSeq resets to 0 each load, but the epoch differs.
+        { ...message, id: message.id ?? `msg-${_idEpoch}-${_msgSeq++}`, timestamp: message.timestamp ?? Date.now() },
       ].slice(-50),  // cap at 50 messages
     })),
 
   setDiscoveredSeeds: (seeds) => set({ discoveredSeeds: seeds }),
 
   setParsedIntent: (intent) => set({ parsedIntent: intent }),
+}), {
+  // Persist ONLY the chat transcript — not transient status/results — so a reload restores
+  // the conversation without resurrecting a dead "running" progress bar or stale cards.
+  name: 'contentos-chat',
+  version: 1,
+  partialize: (state) => ({ conversationMessages: state.conversationMessages }),
 }))
