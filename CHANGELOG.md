@@ -4,6 +4,37 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.0.0.0] — 2026-06-03
+
+**Phase 1 graduated — the conversational chassis.** The chat is now a real turn-based agent, not a field-driven wizard wearing a chat skin. The agent clarifies before it searches, stays steerable mid-run, and the whole conversation lives in one persistent, centered column.
+
+### Added
+
+- **Turn-based agent loop** — the conversation engine (`src/tools/agentTools.ts` + `src/hooks/useAgentConversation.ts`). Each turn the model either CALLS one tool (discover_competitors / discover_by_location / analyze_reels / answer_content) or ASKS one clarifying question. A pure decide/validate/repair core (`runAgentTurn` → `decideAction` → `validateToolCall`, Zod-validated, one repair re-prompt then fall back to ask) is fully unit-tested; the hook is the thin integration layer.
+- **Tappable clarification pills** — when the agent asks, it offers 2-4 short options; a tap is the user's next message.
+- **Latest-wins steering** — a new message mid-run genuinely cancels the running scrape (a single persistent `currentRun` AbortController that outlives the turn), with a muted "Switched…" note and cleanup of the lingering progress.
+- **Chat persistence** — the conversation transcript survives reloads (zustand `persist`, partialized to `conversationMessages`; per-load epoch message ids avoid restore collisions).
+- **Graceful deep-report degradation** — the reel deep report preflights its serverless function; if it isn't deployed (404 under plain `vite dev`) it shows one clear note instead of failing every reel, and keeps the quick results intact.
+
+### Changed
+
+- **The agent loop is the default (and only) conversation engine** — the `VITE_AGENT_LOOP` flag is gone.
+- **Centered, max-width chat column** (`max-w-4xl`) per DESIGN.md — results no longer sprawl full-bleed across the window like a dashboard.
+- A competitor search **no longer wipes the chat** — `startAnalysis` preserves `conversationMessages` while resetting analysis-specific state.
+- `buildHistory` reads **live** store state (`getState()`), not the render-time snapshot.
+
+### Fixed
+
+- First-message Gemini **400** — `buildHistory` sent empty `contents` from a stale Zustand snapshot; every later turn answered the previous message (off-by-one). Now reads live state.
+- Spurious **"Switched — picking up your new request."** after almost every message (a completed turn's controller was misread as a steer).
+- `MALFORMED_FUNCTION_CALL` surfaced as "the AI declined" — now a retryable parse error; raw Gemini errors log to the console for diagnosis.
+- The ChatPage mount effect called `startChat()` on idle, **wiping the persisted chat** on every reload — now resumes it.
+- `npm run build` (`tsc -b`) was broken since Phase 1a — the intent eval read `process.env` under the browser tsconfig.
+
+### Removed
+
+- The legacy `useConversation` wizard state machine + `detectPipelineSwitch` / `heuristicConfirmMatch`, and the now-orphaned `callGeminiConfirmReply` (gemini.ts) + `buildConfirmReplyPrompt` (prompts.ts). One conversation engine now.
+
 ## [0.4.0.0] — 2026-06-02
 
 Content-copilot overhaul: three research tools callable independently by natural language, a conversational content copilot, and deeper HookMap-style reel analysis — on top of a green baseline and a security pass.
