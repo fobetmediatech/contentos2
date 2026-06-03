@@ -194,6 +194,92 @@ export function nextFeedback(current: Feedback | undefined, clicked: Feedback): 
   return current === clicked ? null : clicked
 }
 
+// ----- Phase 3 slice 3: preference-aware ranking -----
+
+/**
+ * Hard filter (3a): drop candidates the user has dismissed so they stop resurfacing in future
+ * rankings. Generic over anything with a `username`; pure — verdicts come from the live
+ * creators map. Order preserved. Callers apply this AFTER the empty-pool guard and re-check
+ * the count (dismissing can shrink a thin pool — see useCompetitorAnalysis).
+ */
+export function dropDismissedCandidates<T extends { username: string }>(
+  candidates: T[],
+  creators: Record<string, CreatorRecord>,
+): T[] {
+  return candidates.filter((c) => creators[c.username]?.feedback !== 'dismissed')
+}
+
+/** A saved/dismissed creator distilled to the traits Gemini can actually learn from (3b). */
+export interface PreferenceExemplar {
+  username: string
+  followersCount: number
+  engagementRate: number | null
+  niches: string[]
+  verified: boolean
+  /** True when this creator's niches overlap the current search niche — weighted heavily in
+   *  the prompt; cross-niche exemplars are demoted to weak style hints. */
+  sameNiche: boolean
+}
+export interface PreferenceExemplars {
+  saved: PreferenceExemplar[]
+  dismissed: PreferenceExemplar[]
+}
+
+// Niche labels are free-text Gemini output ("food bloggers" vs "food creators"), so an exact
+// match almost never fires. Token overlap (minus generic filler words) is the forgiving
+// heuristic that makes same-niche weighting actually trigger in practice.
+const NICHE_STOPWORDS = new Set([
+  'creators', 'creator', 'bloggers', 'blogger', 'content', 'accounts', 'account', 'influencers', 'influencer', 'the', 'and', 'for',
+])
+function nicheTokens(s: string): Set<string> {
+  return new Set(s.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2 && !NICHE_STOPWORDS.has(w)))
+}
+function nicheOverlap(a: string, b: string): boolean {
+  const tb = nicheTokens(b)
+  for (const t of nicheTokens(a)) if (tb.has(t)) return true
+  return false
+}
+
+/** Distinct niches a creator has surfaced in (sightings' niche field, deduped). */
+function creatorNiches(record: CreatorRecord): string[] {
+  return Array.from(new Set(record.sightings.map((s) => s.niche).filter((n): n is string => !!n)))
+}
+
+function toExemplar(record: CreatorRecord, currentNiche: string): PreferenceExemplar {
+  const niches = creatorNiches(record)
+  return {
+    username: record.username,
+    followersCount: record.followersCount,
+    engagementRate: record.engagementRate,
+    niches,
+    verified: record.verified,
+    sameNiche: niches.some((n) => nicheOverlap(n, currentNiche)),
+  }
+}
+
+/**
+ * Select up to `cap` saved + `cap` dismissed exemplars for the preference prompt block (3b).
+ * Ordered same-niche-first (token overlap with the current search), then most-recent by
+ * feedbackAt — so the cap keeps the most relevant signal. Neutral creators are ignored.
+ */
+export function selectPreferenceExemplars(
+  creators: CreatorRecord[],
+  currentNiche: string,
+  cap = 5,
+): PreferenceExemplars {
+  const pick = (verdict: Feedback): PreferenceExemplar[] =>
+    creators
+      .filter((r) => r.feedback === verdict)
+      .map((r) => ({ record: r, ex: toExemplar(r, currentNiche) }))
+      .sort((a, b) => {
+        if (a.ex.sameNiche !== b.ex.sameNiche) return a.ex.sameNiche ? -1 : 1 // same-niche first
+        return (b.record.feedbackAt ?? 0) - (a.record.feedbackAt ?? 0) // then most-recent
+      })
+      .slice(0, cap)
+      .map((x) => x.ex)
+  return { saved: pick('saved'), dismissed: pick('dismissed') }
+}
+
 /** Numeric key for a sort dimension — all dimensions sort descending. */
 function sortValue(r: CreatorRecord, sort: CorpusSort): number {
   switch (sort) {

@@ -11,6 +11,7 @@
 
 import { buildCompetitorPrompt, buildDiscoveryPrompt, buildClarificationPrompt, buildContentPrompt, type AnalysisOutput, type DiscoveryOutput, type ClarificationQuestion, type ContentContext } from './prompts'
 import type { NormalizedProfile } from '../lib/transformers'
+import type { PreferenceExemplars } from '../lib/corpus'
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta'
 // Model precedence: env override → default. Update default here when Google deprecates.
@@ -353,8 +354,9 @@ export async function analyzeCompetitors(
   signal?: AbortSignal,
   nicheContext?: string,
   clarificationAnswer?: string,
+  preferenceExemplars?: PreferenceExemplars,
 ): Promise<AnalysisOutput> {
-  const prompt = buildCompetitorPrompt(inputProfiles, candidateProfiles, nicheContext, clarificationAnswer)
+  const prompt = buildCompetitorPrompt(inputProfiles, candidateProfiles, nicheContext, clarificationAnswer, preferenceExemplars)
   const parsed = await callGeminiWithSchema<AnalysisOutput>(
     geminiKey,
     prompt,

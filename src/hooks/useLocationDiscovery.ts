@@ -27,6 +27,9 @@ import { markKeyCooldown } from '../lib/keyRotator'
 import { ApifyError } from '../lib/apifyCore'
 import { GeminiError } from '../ai/gemini'
 import { linkAbort } from '../lib/abortControl'
+import { useCorpusStore } from '../store/corpusStore'
+import { dropDismissedCandidates } from '../lib/corpus'
+import { ALL_DISMISSED_MESSAGE } from '../lib/errorMessages'
 
 const TIMEOUT_MS = 150_000
 // Minimum post-filter results before triggering a second hashtag batch
@@ -139,6 +142,13 @@ export function useLocationDiscovery() {
           throw new Error(
             `We found no creators in ${safeCity} for "${safeNiche}". Try a broader city or niche.`,
           )
+        }
+
+        // 3a (Phase 3): drop creators the user dismissed before ranking, so they stop
+        // resurfacing in discovery too. Re-check with a distinct message if it empties the pool.
+        finalFiltered = dropDismissedCandidates(finalFiltered, useCorpusStore.getState().creators)
+        if (finalFiltered.length === 0) {
+          throw new Error(ALL_DISMISSED_MESSAGE)
         }
 
         // Build hallucination filter set from ALL candidate profiles (including expansion)

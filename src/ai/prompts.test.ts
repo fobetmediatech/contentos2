@@ -9,8 +9,15 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { buildCompetitorPrompt, buildClarificationPrompt, buildContentPrompt } from './prompts'
+import { buildCompetitorPrompt, buildClarificationPrompt, buildContentPrompt, buildPreferenceBlock } from './prompts'
 import type { NormalizedProfile } from '../lib/transformers'
+import type { PreferenceExemplars } from '../lib/corpus'
+
+const exemplars = (over: Partial<PreferenceExemplars> = {}): PreferenceExemplars => ({
+  saved: [{ username: 'savedguy', followersCount: 50_000, engagementRate: 7.2, niches: ['food'], verified: true, sameNiche: true }],
+  dismissed: [{ username: 'nope', followersCount: 2_000_000, engagementRate: 0.4, niches: ['celebrity'], verified: true, sameNiche: false }],
+  ...over,
+})
 
 function makeProfile(overrides: Partial<NormalizedProfile> = {}): NormalizedProfile {
   return {
@@ -166,6 +173,37 @@ describe('buildCompetitorPrompt — clarificationAnswer injection', () => {
     expect(refinementPos).toBeGreaterThan(-1)
     expect(nicheContextPos).toBeGreaterThan(-1)
     expect(refinementPos).toBeLessThan(nicheContextPos)
+  })
+})
+
+describe('buildPreferenceBlock (Phase 3, 3b)', () => {
+  it('returns empty string when there are no exemplars', () => {
+    expect(buildPreferenceBlock({ saved: [], dismissed: [] })).toBe('')
+  })
+
+  it('renders saved + dismissed traits and frames preference as a SOFT tiebreaker', () => {
+    const block = buildPreferenceBlock(exemplars())
+    expect(block).toContain('@savedguy')
+    expect(block).toContain('@nope')
+    expect(block.toLowerCase()).toContain('tiebreaker')                          // soft framing
+    expect(block).toMatch(/do not override|never override|must not override/i)   // precedence guard
+  })
+
+  it('marks same-niche exemplars as the strong signal', () => {
+    expect(buildPreferenceBlock(exemplars()).toLowerCase()).toContain('same niche')
+  })
+})
+
+describe('buildCompetitorPrompt — preference injection (Phase 3, 3b)', () => {
+  it('injects the PREFERENCE block when exemplars are provided', () => {
+    const prompt = buildCompetitorPrompt([inputProfile], [makeProfile()], undefined, undefined, exemplars())
+    expect(prompt).toContain('@savedguy')
+    expect(prompt.toLowerCase()).toContain('tiebreaker')
+  })
+
+  it('omits the PREFERENCE block when no exemplars are provided', () => {
+    const prompt = buildCompetitorPrompt([inputProfile], [makeProfile()])
+    expect(prompt.toLowerCase()).not.toContain('preference signal')
   })
 })
 
