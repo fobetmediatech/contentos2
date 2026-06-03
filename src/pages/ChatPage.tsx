@@ -299,7 +299,9 @@ export function ChatPage() {
             </div>
           </div>
         ) : (
-          <div className="px-4 pt-4 pb-6">
+          // DESIGN.md: chat is a centered, max-width column (not full-bleed) — this is what
+          // makes it read as a focused conversation instead of a sprawling dashboard.
+          <div className="px-4 pt-4 pb-6 max-w-4xl mx-auto w-full">
             <div role="log" aria-live="polite" aria-label="Conversation" className="flex flex-col gap-4">
 
               {/* Conversation messages */}
@@ -408,7 +410,7 @@ export function ChatPage() {
                       <p className="text-xs font-semibold text-[#7A6A54] uppercase tracking-wide mb-3">
                         {COMPETITOR_CATEGORIES.top.sectionLabel}
                       </p>
-                      <div className="grid gap-3 grid-cols-1 xl:grid-cols-2">
+                      <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
                         {topCompetitors.map((c) => (
                           <CompetitorCard
                             key={c.username}
@@ -427,7 +429,7 @@ export function ChatPage() {
                       <p className="text-xs font-semibold text-[#7A6A54] uppercase tracking-wide mb-3">
                         {COMPETITOR_CATEGORIES.trending.sectionLabel}
                       </p>
-                      <div className="grid gap-3 grid-cols-1 xl:grid-cols-2">
+                      <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
                         {trendingCompetitors.map((c) => (
                           <CompetitorCard
                             key={c.username}
@@ -509,7 +511,7 @@ export function ChatPage() {
                       <p className="text-xs font-semibold text-[#7A6A54] uppercase tracking-wide mb-3">
                         {DISCOVERY_CATEGORIES.top.sectionLabel}
                       </p>
-                      <div className="grid gap-3 grid-cols-1 xl:grid-cols-2">
+                      <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
                         {topDiscovery.map((r) => (
                           <DiscoveryCard
                             key={r.username}
@@ -528,7 +530,7 @@ export function ChatPage() {
                       <p className="text-xs font-semibold text-[#7A6A54] uppercase tracking-wide mb-3">
                         {DISCOVERY_CATEGORIES.trending.sectionLabel}
                       </p>
-                      <div className="grid gap-3 grid-cols-1 xl:grid-cols-2">
+                      <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
                         {trendingDiscovery.map((r) => (
                           <DiscoveryCard
                             key={r.username}
@@ -615,7 +617,8 @@ export function ChatPage() {
 
       {/* ── Input area ────────────────────────────────────────────────── */}
       <div className="flex-shrink-0 bg-surface border-t border-[rgba(245,237,214,0.08)] px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))]">
-        <div className="flex items-end gap-2">
+        {/* Centered to the same max-width as the conversation column above. */}
+        <div className="flex items-end gap-2 max-w-4xl mx-auto w-full">
           <div className="relative flex-1">
             <textarea
               ref={textareaRef}
