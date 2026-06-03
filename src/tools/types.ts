@@ -26,7 +26,6 @@ export type ResolvedIntent = Extract<ParsedIntent, { needsClarification?: false 
  * @property steps         - Ordered step labels shown in <ProgressSteps />. Length drives the step bar.
  * @property confirmMessage - Returns the assistant message shown before the user confirms.
  * @property confirmOptions - Returns the option buttons shown with the confirm message.
- * @property resultsPath   - Absolute router path to navigate to on completion (e.g. '/results').
  */
 export interface PipelineToolDescriptor {
   id: string
@@ -34,5 +33,4 @@ export interface PipelineToolDescriptor {
   steps: string[]
   confirmMessage: (intent: ResolvedIntent) => string
   confirmOptions: (intent: ResolvedIntent) => string[]
-  resultsPath: string
 }

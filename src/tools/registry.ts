@@ -47,7 +47,6 @@ export const PIPELINE_REGISTRY: Record<string, PipelineToolDescriptor> = {
       'Macro creators (100K+ followers)',
       'Include businesses and brands',
     ],
-    resultsPath: '/results',
   },
 
   discovery: {
@@ -60,7 +59,6 @@ export const PIPELINE_REGISTRY: Record<string, PipelineToolDescriptor> = {
       return `Running **location discovery** — finding ${niche} creators physically based in **${location}**. Say "go" to start, or type what you actually want.\n\nWrong pipeline? Try typing "show me who dominates this niche globally" instead.`
     },
     confirmOptions: () => [PROCEED_LABEL, DISCOVERY_REDIRECT_TO_COMPETITOR],
-    resultsPath: '/discover/results',
   },
 
   reel: {
@@ -73,7 +71,5 @@ export const PIPELINE_REGISTRY: Record<string, PipelineToolDescriptor> = {
       return `Break down the hook patterns in recent reels for ${shown || 'these creators'}? I'll analyze the top ~10 reels each — about 2–3 min per creator.`
     },
     confirmOptions: () => [REEL_ANALYZE_LABEL],
-    // Reel results render inline in the chat (no dedicated results route).
-    resultsPath: '/',
   },
 }

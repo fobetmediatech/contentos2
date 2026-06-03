@@ -37,8 +37,6 @@ export interface ActivePipelineState {
   progressLabel: string
   /** Discovery results when the discovery pipeline is done; null otherwise */
   discoveryResults: DiscoveryResult[] | null
-  /** Router path to navigate to when the user clicks "View full report" */
-  resultsPath: string
   /** True when the done pipeline accepts a follow-up refinement message */
   followUpAllowed: boolean
 }
@@ -51,7 +49,6 @@ const NULL_STATE: ActivePipelineState = {
   stepLabels: [],
   progressLabel: '',
   discoveryResults: null,
-  resultsPath: '',
   followUpAllowed: false,
 }
 
@@ -90,7 +87,6 @@ export function computeActivePipeline(v: PipelineInputValues): ActivePipelineSta
       stepLabels: descriptor.steps,
       progressLabel,
       discoveryResults: null,
-      resultsPath: descriptor.resultsPath,
       followUpAllowed: isDone,
     }
   }
@@ -121,7 +117,6 @@ export function computeActivePipeline(v: PipelineInputValues): ActivePipelineSta
       stepLabels: dynamicStepLabels,
       progressLabel,
       discoveryResults: isDone && v.discoveryResults.length > 0 ? v.discoveryResults : null,
-      resultsPath: descriptor.resultsPath,
       followUpAllowed: isDone,
     }
   }

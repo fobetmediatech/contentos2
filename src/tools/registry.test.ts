@@ -2,7 +2,7 @@
  * PIPELINE_REGISTRY unit tests.
  *
  * Validates that each registry entry:
- *   - has the required shape (id, name, steps, resultsPath)
+ *   - has the required shape (id, name, steps)
  *   - confirmMessage() returns a non-empty string with niche/location injected
  *   - confirmOptions() includes PROCEED_LABEL as the first option
  *   - steps array matches the corresponding store STEP_LABELS
@@ -62,10 +62,6 @@ describe('PIPELINE_REGISTRY — competitor entry', () => {
     expect(entry.id).toBe('competitor')
   })
 
-  it('resultsPath is "/results"', () => {
-    expect(entry.resultsPath).toBe('/results')
-  })
-
   it('steps array matches STEP_LABELS values in order', () => {
     expect(entry.steps).toEqual(Object.values(STEP_LABELS))
   })
@@ -99,10 +95,6 @@ describe('PIPELINE_REGISTRY — discovery entry', () => {
 
   it('has id "discovery"', () => {
     expect(entry.id).toBe('discovery')
-  })
-
-  it('resultsPath is "/discover/results"', () => {
-    expect(entry.resultsPath).toBe('/discover/results')
   })
 
   it('steps array contains steps 1-5 only (step 6 is dynamic, added by useActivePipeline)', () => {
@@ -176,12 +168,6 @@ describe('PIPELINE_REGISTRY — registry shape invariants', () => {
   it('no entry has an empty steps array', () => {
     for (const descriptor of Object.values(PIPELINE_REGISTRY)) {
       expect(descriptor.steps.length).toBeGreaterThan(0)
-    }
-  })
-
-  it('no entry has an empty resultsPath', () => {
-    for (const descriptor of Object.values(PIPELINE_REGISTRY)) {
-      expect(descriptor.resultsPath.length).toBeGreaterThan(0)
     }
   })
 })
