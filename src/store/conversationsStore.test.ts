@@ -8,9 +8,15 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useConversationsStore, deriveConversationTitle, sortConversations } from './conversationsStore'
+import { useConversationsStore, deriveConversationTitle, sortConversations, migrateLegacyChat } from './conversationsStore'
 import type { Conversation } from './conversationsStore'
 import type { ChatMessage } from './analysisStore'
+
+// A legacy `contentos-chat` persist envelope (zustand v0 shape): { state: { conversationMessages } }.
+const legacyBlob = (messages: unknown[]) =>
+  JSON.stringify({ state: { conversationMessages: messages }, version: 0 })
+
+const freshStore = () => ({ conversations: { c1: { id: 'c1', title: 'New chat', messages: [], createdAt: 0, updatedAt: 0 } as Conversation } })
 
 const msg = (content: string, role: 'user' | 'assistant' = 'user'): Omit<ChatMessage, 'id' | 'timestamp'> => ({
   role,
@@ -49,6 +55,37 @@ describe('sortConversations', () => {
   })
 })
 
+describe('migrateLegacyChat', () => {
+  it('adopts a legacy transcript into a conversation when the store is fresh', () => {
+    const messages = [
+      { id: 'm1', role: 'user', content: 'Find vegan chefs in Pune', timestamp: 100, type: 'text' },
+      { id: 'm2', role: 'assistant', content: 'On it!', timestamp: 200, type: 'text' },
+    ]
+    const conv = migrateLegacyChat(legacyBlob(messages), freshStore())
+    expect(conv).not.toBeNull()
+    expect(conv!.messages).toHaveLength(2)
+    expect(conv!.title.startsWith('Find vegan chefs')).toBe(true)
+    expect(conv!.createdAt).toBe(100) // first message timestamp
+    expect(conv!.updatedAt).toBe(200) // last message timestamp
+  })
+
+  it('returns null when there is nothing to migrate', () => {
+    expect(migrateLegacyChat(null, freshStore())).toBeNull()
+    expect(migrateLegacyChat('not json{', freshStore())).toBeNull()
+    expect(migrateLegacyChat(legacyBlob([]), freshStore())).toBeNull()
+  })
+
+  it('never clobbers real post-refactor history', () => {
+    const messages = [{ id: 'm1', role: 'user', content: 'old chat', timestamp: 1, type: 'text' }]
+    const storeWithHistory = {
+      conversations: {
+        c1: { id: 'c1', title: 'Active', messages: [{ id: 'x', role: 'user', content: 'new', timestamp: 9, type: 'text' }] as ChatMessage[], createdAt: 0, updatedAt: 9 },
+      },
+    }
+    expect(migrateLegacyChat(legacyBlob(messages), storeWithHistory)).toBeNull()
+  })
+})
+
 describe('conversationsStore', () => {
   it('starts with a single active empty conversation', () => {
     const s = useConversationsStore.getState()
@@ -62,6 +99,27 @@ describe('conversationsStore', () => {
     expect(s.conversations[s.activeId].messages).toHaveLength(1)
     expect(s.conversations[s.activeId].messages[0].content).toBe('hello there')
     expect(s.conversations[s.activeId].messages[0].id).toBeTruthy() // id assigned
+  })
+
+  it('addMessageTo appends to a SPECIFIC conversation even when it is not the active one', () => {
+    // Reel snapshots land in the conversation the run started in, not wherever the user
+    // has since navigated — addMessageTo targets that conversation explicitly.
+    useConversationsStore.getState().addMessage(msg('chat A'))
+    const a = useConversationsStore.getState().activeId
+    useConversationsStore.getState().startNew()
+    const b = useConversationsStore.getState().activeId // active is now B
+
+    useConversationsStore.getState().addMessageTo(a, msg('snapshot into A', 'assistant'))
+    const s = useConversationsStore.getState()
+    expect(s.activeId).toBe(b) // active conversation unchanged
+    expect(s.conversations[a].messages.map((m) => m.content)).toEqual(['chat A', 'snapshot into A'])
+    expect(s.conversations[b].messages).toEqual([]) // B untouched
+  })
+
+  it('addMessageTo is a no-op when the target conversation no longer exists', () => {
+    useConversationsStore.getState().addMessageTo('deleted-id', msg('orphan'))
+    const s = useConversationsStore.getState()
+    expect(s.conversations[s.activeId].messages).toEqual([])
   })
 
   it('auto-titles the active conversation from the first user message', () => {

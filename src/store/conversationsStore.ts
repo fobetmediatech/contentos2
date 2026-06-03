@@ -54,11 +54,61 @@ function makeInitial(): { conversations: Record<string, Conversation>; activeId:
   return { conversations: { [c.id]: c }, activeId: c.id }
 }
 
+// ----- Legacy single-chat migration -----
+// Before multi-conversation history, the transcript lived in analysisStore.conversationMessages,
+// persisted under `contentos-chat`. That key is orphaned post-refactor. We adopt it ONCE into a
+// real conversation so a returning user's old chat doesn't silently vanish, then drop the key.
+
+const LEGACY_CHAT_KEY = 'contentos-chat'
+
+/** Wrap a legacy transcript into a Conversation. Timestamps derive from the messages themselves
+ *  (deterministic — no Date.now()), so a migrated chat sorts where it actually happened. */
+export function buildMigratedConversation(messages: ChatMessage[]): Conversation {
+  const createdAt = messages[0]?.timestamp ?? 0
+  const updatedAt = messages[messages.length - 1]?.timestamp ?? createdAt
+  return {
+    id: nextId('conv'),
+    title: deriveConversationTitle(messages),
+    messages: messages.slice(-MESSAGE_CAP),
+    createdAt,
+    updatedAt,
+  }
+}
+
+/**
+ * Decide whether to migrate the legacy `contentos-chat` blob. Pure + testable: returns a fresh
+ * Conversation to adopt, or null when there's nothing to migrate — no/invalid legacy data, an
+ * empty transcript, or the user already has real post-refactor history (never clobber it).
+ */
+export function migrateLegacyChat(
+  legacyRaw: string | null,
+  current: { conversations: Record<string, Conversation> },
+): Conversation | null {
+  if (!legacyRaw) return null
+  let messages: unknown
+  try {
+    messages = (JSON.parse(legacyRaw) as { state?: { conversationMessages?: unknown } })?.state?.conversationMessages
+  } catch {
+    return null // corrupt blob — ignore
+  }
+  if (!Array.isArray(messages) || messages.length === 0) return null
+  // Only seed when the store is at its fresh default (all conversations empty). If the user has
+  // chatted since the refactor, the legacy transcript is stale — leave their history untouched.
+  if (Object.values(current.conversations).some((c) => c.messages.length > 0)) return null
+  return buildMigratedConversation(messages as ChatMessage[])
+}
+
 interface ConversationsState {
   conversations: Record<string, Conversation>
   activeId: string
   /** Append a message to the active conversation (assigns id + timestamp, caps at 50). */
   addMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'> & { id?: string; timestamp?: number }) => void
+  /** Append to a SPECIFIC conversation — e.g. snapshot a reel run into the chat it started in,
+   *  even if the user has since switched away. No-op if that conversation no longer exists. */
+  addMessageTo: (
+    conversationId: string,
+    message: Omit<ChatMessage, 'id' | 'timestamp'> & { id?: string; timestamp?: number },
+  ) => void
   /** Start a fresh conversation (no-op when the active one is already empty). */
   startNew: () => void
   switchTo: (id: string) => void
@@ -67,28 +117,30 @@ interface ConversationsState {
   reset: () => void
 }
 
-export const useConversationsStore = create<ConversationsState>()(persist((set) => ({
+export const useConversationsStore = create<ConversationsState>()(persist((set, get) => ({
   ...makeInitial(),
 
-  addMessage: (message) =>
+  addMessageTo: (conversationId, message) =>
     set((state) => {
-      const active = state.conversations[state.activeId]
-      if (!active) return {}
+      const conv = state.conversations[conversationId]
+      if (!conv) return {}
       const msg: ChatMessage = {
         ...message,
         id: message.id ?? nextId('msg'),
         timestamp: message.timestamp ?? Date.now(),
       }
-      const messages = [...active.messages, msg].slice(-MESSAGE_CAP)
+      const messages = [...conv.messages, msg].slice(-MESSAGE_CAP)
       // Auto-title from the first user message; once titled (or renamed) it sticks.
-      const title = active.title === 'New chat' ? deriveConversationTitle(messages) : active.title
+      const title = conv.title === 'New chat' ? deriveConversationTitle(messages) : conv.title
       return {
         conversations: {
           ...state.conversations,
-          [active.id]: { ...active, messages, title, updatedAt: Date.now() },
+          [conv.id]: { ...conv, messages, title, updatedAt: Date.now() },
         },
       }
     }),
+
+  addMessage: (message) => get().addMessageTo(get().activeId, message),
 
   startNew: () =>
     set((state) => {
@@ -125,4 +177,27 @@ export const useConversationsStore = create<ConversationsState>()(persist((set) 
   name: 'contentos-conversations',
   storage: safePersistStorage,
   partialize: (s) => ({ conversations: s.conversations, activeId: s.activeId }),
+  // One-time adoption of the pre-refactor single-chat transcript. Runs after this store
+  // rehydrates: if a `contentos-chat` blob exists and we have no real history yet, migrate it
+  // into a conversation. The legacy key is always cleared afterwards so it never re-runs.
+  onRehydrateStorage: () => (state) => {
+    if (!state || typeof localStorage === 'undefined') return
+    let legacyRaw: string | null
+    try {
+      legacyRaw = localStorage.getItem(LEGACY_CHAT_KEY)
+    } catch {
+      return // localStorage unavailable (private mode, etc.) — nothing to migrate
+    }
+    const migrated = migrateLegacyChat(legacyRaw, { conversations: state.conversations })
+    if (migrated) {
+      // Replace the (empty) default with the migrated chat — safe because we only reach here
+      // when there's no real history to lose.
+      useConversationsStore.setState({ conversations: { [migrated.id]: migrated }, activeId: migrated.id })
+    }
+    try {
+      localStorage.removeItem(LEGACY_CHAT_KEY)
+    } catch {
+      /* best-effort cleanup */
+    }
+  },
 }))

@@ -19,6 +19,9 @@ import { create } from 'zustand'
 import type { NormalizedProfile } from '../lib/transformers'
 import type { CompetitorAnalysisResult, DiscoveryResult, AnalysisOutput, ClarificationQuestion } from '../ai/prompts'
 import type { ParsedIntent } from '../ai/intentParser'
+// Type-only imports (erased at runtime — no cycle) for the reel result snapshot.
+import type { CreatorAnalysisState, SynthesisOutput } from './reelAnalysisStore'
+import type { DeepNicheReport } from '../ai/prompts/deepReelAnalysis'
 
 export type AnalysisStep = 1 | 2 | 3 | 4 | 5
 
@@ -77,7 +80,20 @@ export type DiscoveryResultPayload = {
   didExpand: boolean
   locationRelaxed: boolean
 }
-export type ResultPayload = CompetitorResultPayload | DiscoveryResultPayload
+/**
+ * A finished reel/hook run, snapshotted into the conversation it ran in (Phase 2 parity with
+ * competitor/discovery). Replaces the old global-store + live-marker approach, which showed the
+ * wrong run after switching conversations. `creatorStates` is trimmed (thumbnails + deep maps
+ * dropped); the deep report re-runs on demand via the (independent) startDeepReport(handles).
+ */
+export type ReelResultPayload = {
+  kind: 'reel'
+  handles: string[]
+  creatorStates: Record<string, CreatorAnalysisState>
+  synthesis: SynthesisOutput | null
+  deepReport: DeepNicheReport | null
+}
+export type ResultPayload = CompetitorResultPayload | DiscoveryResultPayload | ReelResultPayload
 
 export interface ChatMessage {
   /** Stable unique id for React keys — monotonic, assigned by addMessage. */

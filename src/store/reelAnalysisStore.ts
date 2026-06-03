@@ -90,6 +90,9 @@ interface ReelAnalysisState {
    *  creators are being / have been analyzed. Set by startAnalysis, cleared on reset.
    *  Both the inline ChatPage surface and NL-routed runs read this. */
   activeHandles: string[]
+  /** Conversation the current run belongs to — so its result snapshots into the RIGHT chat,
+   *  and the live block only renders in that conversation (no cross-conversation mismatch). */
+  reelConversationId: string | null
   creatorStates: Record<string, CreatorAnalysisState>
   synthesisStatus: 'idle' | 'running' | 'done' | 'failed'
   synthesis: SynthesisOutput | null
@@ -101,6 +104,7 @@ interface ReelAnalysisState {
   // actions
   setSelectedHandles: (handles: string[]) => void
   setActiveHandles: (handles: string[]) => void
+  setReelConversationId: (id: string | null) => void
   setCreatorState: (handle: string, partial: Partial<CreatorAnalysisState>) => void
   /** Merge a single reel's deep status and/or analysis into a creator's deep maps. */
   setDeepReel: (
@@ -121,6 +125,7 @@ interface ReelAnalysisState {
 const initialState = {
   selectedHandles: [] as string[],
   activeHandles: [] as string[],
+  reelConversationId: null as string | null,
   creatorStates: {} as Record<string, CreatorAnalysisState>,
   synthesisStatus: 'idle' as ReelAnalysisState['synthesisStatus'],
   synthesis: null as SynthesisOutput | null,
@@ -136,6 +141,8 @@ export const useReelAnalysisStore = create<ReelAnalysisState>()(persist((set) =>
   ...initialState,
 
   setSelectedHandles: (handles) => set({ selectedHandles: handles }),
+
+  setReelConversationId: (id) => set({ reelConversationId: id }),
 
   setActiveHandles: (handles) => set({ activeHandles: handles }),
 
@@ -185,6 +192,7 @@ export const useReelAnalysisStore = create<ReelAnalysisState>()(persist((set) =>
   storage: safePersistStorage,
   partialize: (s) => ({
     activeHandles: s.activeHandles,
+    reelConversationId: s.reelConversationId,
     creatorStates: s.creatorStates,
     synthesis: s.synthesis,
     synthesisStatus: s.synthesisStatus,

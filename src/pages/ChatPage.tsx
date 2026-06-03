@@ -17,16 +17,19 @@ import { useAgentConversation } from '../hooks/useAgentConversation'
 import { useCompetitorAnalysis } from '../hooks/useCompetitorAnalysis'
 import { useActivePipeline } from '../hooks/useActivePipeline'
 import { useReelAnalysis } from '../hooks/useReelAnalysis'
+import { useReelAnalysisStore } from '../store/reelAnalysisStore'
 import { ChatMessage, ProgressBubble, TypingIndicator } from '../components/ChatMessage'
 import { ClarificationCard } from '../components/ClarificationCard'
 import { CompetitorResultMessage } from '../components/CompetitorResultMessage'
 import { DiscoveryResultMessage } from '../components/DiscoveryResultMessage'
 import { ConversationSwitcher } from '../components/ConversationSwitcher'
 import { InlineReelResults } from '../components/InlineReelResults'
+import { ReelResultMessage } from '../components/ReelResultMessage'
 import type { NormalizedProfile } from '../lib/transformers'
 import type { ChatMessage as ChatMessageData } from '../store/analysisStore'
 import { useCorpusStore } from '../store/corpusStore'
 import { harvestCompetitors, harvestDiscovery, harvestReelContent } from '../lib/corpusHarvest'
+import { buildReelResultPayload } from '../lib/reelSnapshot'
 
 // Tool chips shown in the empty state — one per independent tool, so all three
 // are discoverable at a glance. Tapping prefills the input with a representative prompt.
@@ -70,6 +73,7 @@ export function ChatPage() {
   const conversations = useConversationsStore((s) => s.conversations)
   const activeConversationId = useConversationsStore((s) => s.activeId)
   const addMessage = useConversationsStore((s) => s.addMessage)
+  const addMessageTo = useConversationsStore((s) => s.addMessageTo)
   const startNew = useConversationsStore((s) => s.startNew)
   const switchConversation = useConversationsStore((s) => s.switchTo)
   const deleteConversation = useConversationsStore((s) => s.deleteConversation)
@@ -94,6 +98,10 @@ export function ChatPage() {
   const agentConv = useAgentConversation()
   const { answerClarification, isPending: clarificationPending } = useCompetitorAnalysis()
   const { startAnalysis: startReelAnalysis, startDeepReport, activeHandles, creatorStates, synthesisStatus, synthesis, synthesisError, deepReport, deepReportStatus, reset: resetReel } = useReelAnalysis()
+  // Which conversation the current reel run belongs to — gates the live block to that chat and
+  // routes its snapshot there on supersede (results-as-messages parity with competitor/discovery).
+  const reelConversationId = useReelAnalysisStore((s) => s.reelConversationId)
+  const setReelConversationId = useReelAnalysisStore((s) => s.setReelConversationId)
 
   const [inputText, setInputText] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -204,6 +212,9 @@ export function ChatPage() {
     const active = activeHandles.length > 0
     if (active && !reelActiveRef.current) {
       reelActiveRef.current = true
+      // Tag the run with the conversation it started in: the live block only renders here
+      // (gated below), and on supersede the snapshot lands here too.
+      setReelConversationId(activeConversationId)
       addMessage({
         role: 'assistant',
         type: 'reel',
@@ -212,7 +223,7 @@ export function ChatPage() {
     } else if (!active) {
       reelActiveRef.current = false
     }
-  }, [activeHandles, addMessage])
+  }, [activeHandles, addMessage, setReelConversationId, activeConversationId])
 
   // Results-as-messages (stage 2): snapshot a finished DISCOVERY run into the conversation as
   // a `type:'result'` message, then reset the discovery store. Armed only while a real run is
@@ -298,7 +309,31 @@ export function ChatPage() {
     setSelectedHandles([])
   }
 
+  // Snapshot the CURRENT (finished) reel run into the conversation it ran in, BEFORE a new run
+  // resets the global store. Reads the live store (getState) so it's accurate at call time.
+  // Guard: only a terminal run with a known home conversation snapshots — an in-flight or
+  // never-started run is skipped (interrupted runs are intentionally dropped).
+  const snapshotCurrentReelRun = () => {
+    const s = useReelAnalysisStore.getState()
+    const terminal =
+      s.synthesisStatus === 'done' || s.synthesisStatus === 'failed' ||
+      s.deepReportStatus === 'done' || s.deepReportStatus === 'failed'
+    if (!s.reelConversationId || s.activeHandles.length === 0 || !terminal) return
+    addMessageTo(s.reelConversationId, {
+      role: 'assistant',
+      type: 'result',
+      content: `Reel breakdown for ${s.activeHandles.map((h) => `@${h}`).join(', ')}.`,
+      result: buildReelResultPayload({
+        handles: s.activeHandles,
+        creatorStates: s.creatorStates,
+        synthesis: s.synthesis,
+        deepReport: s.deepReport,
+      }),
+    })
+  }
+
   const handleStartOver = () => {
+    snapshotCurrentReelRun() // preserve the finished run in its conversation before reset wipes it
     resetReel()
     startNew() // a fresh conversation — the finished one stays in history (switchable)
     freshenAnalysis()
@@ -329,6 +364,7 @@ export function ChatPage() {
   const handleAnalyzeReels = () => {
     const handles = [...selectedHandles]
     setSelectedHandles([])
+    snapshotCurrentReelRun() // if a finished reel run is on screen, preserve it before this supersedes it
     startReelAnalysis(handles)  // sets activeHandles in the reel store
   }
 
@@ -447,10 +483,23 @@ export function ChatPage() {
                     onStartOver={handleStartOver}
                     reelActive={activeHandles.length > 0}
                   />
+                ) : message.type === 'result' && message.result?.kind === 'reel' ? (
+                  // A superseded/finished reel run, snapshotted into this conversation. Renders
+                  // statically from the payload — immune to the live store moving on.
+                  <ReelResultMessage
+                    key={message.id}
+                    payload={message.result}
+                    onSuggest={(text) => {
+                      setInputText(text)
+                      textareaRef.current?.focus()
+                    }}
+                    onDeepReport={(handles) => void startDeepReport(handles)}
+                    onStartOver={handleStartOver}
+                  />
                 ) : message.type === 'reel' ? (
                   // Reel block renders in place at the LATEST reel marker (the store holds one
                   // live run). Older markers + a restored marker with no live run no-op.
-                  message.id === lastReelMarkerId && activeHandles.length > 0 ? (
+                  message.id === lastReelMarkerId && activeHandles.length > 0 && reelConversationId === activeConversationId ? (
                     <Fragment key={message.id}>
                       <div className="flex items-start gap-2">
                         <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(167,139,250,0.12)] flex items-center justify-center mt-0.5">
