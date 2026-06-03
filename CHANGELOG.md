@@ -4,6 +4,38 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [2.0.0.0] — 2026-06-03
+
+**Phase 2 — memory.** The OS now remembers. Every creator you surface is kept across searches and recognized when they reappear, reel breakdowns survive a reload, and you can keep multiple research conversations side by side. What was a stateless search box is now a research library that gets richer the more you use it.
+
+### Added
+
+- **Creator/content corpus** — a cross-search memory (IndexedDB) that dedupes every creator you find by handle and accumulates their *sightings* over time (`src/lib/corpus.ts`, `corpusIdb.ts`, `corpusStore.ts`). A creator who shows up in three searches becomes one remembered record with three sightings.
+- **"Seen N×" recognition** — competitor and discovery cards flag a creator you surfaced in a *prior* search (hover for the niches/cities they appeared in). A 🧠 count in the nav shows how much the OS has learned.
+- **Memory page** (`/memory`) — browse every remembered creator (sort by most-recent / most-seen / engagement / followers), see where each was found, and expand to their stored reel hooks. The nav count links here.
+- **Reel hooks stored as content** — finished reel analyses are saved into the corpus as content tied to each creator (the "content" half of the corpus).
+- **Reel results persist across reload** — a reel/hook breakdown no longer vanishes on refresh; the reel store is persisted with a guard that discards an interrupted mid-run so you never come back to stuck spinners.
+- **Multi-conversation history** — a switcher above the chat lists past conversations (switch / delete) with a New chat button, auto-titled from your first message. Each conversation is kept separately.
+- **Results-as-messages** — competitor and discovery results snapshot into the conversation as inline messages, so they survive a reload and interleave with the chat instead of a transient bottom-pinned block.
+
+### Changed
+
+- **Competitor cards now show metrics** — engagement rate, followers, and avatars render on competitor results (the pipeline now stores the ranked candidates' profiles, not just their count).
+- **The transcript moved to a single-source `conversationsStore`** — `analysisStore` now holds only analysis state; the active conversation owns the messages.
+- **The reel block renders in place in the conversation flow** instead of pinned to the bottom.
+- **Agent history collapses consecutive same-role turns** so a prior search's handles/niche can no longer bleed into the next request.
+
+### Fixed
+
+- **Apify monthly-limit (403)** now shows an accurate message ("monthly usage limit reached — add a key from another account, upgrade, or wait for the reset") instead of the misleading "check your Apify key", and cools the exhausted key down so a key from another account routes around it.
+- **Cross-search contamination** — a filtered-out error between two user messages left two consecutive user turns that Gemini conflated, merging the previous search's handle + niche into the new one (`@nike.training` + `ai` → `@nike.trainingai`). History now alternates strictly.
+- Persisted result payloads are slimmed (heavy profile fields dropped) to keep the transcript light.
+
+### Infrastructure
+
+- `safePersistStorage` — an import-safe localStorage wrapper with an in-memory fallback, so a missing or hostile localStorage can never take down a persisted store on import.
+- The corpus, conversation, reel-persistence, and agent-history logic are covered test-first (corpus merge/dedupe, IndexedDB reload-survival, harvesters, the conversation store, the 403 quota path, and the history-collapse fix) — 535 tests.
+
 ## [1.0.0.0] — 2026-06-03
 
 **Phase 1 graduated — the conversational chassis.** The chat is now a real turn-based agent, not a field-driven wizard wearing a chat skin. The agent clarifies before it searches, stays steerable mid-run, and the whole conversation lives in one persistent, centered column.
