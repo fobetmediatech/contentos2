@@ -77,8 +77,11 @@ export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   timestamp: number
-  /** Controls rendering: text = plain bubble, options = pill choices, error = red bubble, result = inline result cards */
-  type?: 'text' | 'options' | 'error' | 'result'
+  /**
+   * Controls rendering: text = plain bubble, options = pill choices, error = red bubble,
+   * result = inline result cards, reel = position marker for the (live) reel-analysis block.
+   */
+  type?: 'text' | 'options' | 'error' | 'result' | 'reel'
   /** Present when type === 'options' */
   options?: string[]
   /** Present when type === 'result' — the snapshotted pipeline result rendered inline. */

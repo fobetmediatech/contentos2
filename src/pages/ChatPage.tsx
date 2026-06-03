@@ -6,7 +6,7 @@
  * analysis all happen here.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { AlertTriangle, Bot, Send, CheckCircle, X, Video } from 'lucide-react'
 import { useAnalysisStore } from '../store/analysisStore'
@@ -74,6 +74,7 @@ export function ChatPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const analysisErrorHandledRef = useRef(false)
   const competitorResultArmedRef = useRef(false) // armed while a competitor run is live; fires once on done
+  const reelActiveRef = useRef(false) // tracks reel-run active edges to drop one position marker per run
 
   // Selection state — shared across competitor + discovery results
   const [selectedHandles, setSelectedHandles] = useState<string[]>([])
@@ -159,6 +160,24 @@ export function ChatPage() {
     }
   }, [status, competitors, summary, niche, inputProfiles, analysisDidExpand, addMessage, setStatus])
 
+  // Reel position marker: when a reel run STARTS (activeHandles 0 → non-empty), drop a
+  // `type:'reel'` marker into the conversation so the (live) reel block renders in place —
+  // subsequent chats append BELOW it instead of piling above a bottom-pinned block. One
+  // marker per run; the latest marker is the one that renders (older ones no-op).
+  useEffect(() => {
+    const active = activeHandles.length > 0
+    if (active && !reelActiveRef.current) {
+      reelActiveRef.current = true
+      addMessage({
+        role: 'assistant',
+        type: 'reel',
+        content: `Analyzing reels for ${activeHandles.map((h) => `@${h}`).join(', ')}.`,
+      })
+    } else if (!active) {
+      reelActiveRef.current = false
+    }
+  }, [activeHandles, addMessage])
+
   // Scroll to bottom whenever messages or pipeline state changes
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -217,6 +236,9 @@ export function ChatPage() {
 
   // Derived booleans
   const hasMessages = conversationMessages.length > 0
+  // Only the most recent reel marker renders the live block (the store holds one run); older
+  // markers no-op. Empty when no reel run has started this session.
+  const lastReelMarkerId = [...conversationMessages].reverse().find((m) => m.type === 'reel')?.id
   const isAnalysisRunning = status === 'running'
   const isAnalysisClarifying = status === 'clarifying'
   const isAnalysisDone = status === 'done'
@@ -313,6 +335,48 @@ export function ChatPage() {
                     onStartOver={handleStartOver}
                     reelActive={activeHandles.length > 0}
                   />
+                ) : message.type === 'reel' ? (
+                  // Reel block renders in place at the LATEST reel marker (the store holds one
+                  // live run). Older markers + a restored marker with no live run no-op.
+                  message.id === lastReelMarkerId && activeHandles.length > 0 ? (
+                    <Fragment key={message.id}>
+                      <div className="flex items-start gap-2">
+                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(167,139,250,0.12)] flex items-center justify-center mt-0.5">
+                          <Video size={14} className="text-[#A78BFA]" />
+                        </div>
+                        <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(245,237,214,0.08)] text-sm leading-relaxed max-w-[80%]">
+                          <span className="font-semibold text-primary">Analyzing reels</span>
+                          <p className="text-secondary mt-0.5">
+                            Scraping and analyzing reels for {activeHandles.map((h) => `@${h}`).join(', ')} — this takes {activeHandles.length * 2}–{activeHandles.length * 3} min.
+                          </p>
+                        </div>
+                      </div>
+
+                      <InlineReelResults
+                        handles={activeHandles}
+                        creatorStates={creatorStates}
+                        synthesisStatus={synthesisStatus}
+                        synthesis={synthesis}
+                        synthesisError={synthesisError}
+                        onSuggest={(text) => {
+                          setInputText(text)
+                          textareaRef.current?.focus()
+                        }}
+                        onDeepReport={(handles) => void startDeepReport(handles)}
+                        deepReport={deepReport}
+                        deepReportStatus={deepReportStatus}
+                      />
+
+                      {isReelDone && (
+                        <button
+                          onClick={handleStartOver}
+                          className="self-start px-4 py-2 text-sm text-secondary border border-[rgba(245,237,214,0.10)] rounded-xl hover:bg-surface-raised transition-colors"
+                        >
+                          Start over
+                        </button>
+                      )}
+                    </Fragment>
+                  ) : null
                 ) : (
                   <ChatMessage
                     key={message.id}
@@ -470,47 +534,7 @@ export function ChatPage() {
                 </>
               )}
 
-              {/* ── Inline reel analysis ──────────────────────────────── */}
-              {activeHandles.length > 0 && (
-                <>
-                  {/* Header bubble */}
-                  <div className="flex items-start gap-2">
-                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(167,139,250,0.12)] flex items-center justify-center mt-0.5">
-                      <Video size={14} className="text-[#A78BFA]" />
-                    </div>
-                    <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(245,237,214,0.08)] text-sm leading-relaxed max-w-[80%]">
-                      <span className="font-semibold text-primary">Analyzing reels</span>
-                      <p className="text-secondary mt-0.5">
-                        Scraping and analyzing reels for {activeHandles.map(h => `@${h}`).join(', ')} — this takes {activeHandles.length * 2}–{activeHandles.length * 3} min.
-                      </p>
-                    </div>
-                  </div>
-
-                  <InlineReelResults
-                    handles={activeHandles}
-                    creatorStates={creatorStates}
-                    synthesisStatus={synthesisStatus}
-                    synthesis={synthesis}
-                    synthesisError={synthesisError}
-                    onSuggest={(text) => {
-                      setInputText(text)
-                      textareaRef.current?.focus()
-                    }}
-                    onDeepReport={(handles) => void startDeepReport(handles)}
-                    deepReport={deepReport}
-                    deepReportStatus={deepReportStatus}
-                  />
-
-                  {isReelDone && (
-                    <button
-                      onClick={handleStartOver}
-                      className="self-start px-4 py-2 text-sm text-secondary border border-[rgba(245,237,214,0.10)] rounded-xl hover:bg-surface-raised transition-colors"
-                    >
-                      Start over
-                    </button>
-                  )}
-                </>
-              )}
+              {/* Reel analysis now renders in place at its `type:'reel'` marker (above). */}
 
             </div>
             <div ref={messagesEndRef} />
