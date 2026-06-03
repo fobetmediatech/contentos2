@@ -1,5 +1,7 @@
+import { useEffect } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
-import { Settings, MessageSquare } from 'lucide-react'
+import { Brain, FileText, Settings, MessageSquare } from 'lucide-react'
+import { useCorpusStore } from '../store/corpusStore'
 
 interface AppLayoutProps {
   /**
@@ -13,6 +15,21 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
   const location = useLocation()
   const isSettings = location.pathname === '/settings'
   const isChat = location.pathname === '/'
+  const isMemory = location.pathname === '/memory'
+  const isReport = location.pathname === '/report'
+  const corpusCount = useCorpusStore((s) => s.count)
+
+  // Shared nav-link styling (active = filled + primary text; idle = secondary, hover-lifts).
+  const navClass = (active: boolean) =>
+    `flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md transition-colors ${
+      active ? 'bg-surface-raised text-primary font-medium' : 'text-secondary hover:text-primary hover:bg-surface-raised'
+    }`
+
+  // Hydrate the creator memory once for the whole app — the shell is always mounted, so the
+  // remembered-count and "seen before" badges populate on whichever route the user lands on.
+  useEffect(() => {
+    void useCorpusStore.getState().hydrate().catch(() => {})
+  }, [])
 
   return (
     <div className={`${noPadding ? 'h-[100dvh] flex flex-col overflow-hidden' : 'min-h-screen'} bg-chai`}>
@@ -27,28 +44,32 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
             Content OS
           </Link>
 
-          {/* Nav links */}
+          {/* Nav links — Chat | Memory | Report | Settings */}
           <nav className="flex items-center gap-1">
-            <Link
-              to="/"
-              className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md transition-colors ${
-                isChat
-                  ? 'bg-surface-raised text-primary font-medium'
-                  : 'text-secondary hover:text-primary hover:bg-surface-raised'
-              }`}
-            >
+            <Link to="/" className={navClass(isChat)}>
               <MessageSquare size={14} />
               Chat
             </Link>
 
-            <Link
-              to="/settings"
-              className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md transition-colors ${
-                isSettings
-                  ? 'bg-surface-raised text-primary font-medium'
-                  : 'text-secondary hover:text-primary hover:bg-surface-raised'
-              }`}
-            >
+            {/* Memory — the corpus browse view. Always visible; the count rides along as a
+                badge once anything is remembered (it used to be the only, gated, entry point). */}
+            <Link to="/memory" title="Creators remembered across your searches" className={navClass(isMemory)}>
+              <Brain size={14} className="text-[#E07B3A]" />
+              Memory
+              {corpusCount > 0 && (
+                <span className="ml-0.5 text-[11px] font-medium tabular-nums px-1.5 py-0.5 rounded-full bg-[rgba(224,123,58,0.15)] text-[#F4A97B]">
+                  {corpusCount}
+                </span>
+              )}
+            </Link>
+
+            {/* Report — the deep niche report from reel analysis (empty state until one is run). */}
+            <Link to="/report" className={navClass(isReport)}>
+              <FileText size={14} />
+              Report
+            </Link>
+
+            <Link to="/settings" className={navClass(isSettings)}>
               <Settings size={15} />
               Settings
             </Link>

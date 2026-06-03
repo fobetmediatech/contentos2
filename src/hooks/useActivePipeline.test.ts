@@ -69,10 +69,6 @@ describe('computeActivePipeline — no pipeline active', () => {
     expect(computeActivePipeline(base()).stepLabels).toEqual([])
   })
 
-  it('resultsPath is empty string', () => {
-    expect(computeActivePipeline(base()).resultsPath).toBe('')
-  })
-
   it('discoveryResults is null', () => {
     expect(computeActivePipeline(base()).discoveryResults).toBeNull()
   })
@@ -105,10 +101,6 @@ describe('computeActivePipeline — competitor running', () => {
 
   it('progressLabel contains the niche', () => {
     expect(computeActivePipeline(v()).progressLabel).toContain('food bloggers')
-  })
-
-  it('resultsPath is "/results"', () => {
-    expect(computeActivePipeline(v()).resultsPath).toBe('/results')
   })
 
   it('discoveryResults is null', () => {
@@ -195,10 +187,6 @@ describe('computeActivePipeline — discovery running', () => {
 
   it('progressLabel includes the city', () => {
     expect(computeActivePipeline(v()).progressLabel).toContain('Mumbai')
-  })
-
-  it('resultsPath is "/discover/results"', () => {
-    expect(computeActivePipeline(v()).resultsPath).toBe('/discover/results')
   })
 
   it('discoveryResults is null while running', () => {

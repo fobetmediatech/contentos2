@@ -33,6 +33,7 @@ export const apifyRunLimiter = pLimit(3)
 
 export type ApifyErrorCode =
   | 'RATE_LIMITED'
+  | 'QUOTA_EXCEEDED'
   | 'RUN_START_FAILED'
   | 'POLL_FAILED'
   | 'RUN_FAILED'
@@ -104,6 +105,13 @@ export async function startRun(
     if (res.status === 429) {
       markKeyCooldown(apiKey)
       throw new ApifyError('RATE_LIMITED', `Apify key rate limited. Marked for cooldown.`, res.status)
+    }
+    // 403 with a usage/limit/feature-disabled body = this key's Apify account hit its monthly
+    // hard limit. Cool the key down (like a rate-limit) so the rotator routes around it — a key
+    // from another account has its own budget. Other 403s (genuine permission errors) fall through.
+    if (res.status === 403 && /limit|usage|feature-disabled/i.test(body)) {
+      markKeyCooldown(apiKey)
+      throw new ApifyError('QUOTA_EXCEEDED', `Apify monthly usage limit exceeded`, res.status)
     }
     throw new ApifyError('RUN_START_FAILED', `Failed to start actor run (${res.status})`, res.status)
   }

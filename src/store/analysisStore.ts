@@ -16,10 +16,12 @@
  */
 
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 import type { NormalizedProfile } from '../lib/transformers'
-import type { CompetitorAnalysisResult, AnalysisOutput, ClarificationQuestion } from '../ai/prompts'
+import type { CompetitorAnalysisResult, DiscoveryResult, AnalysisOutput, ClarificationQuestion } from '../ai/prompts'
 import type { ParsedIntent } from '../ai/intentParser'
+// Type-only imports (erased at runtime — no cycle) for the reel result snapshot.
+import type { CreatorAnalysisState, SynthesisOutput } from './reelAnalysisStore'
+import type { DeepNicheReport } from '../ai/prompts/deepReelAnalysis'
 
 export type AnalysisStep = 1 | 2 | 3 | 4 | 5
 
@@ -56,16 +58,58 @@ export interface PendingDiscovery {
   clarificationQuestion: ClarificationQuestion
 }
 
+/**
+ * Phase 2 (results-as-messages): a completed pipeline result, snapshotted INTO the
+ * conversation as a message so it persists across reloads and interleaves with the chat
+ * (multiple searches each keep their results in place) instead of rendering from transient
+ * store status. Stage 1 = competitor, stage 2 = discovery; reel still positions a live marker.
+ */
+export type CompetitorResultPayload = {
+  kind: 'competitor'
+  competitors: CompetitorAnalysisResult[]
+  summary: string
+  niche: string
+  profiles: NormalizedProfile[]
+  didExpand: boolean
+}
+export type DiscoveryResultPayload = {
+  kind: 'discovery'
+  results: DiscoveryResult[]
+  city: string
+  profiles: NormalizedProfile[]
+  didExpand: boolean
+  locationRelaxed: boolean
+}
+/**
+ * A finished reel/hook run, snapshotted into the conversation it ran in (Phase 2 parity with
+ * competitor/discovery). Replaces the old global-store + live-marker approach, which showed the
+ * wrong run after switching conversations. `creatorStates` is trimmed (thumbnails + deep maps
+ * dropped); the deep report re-runs on demand via the (independent) startDeepReport(handles).
+ */
+export type ReelResultPayload = {
+  kind: 'reel'
+  handles: string[]
+  creatorStates: Record<string, CreatorAnalysisState>
+  synthesis: SynthesisOutput | null
+  deepReport: DeepNicheReport | null
+}
+export type ResultPayload = CompetitorResultPayload | DiscoveryResultPayload | ReelResultPayload
+
 export interface ChatMessage {
   /** Stable unique id for React keys — monotonic, assigned by addMessage. */
   id: string
   role: 'user' | 'assistant'
   content: string
   timestamp: number
-  /** Controls rendering: text = plain bubble, options = pill choices, error = red bubble */
-  type?: 'text' | 'options' | 'error'
+  /**
+   * Controls rendering: text = plain bubble, options = pill choices, error = red bubble,
+   * result = inline result cards, reel = position marker for the (live) reel-analysis block.
+   */
+  type?: 'text' | 'options' | 'error' | 'result' | 'reel'
   /** Present when type === 'options' */
   options?: string[]
+  /** Present when type === 'result' — the snapshotted pipeline result rendered inline. */
+  result?: ResultPayload
 }
 
 export interface AnalysisState {
@@ -79,6 +123,12 @@ export interface AnalysisState {
   clarificationAnswer: string | null
 
   inputProfiles: NormalizedProfile[]
+  /**
+   * Profiles of the scraped competitor candidates (the accounts behind output.competitors).
+   * Stored so competitor cards can render per-creator metrics (ER, followers) and the cross-
+   * search corpus can harvest them — inputProfiles holds only the user's reference accounts.
+   */
+  candidateProfiles: NormalizedProfile[]
   competitors: CompetitorAnalysisResult[]
   niche: string
   summary: string
@@ -90,8 +140,8 @@ export interface AnalysisState {
   /** True when the competitor pipeline found < 8 candidates (sparse niche indicator). */
   didExpand: boolean
 
-  /** Conversation history for the chat UI. Capped at 50 messages to prevent unbounded growth. */
-  conversationMessages: ChatMessage[]
+  // NOTE: the chat transcript moved to conversationsStore (multi-conversation history) — this
+  // store now holds ONLY analysis state. The active conversation's messages live there.
   /** Populated after successful seed discovery; read by confirmSeeds() in useConversation. */
   discoveredSeeds: string[]
   /** Populated after parseIntent() succeeds; read by confirmSeeds() to build analyze() params. */
@@ -104,7 +154,7 @@ export interface AnalysisState {
   setClarification: (data: PendingDiscovery) => void
   /** Stores the user's clarification answer and transitions back to 'running'. */
   answerClarification: (answer: string) => void
-  setResults: (output: AnalysisOutput, inputProfiles: NormalizedProfile[], candidateCount: number) => void
+  setResults: (output: AnalysisOutput, inputProfiles: NormalizedProfile[], candidateCount: number, candidateProfiles?: NormalizedProfile[]) => void
   setError: (message: string) => void
   setStepProgressDetail: (detail: string) => void
   setDidExpand: (value: boolean) => void
@@ -113,7 +163,6 @@ export interface AnalysisState {
   // Conversational actions
   startChat: () => void
   setStatus: (status: AnalysisStatus) => void
-  addMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'> & { id?: string; timestamp?: number }) => void
   setDiscoveredSeeds: (seeds: string[]) => void
   setParsedIntent: (intent: ParsedIntent | null) => void
 }
@@ -125,6 +174,7 @@ const initialState = {
   pendingDiscovery: null,
   clarificationAnswer: null,
   inputProfiles: [],
+  candidateProfiles: [] as NormalizedProfile[],
   competitors: [],
   niche: '',
   summary: '',
@@ -133,33 +183,17 @@ const initialState = {
   stepProgressDetail: '',
   didExpand: false,
   // Conversational fields — T22: included in initialState for proper reset()
-  conversationMessages: [] as ChatMessage[],
   discoveredSeeds: [] as string[],
   parsedIntent: null,
 }
 
-// Monotonic message-id sequence for stable React keys (M13). The old
-// `${timestamp}-${index}` key collided on same-millisecond messages and churned when
-// the 50-message slice slid. Module-scope so ids stay unique across store resets.
-let _msgSeq = 0
-// Per-load epoch (base36) so message ids stay unique across reloads even though _msgSeq
-// resets. Without this, restored persisted ids (msg-…-0, …-1) would collide with fresh ones.
-const _idEpoch = Date.now().toString(36)
-
-export const useAnalysisStore = create<AnalysisState>()(persist((set) => ({
+export const useAnalysisStore = create<AnalysisState>()((set) => ({
   ...initialState,
 
-  // Reset analysis-specific state for a new run, but KEEP the chat transcript — wiping it
-  // (the old `set({ ...initialState })`) made the conversation vanish the instant a search
-  // started, which read as being thrown onto a separate results screen.
+  // Reset analysis-specific state for a new run. The chat transcript lives in
+  // conversationsStore now, so this no longer needs to preserve it.
   startAnalysis: (params) =>
-    set((state) => ({
-      ...initialState,
-      conversationMessages: state.conversationMessages,
-      status: 'running',
-      params,
-      currentStep: 1,
-    })),
+    set({ ...initialState, status: 'running', params, currentStep: 1 }),
 
   setStep: (step) => set({ currentStep: step }),
 
@@ -169,13 +203,14 @@ export const useAnalysisStore = create<AnalysisState>()(persist((set) => ({
   answerClarification: (answer) =>
     set({ status: 'running', clarificationAnswer: answer }),
 
-  setResults: (output, inputProfiles, candidateCount) =>
+  setResults: (output, inputProfiles, candidateCount, candidateProfiles = []) =>
     set({
       status: 'done',
       competitors: output.competitors,
       niche: output.niche,
       summary: output.summary,
       inputProfiles,
+      candidateProfiles,
       candidateCount,
     }),
 
@@ -192,23 +227,7 @@ export const useAnalysisStore = create<AnalysisState>()(persist((set) => ({
 
   setStatus: (status) => set({ status }),
 
-  addMessage: (message) =>
-    set((state) => ({
-      conversationMessages: [
-        ...state.conversationMessages,
-        // id includes a per-load epoch so persisted ids (restored on reload) never collide
-        // with fresh ones — _msgSeq resets to 0 each load, but the epoch differs.
-        { ...message, id: message.id ?? `msg-${_idEpoch}-${_msgSeq++}`, timestamp: message.timestamp ?? Date.now() },
-      ].slice(-50),  // cap at 50 messages
-    })),
-
   setDiscoveredSeeds: (seeds) => set({ discoveredSeeds: seeds }),
 
   setParsedIntent: (intent) => set({ parsedIntent: intent }),
-}), {
-  // Persist ONLY the chat transcript — not transient status/results — so a reload restores
-  // the conversation without resurrecting a dead "running" progress bar or stale cards.
-  name: 'contentos-chat',
-  version: 1,
-  partialize: (state) => ({ conversationMessages: state.conversationMessages }),
 }))

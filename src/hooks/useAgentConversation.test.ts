@@ -52,6 +52,27 @@ vi.mock('../store/analysisStore', async (io) => ({
   ),
 }))
 
+// The transcript moved here: addMessage writes to the active conversation, and buildHistory
+// reads it via getState(). Wired to the same mockState array so the existing assertions hold.
+vi.mock('../store/conversationsStore', () => {
+  const convState = {
+    get conversations() {
+      return { active: { id: 'active', title: '', messages: mockState.conversationMessages, createdAt: 0, updatedAt: 0 } }
+    },
+    activeId: 'active',
+    // Getter so addMessage is read at call-time, not when this hoisted factory runs (TDZ).
+    get addMessage() {
+      return addMessage
+    },
+  }
+  return {
+    useConversationsStore: Object.assign(
+      vi.fn((selector?: (s: typeof convState) => unknown) => (selector ? selector(convState) : convState)),
+      { getState: () => convState },
+    ),
+  }
+})
+
 vi.mock('../store/discoveryStore', () => ({
   useDiscoveryStore: Object.assign(
     vi.fn(() => ({})),

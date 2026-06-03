@@ -16,6 +16,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useAnalysisStore } from '../store/analysisStore'
+import { useConversationsStore } from '../store/conversationsStore'
 import { useDiscoveryStore } from '../store/discoveryStore'
 import { useReelAnalysisStore } from '../store/reelAnalysisStore'
 import { useKeysStore } from '../store/keysStore'
@@ -24,7 +25,7 @@ import { useLocationDiscovery } from './useLocationDiscovery'
 import { useReelAnalysis } from './useReelAnalysis'
 import { callGeminiWithTools, callGeminiContent, GeminiError } from '../ai/gemini'
 import type { GeminiTurn } from '../ai/gemini'
-import { AGENT_TOOLS, AGENT_SYSTEM_PROMPT, runAgentTurn } from '../tools/agentTools'
+import { AGENT_TOOLS, AGENT_SYSTEM_PROMPT, runAgentTurn, buildGeminiHistory } from '../tools/agentTools'
 import type { AgentAction } from '../tools/agentTools'
 import { generateHashtags } from '../lib/hashtagGenerator'
 import { scrapeHashtagUsernames } from '../lib/apifyClient'
@@ -37,7 +38,8 @@ const MAX_CLARIFY = 2          // cross-turn clarification cap before a forced f
 const SEED_LIMIT = 10          // competitor seeds scraped from hashtags when no handles given
 
 export function useAgentConversation() {
-  const store = useAnalysisStore()
+  // The transcript lives in conversationsStore now; addMessage writes to the active conversation.
+  const addMessage = useConversationsStore((s) => s.addMessage)
   const { geminiKey, pickKey } = useKeysStore()
   const { analyze } = useCompetitorAnalysis()
   const { discover } = useLocationDiscovery()
@@ -68,7 +70,7 @@ export function useAgentConversation() {
   }
 
   const bot = (content: string, type: 'text' | 'error' = 'text') =>
-    store.addMessage({ role: 'assistant', content, type })
+    addMessage({ role: 'assistant', content, type })
 
   /**
    * Windowed Gemini history (errors + empties dropped).
@@ -81,13 +83,8 @@ export function useAgentConversation() {
    * starts with a user turn (the API requires it).
    */
   const buildHistory = (): GeminiTurn[] => {
-    const turns = useAnalysisStore
-      .getState()
-      .conversationMessages.filter((m) => m.type !== 'error' && m.content)
-      .slice(-HISTORY_WINDOW)
-      .map((m): GeminiTurn => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.content }] }))
-    while (turns.length > 0 && turns[0].role === 'model') turns.shift()
-    return turns
+    const c = useConversationsStore.getState()
+    return buildGeminiHistory(c.conversations[c.activeId]?.messages ?? [], HISTORY_WINDOW)
   }
 
   /** True when there is genuinely live work to interrupt — a turn thinking or a scrape running. */
@@ -118,7 +115,7 @@ export function useAgentConversation() {
       bot('Switched — picking up your new request.') // TD4 steer feedback
     }
 
-    store.addMessage({ role: 'user', content: safeText, type: 'text' })
+    addMessage({ role: 'user', content: safeText, type: 'text' })
 
     if (!geminiKey?.trim()) {
       bot(GEMINI_KEY_MISSING_MSG, 'error')
@@ -175,7 +172,7 @@ export function useAgentConversation() {
         clarifyTurnsRef.current += 1
         // TD1: render tappable pills when the agent offered options; plain bubble otherwise.
         if (action.options && action.options.length > 0) {
-          store.addMessage({ role: 'assistant', content: action.question, type: 'options', options: action.options })
+          addMessage({ role: 'assistant', content: action.question, type: 'options', options: action.options })
         } else {
           bot(action.question)
         }

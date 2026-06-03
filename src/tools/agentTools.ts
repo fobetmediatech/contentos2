@@ -89,6 +89,41 @@ export async function runAgentTurn(
   return action
 }
 
+/** Minimal shape buildGeminiHistory needs — ChatMessage is structurally assignable. */
+export interface HistoryMessage {
+  role: 'user' | 'assistant'
+  content: string
+  type?: string
+}
+
+/**
+ * Assemble the windowed Gemini `contents` from the chat transcript.
+ *
+ * Drops error/empty messages, windows to the last `window` messages, and maps role.
+ * Pure + exported so the turn-structure invariants are unit-tested (the hook's inline
+ * version couldn't be, which is how the consecutive-user-turn contamination shipped).
+ */
+export function buildGeminiHistory(messages: HistoryMessage[], window: number): GeminiTurn[] {
+  const mapped = messages
+    .filter((m) => m.type !== 'error' && m.content)
+    .slice(-window)
+    .map((m): GeminiTurn => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.content }] }))
+  // Collapse consecutive same-role turns, keeping the LATEST of each run, so contents
+  // strictly alternate. A filtered-out error between two user messages otherwise left two
+  // adjacent user turns, which Gemini conflated — bleeding the prior (failed) search's
+  // handle + niche into the new request ("@nike.training" + "ai" → "@nike.trainingai").
+  // Keeping the latest drops the stale request; the live message stands alone.
+  const turns: GeminiTurn[] = []
+  for (const t of mapped) {
+    const prev = turns[turns.length - 1]
+    if (prev && prev.role === t.role) turns[turns.length - 1] = t
+    else turns.push(t)
+  }
+  // Drop leading model turns so contents starts with a user turn (the API requires it).
+  while (turns.length > 0 && turns[0].role === 'model') turns.shift()
+  return turns
+}
+
 /** Normalize a handle list: strip @, lowercase, trim, drop empties + over-length. */
 const normalizeHandles = (arr: string[] | null | undefined): string[] =>
   (arr ?? [])

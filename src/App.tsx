@@ -2,11 +2,9 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AppLayout } from './components/AppLayout'
 import { ChatPage } from './pages/ChatPage'
-import { ResultsPage } from './pages/ResultsPage'
-import { DiscoveryResultsPage } from './pages/DiscoveryResultsPage'
 import { SettingsPage } from './pages/SettingsPage'
-import { ReelAnalysisPage } from './pages/ReelAnalysisPage'
 import { ReportPage } from './pages/ReportPage'
+import { MemoryPage } from './pages/MemoryPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -27,19 +25,16 @@ export default function App() {
             <Route index element={<ChatPage />} />
           </Route>
 
-          {/* All other routes — standard layout with padding */}
+          {/* All other routes — standard layout with padding. NOTE: competitor, discovery, and
+              reel results all render INLINE in the chat now (results-as-messages), so the old
+              /results, /discover/results, and /reel-analysis pages were removed (AUDIT-H6). Any
+              stray link to them falls through to the `*` redirect below. */}
           <Route element={<AppLayout />}>
-            {/* Competitor analysis results */}
-            <Route path="results" element={<ResultsPage />} />
-
-            {/* Location discovery results */}
-            <Route path="discover/results" element={<DiscoveryResultsPage />} />
-
-            {/* Reel analysis */}
-            <Route path="reel-analysis" element={<ReelAnalysisPage />} />
-
             {/* Deep niche report (full-page, client-ready view) */}
             <Route path="report" element={<ReportPage />} />
+
+            {/* Creator/content memory — browse everything the corpus has remembered */}
+            <Route path="memory" element={<MemoryPage />} />
 
             {/* Settings */}
             <Route path="settings" element={<SettingsPage />} />

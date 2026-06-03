@@ -1,7 +1,9 @@
-import { BadgeCheck, CheckSquare, Square } from 'lucide-react'
+import { BadgeCheck, CheckSquare, History, Square } from 'lucide-react'
 import type { CompetitorAnalysisResult } from '../ai/prompts'
 import type { NormalizedProfile } from '../lib/transformers'
 import { COMPETITOR_CATEGORIES } from '../shared/utils/categories'
+import { useCorpusStore } from '../store/corpusStore'
+import { recognition } from '../lib/corpus'
 
 interface CompetitorCardProps {
   competitor: CompetitorAnalysisResult
@@ -27,6 +29,8 @@ export function CompetitorCard({ competitor, profile, cohortAvgER, isSelected, o
     .slice(0, 2)
     .join('')
     .toUpperCase()
+  // Cross-search memory: if the corpus has seen this creator in a PRIOR search, surface it.
+  const seen = recognition(useCorpusStore((s) => s.creators[competitor.username]))
 
   return (
     <div
@@ -81,10 +85,19 @@ export function CompetitorCard({ competitor, profile, cohortAvgER, isSelected, o
 
         {/* Handle + meta */}
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <span className="font-semibold text-[#F5EDD6] text-sm">@{competitor.username}</span>
             {profile?.verified && (
               <BadgeCheck size={14} className="text-[#C4A882] flex-shrink-0" />
+            )}
+            {seen && (
+              <span
+                title={seen.detail ? `Seen in ${seen.detail}` : undefined}
+                className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-[rgba(224,123,58,0.12)] text-[#F4A97B] border border-[rgba(224,123,58,0.20)]"
+              >
+                <History size={10} />
+                {seen.label}
+              </span>
             )}
           </div>
           {profile?.fullName && profile.fullName !== competitor.username && (

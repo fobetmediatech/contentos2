@@ -6,6 +6,9 @@
  */
 
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
+import { safePersistStorage } from './persistStorage'
+import { isCleanReelRun } from './reelPersist'
 import type { DeepReelAnalysis, DeepNicheReport } from '../ai/prompts/deepReelAnalysis'
 
 // ----- Creator status -----
@@ -87,6 +90,9 @@ interface ReelAnalysisState {
    *  creators are being / have been analyzed. Set by startAnalysis, cleared on reset.
    *  Both the inline ChatPage surface and NL-routed runs read this. */
   activeHandles: string[]
+  /** Conversation the current run belongs to — so its result snapshots into the RIGHT chat,
+   *  and the live block only renders in that conversation (no cross-conversation mismatch). */
+  reelConversationId: string | null
   creatorStates: Record<string, CreatorAnalysisState>
   synthesisStatus: 'idle' | 'running' | 'done' | 'failed'
   synthesis: SynthesisOutput | null
@@ -98,6 +104,7 @@ interface ReelAnalysisState {
   // actions
   setSelectedHandles: (handles: string[]) => void
   setActiveHandles: (handles: string[]) => void
+  setReelConversationId: (id: string | null) => void
   setCreatorState: (handle: string, partial: Partial<CreatorAnalysisState>) => void
   /** Merge a single reel's deep status and/or analysis into a creator's deep maps. */
   setDeepReel: (
@@ -118,6 +125,7 @@ interface ReelAnalysisState {
 const initialState = {
   selectedHandles: [] as string[],
   activeHandles: [] as string[],
+  reelConversationId: null as string | null,
   creatorStates: {} as Record<string, CreatorAnalysisState>,
   synthesisStatus: 'idle' as ReelAnalysisState['synthesisStatus'],
   synthesis: null as SynthesisOutput | null,
@@ -129,10 +137,12 @@ const initialState = {
 
 // ----- Store -----
 
-export const useReelAnalysisStore = create<ReelAnalysisState>()((set) => ({
+export const useReelAnalysisStore = create<ReelAnalysisState>()(persist((set) => ({
   ...initialState,
 
   setSelectedHandles: (handles) => set({ selectedHandles: handles }),
+
+  setReelConversationId: (id) => set({ reelConversationId: id }),
 
   setActiveHandles: (handles) => set({ activeHandles: handles }),
 
@@ -174,4 +184,27 @@ export const useReelAnalysisStore = create<ReelAnalysisState>()((set) => ({
   setDeepReportStatus: (status) => set({ deepReportStatus: status }),
 
   reset: () => set(initialState),
+}), {
+  // Persist a finished reel analysis so it survives a reload (it used to vanish — the store
+  // reset to empty on refresh). Only the result data + terminal status are persisted; the
+  // merge guard drops an interrupted mid-run so the UI never restores onto stuck spinners.
+  name: 'contentos-reels',
+  storage: safePersistStorage,
+  partialize: (s) => ({
+    activeHandles: s.activeHandles,
+    reelConversationId: s.reelConversationId,
+    creatorStates: s.creatorStates,
+    synthesis: s.synthesis,
+    synthesisStatus: s.synthesisStatus,
+    deepReport: s.deepReport,
+    deepReportStatus: s.deepReportStatus,
+  }),
+  merge: (persisted, current) => {
+    const p = (persisted ?? {}) as Partial<ReelAnalysisState>
+    const creatorStates = (p.creatorStates ?? {}) as Record<string, { status: string }>
+    if (!isCleanReelRun({ synthesisStatus: p.synthesisStatus ?? 'idle', creatorStates })) {
+      return current // interrupted run → discard, come back to a clean slate
+    }
+    return { ...current, ...p }
+  },
 }))
