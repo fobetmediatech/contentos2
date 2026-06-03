@@ -12,7 +12,8 @@ import { Brain, BadgeCheck, ChevronDown, ChevronUp, History } from 'lucide-react
 import { useCorpusStore } from '../store/corpusStore'
 import { corpus } from '../lib/corpusIdb'
 import { sortCreators, creatorContexts } from '../lib/corpus'
-import type { CorpusSort, CreatorRecord, ContentRecord } from '../lib/corpus'
+import type { CorpusSort, CreatorRecord, ContentRecord, Feedback } from '../lib/corpus'
+import { FeedbackControl } from '../components/FeedbackControl'
 
 function formatCount(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
@@ -27,12 +28,24 @@ const SORTS: { key: CorpusSort; label: string }[] = [
   { key: 'followersCount', label: 'Most followers' },
 ]
 
+type VerdictFilter = 'all' | Feedback
+const VERDICTS: { key: VerdictFilter; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'saved', label: 'Saved' },
+  { key: 'dismissed', label: 'Dismissed' },
+]
+
 export function MemoryPage() {
   // Select the stable record; derive the sorted list in render (never sort inside the
   // selector — that returns a fresh array each call and loops useSyncExternalStore).
   const creators = useCorpusStore((s) => s.creators)
   const [sort, setSort] = useState<CorpusSort>('lastSeenAt')
+  const [verdict, setVerdict] = useState<VerdictFilter>('all')
   const list = useMemo(() => sortCreators(Object.values(creators), sort), [creators, sort])
+  const filtered = useMemo(
+    () => (verdict === 'all' ? list : list.filter((r) => r.feedback === verdict)),
+    [list, verdict],
+  )
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -53,7 +66,7 @@ export function MemoryPage() {
         </div>
       ) : (
         <>
-          <div className="flex items-center gap-1.5 mb-4 flex-wrap">
+          <div className="flex items-center gap-1.5 mb-3 flex-wrap">
             {SORTS.map((s) => (
               <button
                 key={s.key}
@@ -69,11 +82,32 @@ export function MemoryPage() {
             ))}
           </div>
 
-          <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
-            {list.map((r) => (
-              <MemoryCreatorCard key={r.username} record={r} />
+          {/* Verdict filter (Phase 3) — review what you've saved or dismissed. */}
+          <div className="flex items-center gap-1.5 mb-4 flex-wrap">
+            {VERDICTS.map((v) => (
+              <button
+                key={v.key}
+                onClick={() => setVerdict(v.key)}
+                className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                  verdict === v.key
+                    ? 'bg-[rgba(224,123,58,0.12)] text-[#F4A97B] border-[rgba(224,123,58,0.3)]'
+                    : 'bg-[#2C2218] text-[#7A6A54] border-[rgba(245,237,214,0.08)] hover:border-[rgba(245,237,214,0.15)]'
+                }`}
+              >
+                {v.label}
+              </button>
             ))}
           </div>
+
+          {filtered.length === 0 ? (
+            <p className="text-sm text-[#7A6A54] py-8 text-center">No {verdict} creators yet.</p>
+          ) : (
+            <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
+              {filtered.map((r) => (
+                <MemoryCreatorCard key={r.username} record={r} />
+              ))}
+            </div>
+          )}
         </>
       )}
     </div>
@@ -108,9 +142,10 @@ function MemoryCreatorCard({ record }: { record: CreatorRecord }) {
     .slice(0, 2)
     .join('')
     .toUpperCase()
+  const dismissed = record.feedback === 'dismissed'
 
   return (
-    <div className="bg-[#2C2218] border border-[rgba(245,237,214,0.08)] rounded-xl p-4">
+    <div className={`bg-[#2C2218] border border-[rgba(245,237,214,0.08)] rounded-xl p-4 ${dismissed ? 'opacity-60 hover:opacity-100' : ''}`}>
       <div className="flex items-start gap-3">
         <div className="relative w-12 h-12 rounded-full bg-[#3D3025] flex items-center justify-center flex-shrink-0 text-[#C4A882] font-semibold text-sm overflow-hidden">
           <span>{initials}</span>
@@ -152,13 +187,16 @@ function MemoryCreatorCard({ record }: { record: CreatorRecord }) {
         </div>
       </div>
 
-      <button
-        onClick={toggle}
-        className="mt-3 flex items-center gap-1 text-xs text-[#E07B3A] hover:underline"
-      >
-        {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-        {expanded ? 'Hide reels' : 'Show reels'}
-      </button>
+      <div className="mt-3 flex items-center justify-between">
+        <button
+          onClick={toggle}
+          className="flex items-center gap-1 text-xs text-[#E07B3A] hover:underline"
+        >
+          {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+          {expanded ? 'Hide reels' : 'Show reels'}
+        </button>
+        <FeedbackControl username={record.username} />
+      </div>
 
       {expanded && (
         <div className="mt-2">

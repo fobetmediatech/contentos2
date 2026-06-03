@@ -31,7 +31,11 @@ export function CompetitorCard({ competitor, profile, cohortAvgER, isSelected, o
     .join('')
     .toUpperCase()
   // Cross-search memory: if the corpus has seen this creator in a PRIOR search, surface it.
-  const seen = recognition(useCorpusStore((s) => s.creators[competitor.username]))
+  const record = useCorpusStore((s) => s.creators[competitor.username])
+  const seen = recognition(record)
+  // Dismissed creators visibly deprioritize (Phase 3) — dimmed, but hover restores so they
+  // stay readable. Ranking-level deprioritization comes in slice 3.
+  const dismissed = record?.feedback === 'dismissed'
 
   return (
     <div
@@ -39,7 +43,7 @@ export function CompetitorCard({ competitor, profile, cohortAvgER, isSelected, o
         isSelected
           ? 'border-0 ring-2 ring-[#E07B3A] ring-offset-1 ring-offset-[#1A1410]'
           : 'border border-[rgba(245,237,214,0.08)] hover:border-[rgba(245,237,214,0.15)]'
-      } ${onSelect ? 'cursor-pointer' : ''}`}
+      } ${onSelect ? 'cursor-pointer' : ''} ${dismissed ? 'opacity-60 hover:opacity-100' : ''}`}
       onClick={onSelect ? () => onSelect(competitor.username) : undefined}
     >
       {/* Checkbox overlay — top left */}
