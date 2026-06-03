@@ -94,7 +94,7 @@ beforeEach(() => {
   mocks.getCachedDeep.mockResolvedValue(undefined)
   mocks.setCachedDeep.mockResolvedValue(undefined)
 })
-afterEach(cleanup)
+afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 const run = async (handles: string[]) => {
   const { result } = renderHook(() => useReelAnalysis())
@@ -150,6 +150,26 @@ describe('useReelAnalysis.startDeepReport — R2 partial-failure', () => {
 
     const states = await run(['nike'])
     expect(states.nike.status).toBe('no-reels')
+  })
+
+  it('deep fn not deployed (404 preflight) -> unavailable, no scrape/reset (quick results kept)', async () => {
+    // Plain `vite dev` returns 404 for /api/analyze-reel-video. The preflight must catch this
+    // and show ONE note instead of resetting + failing every reel.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('not found', { status: 404 })))
+    const { result } = renderHook(() => useReelAnalysis())
+    await act(async () => { await result.current.startDeepReport(['nike']) })
+    expect(useReelAnalysisStore.getState().deepReportStatus).toBe('unavailable')
+    expect(mocks.scrapeTopReels).not.toHaveBeenCalled() // pipeline never started → quick results untouched
+  })
+
+  it('deep fn present (preflight not 404) -> proceeds with the deep run', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('bad request', { status: 400 })))
+    mocks.scrapeTopReels.mockResolvedValue([reel('a')])
+    mocks.scrapeReelVideos.mockResolvedValue(new Map([['a', 'urlA']]))
+    mocks.analyzeReelDeep.mockResolvedValue(deepResult())
+    const states = await run(['nike'])
+    expect(states.nike.status).toBe('done')
+    expect(mocks.scrapeTopReels).toHaveBeenCalled()
   })
 
   it('cache hit: restores from cache, skips the video scrape AND the analysis (R3 free re-run)', async () => {

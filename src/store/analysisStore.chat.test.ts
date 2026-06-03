@@ -111,6 +111,43 @@ describe('analysisStore — addMessage', () => {
     }
     expect(useAnalysisStore.getState().conversationMessages).toHaveLength(49)
   })
+
+  it('assigns a unique id to every message', () => {
+    for (let i = 0; i < 12; i++) useAnalysisStore.getState().addMessage(makeMsg(`m${i}`))
+    const ids = useAnalysisStore.getState().conversationMessages.map((m) => m.id)
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+
+  it('ids carry a per-load epoch segment so persisted ids never collide with fresh ones after reload', () => {
+    // The chat is persisted; on reload _msgSeq resets to 0, so without an epoch the new
+    // msg-0 would clash with a restored msg-0. id shape is `msg-<epoch>-<seq>`.
+    useAnalysisStore.getState().addMessage(makeMsg('hi'))
+    const id = useAnalysisStore.getState().conversationMessages[0].id
+    const parts = id.split('-')
+    expect(parts[0]).toBe('msg')
+    expect(parts.length).toBeGreaterThanOrEqual(3)
+  })
+})
+
+describe('analysisStore — startAnalysis preserves the chat (agent continuity)', () => {
+  it('keeps conversationMessages when a search starts — does not wipe the transcript', () => {
+    // Regression: startAnalysis did set({ ...initialState }), which erased the chat the moment
+    // a competitor search ran — the conversation vanished and it looked like a separate screen.
+    useAnalysisStore.getState().addMessage(makeMsg('top ai creators', 'user'))
+    useAnalysisStore.getState().startAnalysis({ handles: ['x'], depth: 'standard', clientName: '', nicheContext: '' })
+    expect(useAnalysisStore.getState().status).toBe('running')
+    expect(useAnalysisStore.getState().conversationMessages).toHaveLength(1)
+    expect(useAnalysisStore.getState().conversationMessages[0].content).toBe('top ai creators')
+  })
+
+  it('still resets analysis-specific state (competitors) on a new search', () => {
+    useAnalysisStore.getState().setResults({ competitors: [], niche: 'x', summary: 's' }, [], 5)
+    useAnalysisStore.getState().addMessage(makeMsg('new search', 'user'))
+    useAnalysisStore.getState().startAnalysis({ handles: ['y'], depth: 'standard', clientName: '', nicheContext: '' })
+    expect(useAnalysisStore.getState().competitors).toHaveLength(0)
+    expect(useAnalysisStore.getState().candidateCount).toBe(0)
+    expect(useAnalysisStore.getState().conversationMessages).toHaveLength(1)
+  })
 })
 
 describe('analysisStore — setDiscoveredSeeds', () => {

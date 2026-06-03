@@ -22,7 +22,9 @@ import { describe, it, expect } from 'vitest'
 import { parseIntent, type ParsedIntent } from '../intentParser'
 import { GOLDEN_SET, type GoldenCase } from './intentGolden'
 
-const KEY = process.env.GEMINI_EVAL_KEY
+// Read the eval key from the shell env (vitest runs under Node). Accessed via globalThis so
+// this file compiles under the browser-only app tsconfig (no "node" types) in `tsc -b`.
+const KEY = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.GEMINI_EVAL_KEY
 
 // Tunable floors. Loosen/tighten as the golden set grows with real examples.
 const MIN_ACCURACY = 0.8

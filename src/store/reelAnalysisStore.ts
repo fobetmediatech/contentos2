@@ -93,7 +93,8 @@ interface ReelAnalysisState {
   synthesisError: string | null
   // Cross-profile deep niche report (Phase 2) — produced after a deep run finishes.
   deepReport: DeepNicheReport | null
-  deepReportStatus: 'idle' | 'running' | 'done' | 'failed'
+  // 'unavailable' = the deep-analysis serverless function isn't deployed (e.g. plain `vite dev`)
+  deepReportStatus: 'idle' | 'running' | 'done' | 'failed' | 'unavailable'
   // actions
   setSelectedHandles: (handles: string[]) => void
   setActiveHandles: (handles: string[]) => void

@@ -12,7 +12,7 @@ import { AlertTriangle, Bot, Send, CheckCircle, X, Video } from 'lucide-react'
 import { useAnalysisStore } from '../store/analysisStore'
 import { useDiscoveryStore } from '../store/discoveryStore'
 import { useKeysStore } from '../store/keysStore'
-import { useConversation } from '../hooks/useConversation'
+import { useAgentConversation } from '../hooks/useAgentConversation'
 import { useCompetitorAnalysis } from '../hooks/useCompetitorAnalysis'
 import { useActivePipeline } from '../hooks/useActivePipeline'
 import { useReelAnalysis } from '../hooks/useReelAnalysis'
@@ -63,7 +63,9 @@ export function ChatPage() {
   const activePipeline = useActivePipeline()
 
   const { isReady } = useKeysStore()
-  const { sendMessage, confirmSeeds, isConfirmingPending, isConfirmingLocked, isAnswering } = useConversation()
+  // Phase 1 graduated: the turn-based agent loop is THE conversation engine (the old
+  // useConversation wizard is retired). Input stays live; a new message steers (latest-wins).
+  const agentConv = useAgentConversation()
   const { answerClarification, isPending: clarificationPending } = useCompetitorAnalysis()
   const { startAnalysis: startReelAnalysis, startDeepReport, activeHandles, creatorStates, synthesisStatus, synthesis, synthesisError, deepReport, deepReportStatus, reset: resetReel } = useReelAnalysis()
 
@@ -79,33 +81,19 @@ export function ChatPage() {
   const ready = isReady()
   // Reel run state (derived from the reel store). A run is "running" until synthesis
   // reaches a terminal state; "done" once synthesis succeeds or fails.
-  const isReelRunning = activeHandles.length > 0 && synthesisStatus !== 'done' && synthesisStatus !== 'failed'
   const isReelDone = activeHandles.length > 0 && (synthesisStatus === 'done' || synthesisStatus === 'failed')
-  const isInPipeline = ['running', 'clarifying', 'done', 'error'].includes(status) ||
-    ['running', 'done', 'error'].includes(discoveryStatus)
-  const canSend =
-    (status === 'chatting' || status === 'confirming' || activePipeline.followUpAllowed) &&
-    inputText.trim().length > 0 &&
-    ready &&
-    !isConfirmingPending &&
-    !isConfirmingLocked &&
-    !isReelRunning &&
-    !isAnswering
+  // Input stays live during runs (TD3) — sending while something runs steers it (latest-wins).
+  const canSend = ready && inputText.trim().length > 0
 
-  // Initialise chat state on mount
+  // On mount: RESUME a persisted conversation if one exists (never wipe a restored
+  // transcript — startChat() clears conversationMessages, which silently defeated persistence).
+  // With no persisted chat, start fresh. A dead transient status (a mid-run state can't resume
+  // after a reload/remount) is dropped to 'chatting' so the input is live with no stuck progress.
   useEffect(() => {
-    if (status === 'idle') {
+    if (conversationMessages.length === 0) {
       startChat()
-    } else if (
-      status === 'done' ||
-      status === 'error' ||
-      status === 'discovering' ||
-      status === 'confirming' ||
-      status === 'running' ||
-      status === 'clarifying'
-    ) {
-      reset()
-      startChat()
+    } else if (status !== 'chatting' && status !== 'done') {
+      setStatus('chatting')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -142,17 +130,10 @@ export function ChatPage() {
     }
   }, [discoveryStatus, discoveryError, addMessage, setStatus, resetDiscovery])
 
-  // Auto-focus textarea when entering confirming state
-  useEffect(() => {
-    if (status === 'confirming') {
-      textareaRef.current?.focus()
-    }
-  }, [status])
-
   // Scroll to bottom whenever messages or pipeline state changes
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [conversationMessages, status, discoveryStatus, currentStep, activePipeline.step, activeHandles, creatorStates, synthesisStatus, isAnswering])
+  }, [conversationMessages, status, discoveryStatus, currentStep, activePipeline.step, activeHandles, creatorStates, synthesisStatus])
 
   const resetTextareaHeight = () => {
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
@@ -163,7 +144,7 @@ export function ChatPage() {
     const text = inputText.trim()
     setInputText('')
     resetTextareaHeight()
-    await sendMessage(text)
+    await agentConv.sendMessage(text)
   }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -207,7 +188,6 @@ export function ChatPage() {
 
   // Derived booleans
   const hasMessages = conversationMessages.length > 0
-  const isDiscovering = status === 'discovering'
   const isAnalysisRunning = status === 'running'
   const isAnalysisClarifying = status === 'clarifying'
   const isAnalysisDone = status === 'done'
@@ -293,7 +273,9 @@ export function ChatPage() {
             </div>
           </div>
         ) : (
-          <div className="px-4 pt-4 pb-6">
+          // DESIGN.md: chat is a centered, max-width column (not full-bleed) — this is what
+          // makes it read as a focused conversation instead of a sprawling dashboard.
+          <div className="px-4 pt-4 pb-6 max-w-4xl mx-auto w-full">
             <div role="log" aria-live="polite" aria-label="Conversation" className="flex flex-col gap-4">
 
               {/* Conversation messages */}
@@ -301,15 +283,14 @@ export function ChatPage() {
                 <ChatMessage
                   key={message.id}
                   message={message}
-                  onOptionSelect={confirmSeeds}
-                  optionsDisabled={status !== 'confirming' || isConfirmingPending}
+                  // A clarification pill is just the user's next message (TD1).
+                  onOptionSelect={agentConv.sendMessage}
+                  optionsDisabled={agentConv.isThinking}
                 />
               ))}
 
               {/* Typing indicators */}
-              {isDiscovering && <TypingIndicator />}
-              {isConfirmingPending && <TypingIndicator />}
-              {isAnswering && <TypingIndicator />}
+              {agentConv.isThinking && <TypingIndicator />}
 
               {/* ── Competitor analysis progress ──────────────────────── */}
               {(isAnalysisRunning || isAnalysisClarifying) && (
@@ -399,7 +380,7 @@ export function ChatPage() {
                       <p className="text-xs font-semibold text-[#7A6A54] uppercase tracking-wide mb-3">
                         {COMPETITOR_CATEGORIES.top.sectionLabel}
                       </p>
-                      <div className="grid gap-3 grid-cols-1 xl:grid-cols-2">
+                      <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
                         {topCompetitors.map((c) => (
                           <CompetitorCard
                             key={c.username}
@@ -418,7 +399,7 @@ export function ChatPage() {
                       <p className="text-xs font-semibold text-[#7A6A54] uppercase tracking-wide mb-3">
                         {COMPETITOR_CATEGORIES.trending.sectionLabel}
                       </p>
-                      <div className="grid gap-3 grid-cols-1 xl:grid-cols-2">
+                      <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
                         {trendingCompetitors.map((c) => (
                           <CompetitorCard
                             key={c.username}
@@ -500,7 +481,7 @@ export function ChatPage() {
                       <p className="text-xs font-semibold text-[#7A6A54] uppercase tracking-wide mb-3">
                         {DISCOVERY_CATEGORIES.top.sectionLabel}
                       </p>
-                      <div className="grid gap-3 grid-cols-1 xl:grid-cols-2">
+                      <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
                         {topDiscovery.map((r) => (
                           <DiscoveryCard
                             key={r.username}
@@ -519,7 +500,7 @@ export function ChatPage() {
                       <p className="text-xs font-semibold text-[#7A6A54] uppercase tracking-wide mb-3">
                         {DISCOVERY_CATEGORIES.trending.sectionLabel}
                       </p>
-                      <div className="grid gap-3 grid-cols-1 xl:grid-cols-2">
+                      <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
                         {trendingDiscovery.map((r) => (
                           <DiscoveryCard
                             key={r.username}
@@ -606,7 +587,8 @@ export function ChatPage() {
 
       {/* ── Input area ────────────────────────────────────────────────── */}
       <div className="flex-shrink-0 bg-surface border-t border-[rgba(245,237,214,0.08)] px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))]">
-        <div className="flex items-end gap-2">
+        {/* Centered to the same max-width as the conversation column above. */}
+        <div className="flex items-end gap-2 max-w-4xl mx-auto w-full">
           <div className="relative flex-1">
             <textarea
               ref={textareaRef}
@@ -614,34 +596,14 @@ export function ChatPage() {
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={handleKeyDown}
               onInput={handleTextareaInput}
-              placeholder={
-                isReelRunning
-                  ? 'Analyzing reels — this takes a few minutes…'
-                  : isInPipeline
-                  ? 'Analysis in progress…'
-                  : status === 'discovering'
-                  ? 'Searching for accounts…'
-                  : status === 'confirming' && isConfirmingLocked
-                  ? 'Pick one of the options above ↑'
-                  : status === 'confirming'
-                  ? 'Or describe what you want…'
-                  : 'Describe a niche, location, or paste handles…'
-              }
+              // Input is always live — the agent handles every state — so the placeholder is
+              // static (it must NOT track pipeline status, which lingers stale).
+              placeholder="Describe a niche, location, or paste handles…"
               maxLength={500}
               rows={1}
-              disabled={
-                (status !== 'chatting' && status !== 'confirming' && !activePipeline.followUpAllowed) ||
-                isConfirmingPending ||
-                isConfirmingLocked ||
-                isReelRunning ||
-                isAnswering
-              }
+              disabled={!ready}
               aria-label="Message input"
-              className={`w-full px-3 py-2.5 text-sm bg-[#1A1410] text-primary border rounded-xl focus:outline-none focus:ring-1 focus:ring-[#E07B3A] focus:border-[#E07B3A] resize-none disabled:opacity-40 disabled:cursor-not-allowed leading-relaxed placeholder:text-muted ${
-                status === 'confirming' && !isConfirmingPending
-                  ? 'border-[rgba(224,123,58,0.35)] ring-1 ring-[rgba(224,123,58,0.12)]'
-                  : 'border-[rgba(245,237,214,0.12)]'
-              }`}
+              className="w-full px-3 py-2.5 text-sm bg-[#1A1410] text-primary border border-[rgba(245,237,214,0.12)] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#E07B3A] focus:border-[#E07B3A] resize-none disabled:opacity-40 disabled:cursor-not-allowed leading-relaxed placeholder:text-muted"
             />
             {inputText.length >= 400 && (
               <span

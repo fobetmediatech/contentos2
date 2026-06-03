@@ -49,7 +49,7 @@ export function ChatMessage({ message, onOptionSelect, optionsDisabled }: ChatMe
       </div>
       <div className="flex flex-col gap-2 max-w-[80%]">
         <div
-          className={`px-4 py-2.5 rounded-2xl rounded-bl-sm text-sm leading-relaxed ${
+          className={`px-4 py-2.5 rounded-2xl rounded-bl-sm text-sm leading-relaxed whitespace-pre-wrap ${
             isError
               ? 'bg-[rgba(224,92,92,0.1)] border border-[rgba(224,92,92,0.2)] text-danger'
               : 'bg-surface border border-[rgba(245,237,214,0.08)] text-primary'

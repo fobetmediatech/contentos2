@@ -34,7 +34,7 @@ interface Props {
   onDeepReport?: (handles: string[]) => void
   /** Cross-profile niche report (Phase 2) — rendered above the per-creator sections. */
   deepReport?: DeepNicheReport | null
-  deepReportStatus?: 'idle' | 'running' | 'done' | 'failed'
+  deepReportStatus?: 'idle' | 'running' | 'done' | 'failed' | 'unavailable'
 }
 
 export function InlineReelResults({ handles, creatorStates, synthesisStatus, synthesis, synthesisError, onSuggest, onDeepReport, deepReport, deepReportStatus }: Props) {
@@ -69,6 +69,13 @@ export function InlineReelResults({ handles, creatorStates, synthesisStatus, syn
       {deepReportStatus === 'failed' && (
         <div className="mb-8 px-4 py-3 bg-[#2C1818] border border-danger/30 rounded-xl text-sm text-danger">
           Niche report synthesis failed — the per-creator analyses below are still available.
+        </div>
+      )}
+      {deepReportStatus === 'unavailable' && (
+        <div className="mb-8 px-4 py-3 bg-[rgba(217,119,6,0.1)] border border-warning/30 rounded-xl text-sm text-secondary leading-relaxed">
+          <span className="font-semibold text-warning">Deep report needs the analysis backend.</span>{' '}
+          The video breakdown runs in a serverless function that isn't served by <code className="font-mono text-xs">vite dev</code> — run{' '}
+          <code className="font-mono text-xs">vercel dev</code> or use the deployed app. Your reel breakdowns below still work.
         </div>
       )}
       {/* Deep-report CTA — offer to enrich the quick results with real video analysis. */}

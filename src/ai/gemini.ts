@@ -9,7 +9,7 @@
  *   empty candidates[]      → SAFETY block, surface as content policy error
  */
 
-import { buildCompetitorPrompt, buildDiscoveryPrompt, buildClarificationPrompt, buildContentPrompt, buildConfirmReplyPrompt, type AnalysisOutput, type DiscoveryOutput, type ClarificationQuestion, type ContentContext } from './prompts'
+import { buildCompetitorPrompt, buildDiscoveryPrompt, buildClarificationPrompt, buildContentPrompt, type AnalysisOutput, type DiscoveryOutput, type ClarificationQuestion, type ContentContext } from './prompts'
 import type { NormalizedProfile } from '../lib/transformers'
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta'
@@ -515,72 +515,6 @@ export async function callGeminiContent(
   return text
 }
 
-// ----- Confirm reply mapping -----
-
-/**
- * Map a free-text confirming-state reply to one of the available pipeline option strings.
- *
- * Uses JSON mode at temperature 0 to deterministically select the best matching option.
- * Validates the returned string is actually in availableOptions — falls back to
- * availableOptions[0] if Gemini returns a near-miss or hallucinated string.
- *
- * @param geminiKey        Active Gemini API key.
- * @param userText         The user's free-text message (already sanitised — max 500 chars, newlines stripped).
- * @param availableOptions The exact option strings to choose between.
- * @param signal           AbortController signal.
- * @returns                One of availableOptions (guaranteed).
- */
-export async function callGeminiConfirmReply(
-  geminiKey: string,
-  userText: string,
-  availableOptions: string[],
-  signal?: AbortSignal,
-): Promise<string> {
-  if (availableOptions.length === 0) return ''
-
-  const prompt = buildConfirmReplyPrompt(userText, availableOptions)
-
-  const CONFIRM_SCHEMA = {
-    type: 'object',
-    properties: {
-      selectedOption: { type: 'string' },
-    },
-    required: ['selectedOption'],
-  }
-
-  let parsed: { selectedOption?: unknown; selected_option?: unknown; SelectedOption?: unknown }
-  try {
-    parsed = await callGeminiWithSchema<typeof parsed>(
-      geminiKey,
-      prompt,
-      CONFIRM_SCHEMA,
-      { temperature: 0, maxOutputTokens: 64, signal },
-    )
-  } catch (err) {
-    // Safety block falls back to default option silently; other errors propagate
-    if (err instanceof GeminiError && err.code === 'SAFETY_BLOCK') {
-      return availableOptions[0]
-    }
-    throw err
-  }
-
-  try {
-    // Try camelCase key first (canonical schema), then fallback variants (snake_case,
-    // PascalCase) in case different Gemini model variants return different key formats.
-    const selected = String(
-      parsed.selectedOption ?? parsed.selected_option ?? parsed.SelectedOption ?? '',
-    )
-    // Validate the returned string is an exact member of availableOptions.
-    // This prevents near-miss hallucinations from corrupting downstream pipeline logic.
-    if (availableOptions.includes(selected)) return selected
-  } catch {
-    // key extraction failure — fall through to default
-  }
-
-  console.warn('[callGeminiConfirmReply] returning fallback option — Gemini returned unrecognised selection')
-  return availableOptions[0]
-}
-
 // ----- Function-calling primitive (Phase 1b agent loop) -----
 
 /** One tool the model may call. `parameters` is a JSON-Schema object (Gemini's OpenAPI subset). */
@@ -656,15 +590,27 @@ async function _callGeminiWithToolsRetry(
       }
       throw new GeminiError('RATE_LIMITED', 'Gemini API rate limit exceeded after 3 retries.', false)
     }
+    // Diagnostic (console only — raw body is NEVER shown to the user, per C2/H11).
+    console.error('[gemini:tools] HTTP error', res.status, body.error?.status, body.error?.message)
     throw mapGeminiHttpError(res.status, body)
   }
 
   const json = (await res.json()) as GeminiResponse
   if (!json.candidates || json.candidates.length === 0) {
+    console.error('[gemini:tools] blocked / no candidates', json)
     throw new GeminiError('SAFETY_BLOCK', 'Gemini blocked the response (content policy).', false)
   }
 
-  const parts = json.candidates[0].content?.parts ?? []
+  const candidate = json.candidates[0]
+  // Known intermittent function-calling hiccup: the model attempts a tool call but malforms
+  // it, so the candidate comes back with finishReason MALFORMED_FUNCTION_CALL and (usually)
+  // no usable parts. Treat it as a retryable parse error, NOT a content-policy "decline".
+  if (candidate.finishReason === 'MALFORMED_FUNCTION_CALL') {
+    console.error('[gemini:tools] malformed function call', candidate.finishReason)
+    throw new GeminiError('PARSE_ERROR', 'Gemini returned a malformed function call.', true)
+  }
+
+  const parts = candidate.content?.parts ?? []
   // Prefer a tool call if the model emitted one; otherwise fall back to text.
   const call = parts.find((p) => p.functionCall)?.functionCall
   if (call?.name) {
@@ -672,6 +618,7 @@ async function _callGeminiWithToolsRetry(
   }
   const text = joinThoughtFilteredText(parts).trim()
   if (!text) {
+    console.error('[gemini:tools] empty output', candidate.finishReason)
     throw new GeminiError('SAFETY_BLOCK', 'Gemini returned neither a tool call nor text.', false)
   }
   return { kind: 'text', text }
