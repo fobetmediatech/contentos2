@@ -28,7 +28,7 @@ import { analyzeCompetitors, generateClarificationQuestion } from '../ai/gemini'
 import { markKeyCooldown } from '../lib/keyRotator'
 import { ApifyError } from '../lib/apifyClient'
 import { GeminiError } from '../ai/gemini'
-import { friendlyApify, friendlyGemini } from '../lib/errorMessages'
+import { friendlyApify, friendlyGemini, sparseSeedMessage } from '../lib/errorMessages'
 import { linkAbort } from '../lib/abortControl'
 
 const TIMEOUT_MS = 150_000
@@ -62,15 +62,21 @@ export function useCompetitorAnalysis() {
           params.depth,
         )
 
-        if (candidateProfiles.length > 0) {
-          const isSparse = candidateProfiles.length < MIN_COMPETITOR_RESULTS
-          setStepProgressDetail(
-            isSparse
-              ? `Found only ${candidateProfiles.length} profiles — this niche may be sparse on Instagram`
-              : `Found ${candidateProfiles.length} candidate accounts`
-          )
-          if (isSparse) setDidExpand(true)
+        // Fail fast on an empty candidate pool. An invalid/too-sparse reference handle yields zero
+        // candidates; running clarification + ranking on nothing just dead-ends ~2 minutes later
+        // with a confusing "no verified competitors". A clear, actionable message here lets the
+        // user fix the handle immediately. (wasSuperseded is checked first in catch → silent steer.)
+        if (candidateProfiles.length === 0) {
+          throw new Error(sparseSeedMessage(params.handles, inputProfiles.length > 0))
         }
+
+        const isSparse = candidateProfiles.length < MIN_COMPETITOR_RESULTS
+        setStepProgressDetail(
+          isSparse
+            ? `Found only ${candidateProfiles.length} profiles — this niche may be sparse on Instagram`
+            : `Found ${candidateProfiles.length} candidate accounts`
+        )
+        if (isSparse) setDidExpand(true)
         setStep(4)
 
         // Generate the clarification question from the first 20 candidates.

@@ -42,3 +42,20 @@ export function friendlyApify(code: string): string {
 export function friendlyGemini(code: string): string {
   return GEMINI_FRIENDLY[code] ?? 'AI analysis failed — try again.'
 }
+
+/**
+ * Empty-candidate-pool message for the competitor pipeline. A reference handle that doesn't exist
+ * (or has no public related accounts) yields zero candidates — the pipeline fails fast with this
+ * instead of running clarification + 2 minutes of ranking only to dead-end on the confusing "no
+ * verified competitors found". `refFound` distinguishes "handle not found at all" from "found,
+ * but it has nothing adjacent to compare against". Built ONLY from the user's own input handles +
+ * fixed copy (never a raw API body), so it's user-safe per the C2/H11 rule above.
+ */
+export function sparseSeedMessage(handles: string[], refFound: boolean): string {
+  const subject = handles.map((h) => `@${h.replace(/^@+/, '')}`).join(', ') || 'that account'
+  if (!refFound) {
+    return `Couldn't find ${subject} on Instagram — double-check the handle (it may be private, renamed, or misspelled).`
+  }
+  const verb = handles.length > 1 ? 'have' : 'has'
+  return `${subject} ${verb} no related public accounts to compare against. Try a more established reference account in the same niche.`
+}
