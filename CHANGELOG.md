@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [3.0.0.0] — 2026-06-04
+
+**Phase 3 — self-training.** The OS now learns your taste. Save or dismiss any creator and it sticks across searches: dismissed creators stop resurfacing, and new rankings lean toward the kind of creators you keep — without re-explaining what you want each time. Memory became a logbook in Phase 2; now it shapes the results.
+
+### Added
+
+- **Save / dismiss feedback** — a 👍/👎 control on every competitor and discovery card (and in the Memory page) records your verdict on a creator, persisted in the corpus (IndexedDB, survives reload) and remembered across searches. The verdict sticks even when a creator resurfaces in a later search.
+- **Dismissed creators stop resurfacing** — a dismissed creator is dropped from the candidate pool *before* ranking, in both the competitor and discovery pipelines, so you never see them again. Dismissed cards also dim in past results.
+- **Preference-aware ranking** — saved/dismissed creators are distilled to traits (follower tier, engagement, niche, verified) and fed to Gemini as a lowest-priority tiebreaker, so new searches lean toward saved-like creators and away from dismissed-like ones. Same-niche preferences are weighted heavily; cross-niche ones act only as weak style hints (a food preference won't hijack a fitness search). A no-op until you give feedback.
+- **Verdict management in Memory** — the Memory page gains a Saved / Dismissed filter and a feedback control on every creator, so you can review and change verdicts in one place.
+
+### Changed
+
+- **The corpus is now active, not just a logbook** — `CreatorRecord` carries a `feedback` verdict; `setFeedback` writes through both the in-memory and IndexedDB repositories and mirrors into the store for instant UI.
+- **An all-dismissed candidate pool** gets a distinct, actionable message ("clear some dismissals in Memory") instead of the handle-not-found one.
+
+### Infrastructure
+
+- The self-training logic is covered test-first — feedback model + merge-preservation, both repository implementations, the toggle semantics, exemplar selection (niche token-overlap, recency, cap), the prompt-block assembly, and both pipelines' filter/bias wiring — 559 tests.
+- Pure helpers (`dropDismissedCandidates`, `selectPreferenceExemplars`, `buildPreferenceBlock`) keep the pipelines as thin call-sites, so the same tiebreaker block serves both competitor and discovery ranking.
+
 ## [2.0.0.0] — 2026-06-03
 
 **Phase 2 — memory.** The OS now remembers. Every creator you surface is kept across searches and recognized when they reappear, reel breakdowns survive a reload, and you can keep multiple research conversations side by side. What was a stateless search box is now a research library that gets richer the more you use it.
