@@ -16,7 +16,7 @@
  */
 
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, createJSONStorage } from 'zustand/middleware'
 import type { NormalizedProfile } from '../lib/transformers'
 import type { CompetitorAnalysisResult, DiscoveryResult, AnalysisOutput, ClarificationQuestion } from '../ai/prompts'
 import type { ParsedIntent } from '../ai/intentParser'
@@ -175,6 +175,33 @@ let _msgSeq = 0
 // resets. Without this, restored persisted ids (msg-…-0, …-1) would collide with fresh ones.
 const _idEpoch = Date.now().toString(36)
 
+// Instrumented localStorage wrapper: surfaces WHY the chat might not survive a reload.
+// A failed write (quota, or Brave/privacy treating localhost storage as session-only) is
+// logged with the payload size instead of failing silently. Pair with the onRehydrateStorage
+// log below: write logs + a restore count of 0 = the store isn't being read back.
+const safeStorage = {
+  getItem: (key: string): string | null => {
+    try {
+      const v = localStorage.getItem(key)
+      console.info(`[persist] read "${key}":`, v ? `${(v.length / 1024).toFixed(1)}KB` : 'EMPTY')
+      return v
+    } catch (e) {
+      console.error('[persist] read failed', e)
+      return null
+    }
+  },
+  setItem: (key: string, value: string): void => {
+    try {
+      localStorage.setItem(key, value)
+    } catch (e) {
+      console.error(`[persist] WRITE FAILED (${(value.length / 1024).toFixed(1)}KB) — chat will NOT survive reload`, e)
+    }
+  },
+  removeItem: (key: string): void => {
+    try { localStorage.removeItem(key) } catch { /* ignore */ }
+  },
+}
+
 export const useAnalysisStore = create<AnalysisState>()(persist((set) => ({
   ...initialState,
 
@@ -239,5 +266,9 @@ export const useAnalysisStore = create<AnalysisState>()(persist((set) => ({
   // the conversation without resurrecting a dead "running" progress bar or stale cards.
   name: 'contentos-chat',
   version: 1,
+  storage: createJSONStorage(() => safeStorage),
   partialize: (state) => ({ conversationMessages: state.conversationMessages }),
+  onRehydrateStorage: () => (state) => {
+    console.info('[persist] rehydrated', state?.conversationMessages?.length ?? 0, 'messages from storage')
+  },
 }))

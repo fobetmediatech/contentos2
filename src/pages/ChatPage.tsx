@@ -21,6 +21,7 @@ import { ClarificationCard } from '../components/ClarificationCard'
 import { CompetitorResultMessage } from '../components/CompetitorResultMessage'
 import { DiscoveryResultMessage } from '../components/DiscoveryResultMessage'
 import { InlineReelResults } from '../components/InlineReelResults'
+import type { NormalizedProfile } from '../lib/transformers'
 
 // Tool chips shown in the empty state — one per independent tool, so all three
 // are discoverable at a glance. Tapping prefills the input with a representative prompt.
@@ -29,6 +30,13 @@ const TOOL_CHIPS: { tool: string; example: string; hint: string }[] = [
   { tool: 'Discover by city', example: 'Food bloggers in Mumbai', hint: 'Find creators based in a location' },
   { tool: 'Break down hooks', example: "Analyze @garyvee's reel hooks", hint: 'Reverse-engineer viral hook patterns' },
 ]
+
+// Slim a profile before it's snapshotted into a persisted result message: drop the heavy
+// fields the result cards never render (bio, related handles, top hashtags) so the localStorage
+// payload stays small. Keeps everything the cards show (name, followers, verified, ER, avatar).
+function trimProfile(p: NormalizedProfile): NormalizedProfile {
+  return { ...p, biography: '', relatedHandles: [], topHashtags: [] }
+}
 
 export function ChatPage() {
   const analysisStore = useAnalysisStore()
@@ -151,7 +159,7 @@ export function ChatPage() {
           competitors,
           summary,
           niche,
-          profiles: inputProfiles.filter((p) => handles.has(p.username)),
+          profiles: inputProfiles.filter((p) => handles.has(p.username)).map(trimProfile),
           didExpand: analysisDidExpand,
         },
       })
@@ -194,7 +202,7 @@ export function ChatPage() {
           kind: 'discovery',
           results: discoveryResults,
           city: discoveryCity,
-          profiles: discoveryProfiles.filter((p) => handles.has(p.username)),
+          profiles: discoveryProfiles.filter((p) => handles.has(p.username)).map(trimProfile),
           didExpand: discoveryDidExpand,
           locationRelaxed: discoveryLocationRelaxed,
         },
