@@ -8,7 +8,7 @@
 
 import { Fragment, useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
-import { AlertTriangle, Bot, Send, CheckCircle, X, Video } from 'lucide-react'
+import { AlertTriangle, Bot, Send, Video } from 'lucide-react'
 import { useAnalysisStore } from '../store/analysisStore'
 import { useDiscoveryStore } from '../store/discoveryStore'
 import { useKeysStore } from '../store/keysStore'
@@ -19,10 +19,8 @@ import { useReelAnalysis } from '../hooks/useReelAnalysis'
 import { ChatMessage, ProgressBubble, TypingIndicator } from '../components/ChatMessage'
 import { ClarificationCard } from '../components/ClarificationCard'
 import { CompetitorResultMessage } from '../components/CompetitorResultMessage'
-import { DiscoveryCard } from '../components/DiscoveryCard'
+import { DiscoveryResultMessage } from '../components/DiscoveryResultMessage'
 import { InlineReelResults } from '../components/InlineReelResults'
-import { DISCOVERY_CATEGORIES } from '../shared/utils/categories'
-import { MIN_LOCATION_RESULTS } from '../hooks/useLocationDiscovery'
 
 // Tool chips shown in the empty state — one per independent tool, so all three
 // are discoverable at a glance. Tapping prefills the input with a representative prompt.
@@ -75,6 +73,7 @@ export function ChatPage() {
   const analysisErrorHandledRef = useRef(false)
   const competitorResultArmedRef = useRef(false) // armed while a competitor run is live; fires once on done
   const reelActiveRef = useRef(false) // tracks reel-run active edges to drop one position marker per run
+  const discoveryResultArmedRef = useRef(false) // armed while a discovery run is live; fires once on done
 
   // Selection state — shared across competitor + discovery results
   const [selectedHandles, setSelectedHandles] = useState<string[]>([])
@@ -178,6 +177,32 @@ export function ChatPage() {
     }
   }, [activeHandles, addMessage])
 
+  // Results-as-messages (stage 2): snapshot a finished DISCOVERY run into the conversation as
+  // a `type:'result'` message, then reset the discovery store. Armed only while a real run is
+  // live so it fires once. Profiles trimmed to the ranked creators to keep the payload small.
+  useEffect(() => {
+    if (discoveryStatus === 'running') {
+      discoveryResultArmedRef.current = true
+    } else if (discoveryStatus === 'done' && discoveryResultArmedRef.current) {
+      discoveryResultArmedRef.current = false
+      const handles = new Set(discoveryResults.map((r) => r.username))
+      addMessage({
+        role: 'assistant',
+        type: 'result',
+        content: `Found ${discoveryResults.length} creator${discoveryResults.length !== 1 ? 's' : ''}${discoveryCity ? ` in ${discoveryCity}` : ''}.`,
+        result: {
+          kind: 'discovery',
+          results: discoveryResults,
+          city: discoveryCity,
+          profiles: discoveryProfiles.filter((p) => handles.has(p.username)),
+          didExpand: discoveryDidExpand,
+          locationRelaxed: discoveryLocationRelaxed,
+        },
+      })
+      resetDiscovery()
+    }
+  }, [discoveryStatus, discoveryResults, discoveryCity, discoveryProfiles, discoveryDidExpand, discoveryLocationRelaxed, addMessage, resetDiscovery])
+
   // Scroll to bottom whenever messages or pipeline state changes
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -247,18 +272,8 @@ export function ChatPage() {
   const showInlineContent = isAnalysisRunning || isAnalysisClarifying || isAnalysisDone ||
     isDiscoveryRunning || isDiscoveryDone
 
-  // Discovery profile map + cohort ER for card rendering (competitor equivalents now live in
-  // CompetitorResultMessage, derived from the result payload).
-  const discoveryProfileMap = new Map(discoveryProfiles.map((p) => [p.username, p]))
-  const discoveryERValues = discoveryResults
-    .map((r) => discoveryProfileMap.get(r.username)?.engagementRate)
-    .filter((er): er is number => er !== null && er !== undefined)
-  const discoveryAvgER = discoveryERValues.length > 0
-    ? discoveryERValues.reduce((a, b) => a + b, 0) / discoveryERValues.length
-    : 3.0
-
-  const topDiscovery = discoveryResults.filter((r) => r.category === 'top').sort((a, b) => a.rank - b.rank)
-  const trendingDiscovery = discoveryResults.filter((r) => r.category === 'trending').sort((a, b) => a.rank - b.rank)
+  // (Competitor + discovery card derivations now live in their result-message components,
+  // computed from the snapshotted payload.)
 
   return (
     <div className="h-full flex flex-col bg-chai">
@@ -326,6 +341,17 @@ export function ChatPage() {
                   // Results-as-messages: a finished competitor run renders inline, in place,
                   // and survives reload (the payload is persisted in conversationMessages).
                   <CompetitorResultMessage
+                    key={message.id}
+                    payload={message.result}
+                    selectedHandles={selectedHandles}
+                    onToggleSelect={handleToggleSelect}
+                    onClearSelection={() => setSelectedHandles([])}
+                    onAnalyzeReels={handleAnalyzeReels}
+                    onStartOver={handleStartOver}
+                    reelActive={activeHandles.length > 0}
+                  />
+                ) : message.type === 'result' && message.result?.kind === 'discovery' ? (
+                  <DiscoveryResultMessage
                     key={message.id}
                     payload={message.result}
                     selectedHandles={selectedHandles}
@@ -433,106 +459,7 @@ export function ChatPage() {
 
               {/* Competitor results now render inline as a type:'result' message (Phase 2). */}
 
-              {/* ── Discovery results ─────────────────────────────────── */}
-              {isDiscoveryDone && (
-                <>
-                  {/* Completion bubble */}
-                  <div className="flex items-start gap-2">
-                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(224,123,58,0.12)] flex items-center justify-center mt-0.5">
-                      <Bot size={14} className="text-[#E07B3A]" />
-                    </div>
-                    <div className="flex flex-col gap-2 max-w-[80%]">
-                      <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(245,237,214,0.08)] text-sm leading-relaxed">
-                        <div className="flex items-center gap-2 mb-1">
-                          <CheckCircle size={14} className="text-success flex-shrink-0" />
-                          <span className="font-semibold text-primary">Discovery complete</span>
-                        </div>
-                        <p className="text-secondary">
-                          Found {discoveryResults.length} creator{discoveryResults.length !== 1 ? 's' : ''}
-                          {discoveryCity ? ` in ${discoveryCity}` : ''}.
-                          Filtered for location signals and partnership readiness.
-                        </p>
-                        {discoveryDidExpand && (
-                          <p className="text-xs text-warning mt-1.5">
-                            Expanded search with a second hashtag batch — initial pass found fewer than {MIN_LOCATION_RESULTS} creators in this city.
-                          </p>
-                        )}
-                        {discoveryLocationRelaxed && (
-                          <p className="text-xs text-warning mt-1.5">
-                            Location filter relaxed — showing all niche-relevant creators; some may not be locally based.
-                          </p>
-                        )}
-                      </div>
-                      <button
-                        onClick={handleStartOver}
-                        className="self-start px-4 py-2 text-sm text-secondary border border-[rgba(245,237,214,0.10)] rounded-xl hover:bg-surface-raised transition-colors"
-                      >
-                        Start over
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Card grid */}
-                  {topDiscovery.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold text-[#7A6A54] uppercase tracking-wide mb-3">
-                        {DISCOVERY_CATEGORIES.top.sectionLabel}
-                      </p>
-                      <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
-                        {topDiscovery.map((r) => (
-                          <DiscoveryCard
-                            key={r.username}
-                            result={r}
-                            profile={discoveryProfileMap.get(r.username)}
-                            cohortAvgER={discoveryAvgER}
-                            isSelected={selectedHandles.includes(r.username)}
-                            onSelect={activeHandles.length === 0 ? handleToggleSelect : undefined}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {trendingDiscovery.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold text-[#7A6A54] uppercase tracking-wide mb-3">
-                        {DISCOVERY_CATEGORIES.trending.sectionLabel}
-                      </p>
-                      <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
-                        {trendingDiscovery.map((r) => (
-                          <DiscoveryCard
-                            key={r.username}
-                            result={r}
-                            profile={discoveryProfileMap.get(r.username)}
-                            cohortAvgER={discoveryAvgER}
-                            isSelected={selectedHandles.includes(r.username)}
-                            onSelect={activeHandles.length === 0 ? handleToggleSelect : undefined}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Selection CTA */}
-                  {selectedHandles.length > 0 && activeHandles.length === 0 && (
-                    <div className="flex items-center gap-2 pt-1">
-                      <button
-                        onClick={() => setSelectedHandles([])}
-                        className="flex items-center gap-1.5 px-3 py-2 text-sm text-[#A09080] border border-[#3D2E1E] rounded-xl hover:text-[#F5E6D3] hover:border-[#5C4A30] transition-colors"
-                      >
-                        <X size={13} />
-                        Clear
-                      </button>
-                      <button
-                        onClick={handleAnalyzeReels}
-                        className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-[#E07B3A] text-[#1A1410] rounded-xl hover:bg-[#C96A2A] transition-colors"
-                      >
-                        <Video size={14} />
-                        Analyze {selectedHandles.length} creator{selectedHandles.length !== 1 ? 's' : ''} reels
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
+              {/* Discovery results now render inline as a type:'result' message (Phase 2 stage 2). */}
 
               {/* Reel analysis now renders in place at its `type:'reel'` marker (above). */}
 

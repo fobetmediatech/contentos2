@@ -18,7 +18,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { NormalizedProfile } from '../lib/transformers'
-import type { CompetitorAnalysisResult, AnalysisOutput, ClarificationQuestion } from '../ai/prompts'
+import type { CompetitorAnalysisResult, DiscoveryResult, AnalysisOutput, ClarificationQuestion } from '../ai/prompts'
 import type { ParsedIntent } from '../ai/intentParser'
 
 export type AnalysisStep = 1 | 2 | 3 | 4 | 5
@@ -60,9 +60,9 @@ export interface PendingDiscovery {
  * Phase 2 (results-as-messages): a completed pipeline result, snapshotted INTO the
  * conversation as a message so it persists across reloads and interleaves with the chat
  * (multiple searches each keep their results in place) instead of rendering from transient
- * store status. Stage 1 = competitor; discovery + reel follow the same shape.
+ * store status. Stage 1 = competitor, stage 2 = discovery; reel still positions a live marker.
  */
-export type ResultPayload = {
+export type CompetitorResultPayload = {
   kind: 'competitor'
   competitors: CompetitorAnalysisResult[]
   summary: string
@@ -70,6 +70,15 @@ export type ResultPayload = {
   profiles: NormalizedProfile[]
   didExpand: boolean
 }
+export type DiscoveryResultPayload = {
+  kind: 'discovery'
+  results: DiscoveryResult[]
+  city: string
+  profiles: NormalizedProfile[]
+  didExpand: boolean
+  locationRelaxed: boolean
+}
+export type ResultPayload = CompetitorResultPayload | DiscoveryResultPayload
 
 export interface ChatMessage {
   /** Stable unique id for React keys — monotonic, assigned by addMessage. */

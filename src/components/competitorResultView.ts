@@ -4,11 +4,11 @@
  * splitting/sorting/cohort-ER logic is unit-testable in isolation.
  */
 
-import type { ResultPayload } from '../store/analysisStore'
+import type { CompetitorResultPayload } from '../store/analysisStore'
 import type { NormalizedProfile } from '../lib/transformers'
 import type { CompetitorAnalysisResult } from '../ai/prompts'
 
-export function deriveCompetitorView(payload: ResultPayload): {
+export function deriveCompetitorView(payload: CompetitorResultPayload): {
   profileMap: Map<string, NormalizedProfile>
   cohortAvgER: number
   top: CompetitorAnalysisResult[]

@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { deriveCompetitorView } from './competitorResultView'
-import type { ResultPayload } from '../store/analysisStore'
+import type { CompetitorResultPayload } from '../store/analysisStore'
 import type { CompetitorAnalysisResult } from '../ai/prompts'
 import type { NormalizedProfile } from '../lib/transformers'
 
@@ -19,7 +19,7 @@ const comp = (username: string, category: 'top' | 'trending', rank: number): Com
 const prof = (username: string, engagementRate: number): NormalizedProfile =>
   ({ username, engagementRate } as unknown as NormalizedProfile)
 
-const payload = (competitors: CompetitorAnalysisResult[], profiles: NormalizedProfile[]): ResultPayload => ({
+const payload = (competitors: CompetitorAnalysisResult[], profiles: NormalizedProfile[]): CompetitorResultPayload => ({
   kind: 'competitor',
   competitors,
   summary: '',

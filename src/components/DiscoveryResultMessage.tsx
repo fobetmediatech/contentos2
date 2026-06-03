@@ -1,31 +1,28 @@
 /**
- * CompetitorResultMessage — renders a completed competitor analysis INLINE in the chat.
- *
- * Phase 2 (results-as-messages): instead of rendering from transient store status, a finished
- * competitor run is snapshotted into a `type:'result'` conversation message (so it persists
- * across reloads and interleaves with the chat). This component renders that snapshot. The
- * select → "Analyze N reels" interactivity is threaded in via props (the selection lives in
- * ChatPage state, shared across results).
+ * DiscoveryResultMessage — renders a completed location-discovery run INLINE in the chat
+ * (Phase 2 stage 2), mirroring CompetitorResultMessage. Snapshotted into a `type:'result'`
+ * message so it persists across reloads and interleaves with the conversation. No AI summary
+ * (discovery doesn't produce one); adds the expand + location-relaxed notes.
  */
 
 import { Bot, CheckCircle, Video, X } from 'lucide-react'
-import type { CompetitorResultPayload } from '../store/analysisStore'
-import { CompetitorCard } from './CompetitorCard'
-import { COMPETITOR_CATEGORIES } from '../shared/utils/categories'
-import { deriveCompetitorView } from './competitorResultView'
+import type { DiscoveryResultPayload } from '../store/analysisStore'
+import { DiscoveryCard } from './DiscoveryCard'
+import { DISCOVERY_CATEGORIES } from '../shared/utils/categories'
+import { MIN_LOCATION_RESULTS } from '../hooks/useLocationDiscovery'
+import { deriveDiscoveryView } from './discoveryResultView'
 
 interface Props {
-  payload: CompetitorResultPayload
+  payload: DiscoveryResultPayload
   selectedHandles: string[]
   onToggleSelect: (handle: string) => void
   onClearSelection: () => void
   onAnalyzeReels: () => void
   onStartOver: () => void
-  /** True while a reel run is active — selection is disabled (you can't re-pick mid-run). */
   reelActive: boolean
 }
 
-export function CompetitorResultMessage({
+export function DiscoveryResultMessage({
   payload,
   selectedHandles,
   onToggleSelect,
@@ -34,8 +31,8 @@ export function CompetitorResultMessage({
   onStartOver,
   reelActive,
 }: Props) {
-  const { competitors, summary, niche, didExpand } = payload
-  const { profileMap, cohortAvgER, top, trending } = deriveCompetitorView(payload)
+  const { results, city, didExpand, locationRelaxed } = payload
+  const { profileMap, cohortAvgER, top, trending } = deriveDiscoveryView(payload)
 
   return (
     <>
@@ -48,16 +45,21 @@ export function CompetitorResultMessage({
           <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(245,237,214,0.08)] text-sm leading-relaxed">
             <div className="flex items-center gap-2 mb-1">
               <CheckCircle size={14} className="text-success flex-shrink-0" />
-              <span className="font-semibold text-primary">Analysis complete</span>
+              <span className="font-semibold text-primary">Discovery complete</span>
             </div>
             <p className="text-secondary">
-              Found {competitors.length} competitor{competitors.length !== 1 ? 's' : ''}
-              {niche ? ` in the ${niche} space` : ''}.
-              Ranked by engagement, location fit, and partnership readiness.
+              Found {results.length} creator{results.length !== 1 ? 's' : ''}
+              {city ? ` in ${city}` : ''}.
+              Filtered for location signals and partnership readiness.
             </p>
             {didExpand && (
               <p className="text-xs text-warning mt-1.5">
-                Sparse niche — results may be limited. Try a different reference account for a broader pool.
+                Expanded search with a second hashtag batch — initial pass found fewer than {MIN_LOCATION_RESULTS} creators in this city.
+              </p>
+            )}
+            {locationRelaxed && (
+              <p className="text-xs text-warning mt-1.5">
+                Location filter relaxed — showing all niche-relevant creators; some may not be locally based.
               </p>
             )}
           </div>
@@ -70,28 +72,20 @@ export function CompetitorResultMessage({
         </div>
       </div>
 
-      {/* AI summary — violet AI tint + Gemini eyebrow per DESIGN.md */}
-      {summary && (
-        <div className="px-4 py-3 bg-[rgba(167,139,250,0.08)] border border-[#A78BFA]/20 rounded-xl">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-[#A78BFA] mb-1">✦ Gemini</p>
-          <p className="text-sm text-[#C4B5FD] leading-relaxed">{summary}</p>
-        </div>
-      )}
-
       {/* Card grids */}
       {top.length > 0 && (
         <div>
           <p className="text-xs font-semibold text-[#7A6A54] uppercase tracking-wide mb-3">
-            {COMPETITOR_CATEGORIES.top.sectionLabel}
+            {DISCOVERY_CATEGORIES.top.sectionLabel}
           </p>
           <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
-            {top.map((c) => (
-              <CompetitorCard
-                key={c.username}
-                competitor={c}
-                profile={profileMap.get(c.username)}
+            {top.map((r) => (
+              <DiscoveryCard
+                key={r.username}
+                result={r}
+                profile={profileMap.get(r.username)}
                 cohortAvgER={cohortAvgER}
-                isSelected={selectedHandles.includes(c.username)}
+                isSelected={selectedHandles.includes(r.username)}
                 onSelect={reelActive ? undefined : onToggleSelect}
               />
             ))}
@@ -101,16 +95,16 @@ export function CompetitorResultMessage({
       {trending.length > 0 && (
         <div>
           <p className="text-xs font-semibold text-[#7A6A54] uppercase tracking-wide mb-3">
-            {COMPETITOR_CATEGORIES.trending.sectionLabel}
+            {DISCOVERY_CATEGORIES.trending.sectionLabel}
           </p>
           <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
-            {trending.map((c) => (
-              <CompetitorCard
-                key={c.username}
-                competitor={c}
-                profile={profileMap.get(c.username)}
+            {trending.map((r) => (
+              <DiscoveryCard
+                key={r.username}
+                result={r}
+                profile={profileMap.get(r.username)}
                 cohortAvgER={cohortAvgER}
-                isSelected={selectedHandles.includes(c.username)}
+                isSelected={selectedHandles.includes(r.username)}
                 onSelect={reelActive ? undefined : onToggleSelect}
               />
             ))}
