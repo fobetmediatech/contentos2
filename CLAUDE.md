@@ -75,7 +75,7 @@ Entry point: `ChatPage` — conversational interface that routes to either pipel
 ```bash
 npm run dev          # Start Vite dev server
 npm run build        # TypeScript check + Vite build
-npm run test         # Run 420 unit tests (vitest)
+npm run test         # Run 533 unit tests (vitest)
 npm run test:watch   # Watch mode
 npm run lint         # ESLint
 npm run test:discovery  # Integration test for discovery pipeline (needs real API keys)
@@ -86,19 +86,21 @@ npm run test:discovery  # Integration test for discovery pipeline (needs real AP
 ```
 src/
   pages/
-    ChatPage.tsx              # Primary entry point — conversational UX
-    DiscoveryResultsPage.tsx  # Location discovery results
-    ResultsPage.tsx           # Competitor analysis results
+    ChatPage.tsx              # Primary entry point — single-surface conversational UX (results render inline)
+    MemoryPage.tsx            # Browse the creator/content corpus remembered across searches
+    ReportPage.tsx            # Full-page deep niche report (client-ready view)
     SettingsPage.tsx          # API key management
   hooks/
-    useConversation.ts        # Chat orchestration state machine
+    useAgentConversation.ts   # Turn-based agent loop — THE conversation engine (latest-wins steering)
     useActivePipeline.ts      # Reads PIPELINE_REGISTRY, computes active pipeline state
-    useCompetitorAnalysis.ts  # TanStack Query mutation for competitor pipeline
+    useCompetitorAnalysis.ts  # TanStack Query mutation for competitor pipeline (discover → clarify → rank)
     useLocationDiscovery.ts   # TanStack Query mutation for discovery pipeline
+    useReelAnalysis.ts        # Reel scrape + hook analysis + synthesis; self-contained deep-report run
   ai/
     intentParser.ts           # Gemini intent classification (pipeline routing)
     gemini.ts                 # Gemini REST API caller (no SDK)
     prompts.ts                # Prompt builders for all Gemini calls
+    prompts/                  # Per-feature prompt modules (e.g. deepReelAnalysis)
   lib/
     apifyCore.ts              # Shared Apify primitives (startRun, pollRun, fetchDataset)
     apifyClient.ts            # Competitor pipeline scraper (3-round with hashtag expansion)
@@ -107,26 +109,45 @@ src/
     locationFilter.ts         # Bio-text city matching with alias map
     transformers.ts           # Apify raw → NormalizedProfile
     keyRotator.ts             # Round-robin Apify key selection with cooldown
+    reelScraper.ts            # Top-reels scrape for a handle (NoReelsError when none)
+    reelAnalyzer.ts           # Hook analysis + cross-creator synthesis + deep niche report
+    reelVideoClient.ts        # Batch-resolve reel video URLs (deep multimodal path)
+    reelSnapshot.ts           # buildReelResultPayload — snapshot a finished reel run (per-conversation parity)
+    deepReelCache.ts          # IndexedDB cache for deep per-reel analyses (free re-runs)
+    corpus.ts                 # Pure corpus core (mergeCreator, recognition, CorpusRepository)
+    corpusIdb.ts              # IndexedDB-backed corpus (creators + content stores)
+    corpusHarvest.ts          # Map pipeline results → corpus creator/content records
+    errorMessages.ts          # Fixed, user-safe error strings (code-keyed; never raw API bodies)
     storage.ts                # Cross-runtime storage adapter (browser / Node)
     constants.ts              # Shared string constants
   tools/
     registry.ts               # PIPELINE_REGISTRY — confirmMessage + confirmOptions per pipeline
+    agentTools.ts             # Agent-loop tool defs + buildGeminiHistory
     types.ts                  # Shared TypeScript types
   store/
-    analysisStore.ts          # Zustand store — competitor analysis state
-    discoveryStore.ts         # Zustand store — discovery state
-    keysStore.ts              # Zustand store — API keys (persisted)
+    analysisStore.ts          # Zustand — competitor analysis state + ResultPayload union
+    discoveryStore.ts         # Zustand — discovery state
+    reelAnalysisStore.ts      # Zustand — reel run state (persisted; reelConversationId tags the owning chat)
+    conversationsStore.ts     # Zustand — multi-conversation chat history (persisted) + legacy migration
+    corpusStore.ts            # Zustand — corpus hydration + remembered count
+    keysStore.ts              # Zustand — API keys (persisted)
+    persistStorage.ts         # Import-safe persist storage wrapper (never throws)
+    reelPersist.ts            # Reel persist guard — drop interrupted mid-runs on restore
   components/
-    AppLayout.tsx             # Top nav bar + Outlet
+    AppLayout.tsx             # Top nav (Chat | Memory | Report | Settings) + Outlet
     ChatMessage.tsx           # Chat bubble with optional options
-    ChatOptions.tsx           # Confirm option buttons with label prop
+    CompetitorResultMessage.tsx  # Inline competitor results (results-as-messages)
+    DiscoveryResultMessage.tsx   # Inline discovery results
+    ReelResultMessage.tsx        # Inline snapshot of a finished reel run
+    InlineReelResults.tsx     # Reel run rendering, shared by the live block + snapshots
+    ConversationSwitcher.tsx  # New / switch / delete conversations
     ClarificationCard.tsx     # Inline clarification prompt
-    DiscoveryCard.tsx         # Creator card for discovery results
     CompetitorCard.tsx        # Competitor card for analysis results
+    DiscoveryCard.tsx         # Creator card for discovery results
     ProgressSteps.tsx         # Inline progress step indicator
   shared/
     utils/categories.ts       # COMPETITOR_CATEGORIES + DISCOVERY_CATEGORIES
-    utils/export.ts           # CSV + clipboard export formatters
+    utils/export.ts           # CSV + clipboard + markdown export formatters
 ```
 
 ## Design System
