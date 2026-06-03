@@ -24,6 +24,28 @@ const geminiLimiter = pLimit(5)
 const deepLimiter = pLimit(3)
 
 /**
+ * Preflight: the deep-analysis serverless function (/api/analyze-reel-video) is only served
+ * when deployed or under `vercel dev` — plain `vite dev` returns 404 for it. We probe with a
+ * minimal POST: a 404 means "not deployed". Any other status (400/401/405/200) means the
+ * route exists, so we proceed. Network errors aren't treated as missing (let the real run
+ * surface them). This lets us show ONE clear note instead of resetting the quick results and
+ * marking every reel "failed".
+ */
+async function deepFnAvailable(signal?: AbortSignal): Promise<boolean> {
+  try {
+    const res = await fetch('/api/analyze-reel-video', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+      signal,
+    })
+    return res.status !== 404
+  } catch {
+    return true
+  }
+}
+
+/**
  * useReelAnalysis — orchestrates per-creator reel scraping + hook analysis, then
  * cross-creator synthesis, as ONE awaited sequence inside startAnalysis().
  *
@@ -226,9 +248,18 @@ export function useReelAnalysis() {
   const startDeepReport = async (handles: string[]) => {
     if (handles.length === 0) return
     abortRef.current?.abort()
-    reset()
     const controller = new AbortController()
     abortRef.current = controller
+
+    // Preflight BEFORE reset(): if the deep-analysis function isn't deployed, surface one note
+    // and keep the quick results intact instead of wiping them and failing every reel.
+    if (!(await deepFnAvailable(controller.signal))) {
+      setDeepReportStatus('unavailable')
+      return
+    }
+    if (controller.signal.aborted) return
+
+    reset()
 
     setActiveHandles(handles)
     handles.forEach((handle) =>
