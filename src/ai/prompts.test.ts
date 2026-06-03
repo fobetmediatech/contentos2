@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { buildCompetitorPrompt, buildClarificationPrompt, buildContentPrompt, buildConfirmReplyPrompt } from './prompts'
+import { buildCompetitorPrompt, buildClarificationPrompt, buildContentPrompt } from './prompts'
 import type { NormalizedProfile } from '../lib/transformers'
 
 function makeProfile(overrides: Partial<NormalizedProfile> = {}): NormalizedProfile {
@@ -284,54 +284,3 @@ describe('buildContentPrompt', () => {
   })
 })
 
-// ── buildConfirmReplyPrompt ───────────────────────────────────────────────────
-
-describe('buildConfirmReplyPrompt', () => {
-  const OPTIONS = [
-    'Proceed',
-    'Micro-influencers (under 100K followers)',
-    'Macro creators (100K+ followers)',
-  ]
-
-  it('includes the user text in the prompt', () => {
-    const prompt = buildConfirmReplyPrompt('micro please', OPTIONS)
-    expect(prompt).toContain('micro please')
-  })
-
-  it('lists all options numbered', () => {
-    const prompt = buildConfirmReplyPrompt('yes', OPTIONS)
-    expect(prompt).toContain('1. "Proceed"')
-    expect(prompt).toContain('2. "Micro-influencers (under 100K followers)"')
-    expect(prompt).toContain('3. "Macro creators (100K+ followers)"')
-  })
-
-  it('escapes double-quotes in user text', () => {
-    const prompt = buildConfirmReplyPrompt('show me "micro" please', OPTIONS)
-    // JSON.stringify escaping — quotes become \"
-    expect(prompt).toContain('\\"micro\\"')
-    // should NOT contain unescaped version that could break JSON
-    expect(prompt).not.toContain('show me "micro" please')
-  })
-
-  it('escapes backslashes in user text', () => {
-    const prompt = buildConfirmReplyPrompt('path\\to\\thing', OPTIONS)
-    // JSON.stringify escapes backslashes: \ becomes \\
-    expect(prompt).toContain('path\\\\to\\\\thing')
-  })
-
-  it('strips newlines from user text', () => {
-    const prompt = buildConfirmReplyPrompt('yes\nplease\rgo', OPTIONS)
-    expect(prompt).not.toMatch(/yes\nplease/)
-    expect(prompt).not.toMatch(/yes\rplease/)
-  })
-
-  it('instructs Gemini to return JSON only', () => {
-    const prompt = buildConfirmReplyPrompt('go', OPTIONS)
-    expect(prompt).toContain('Return JSON only')
-    expect(prompt).toContain('"selectedOption"')
-  })
-
-  it('handles empty user text without throwing', () => {
-    expect(() => buildConfirmReplyPrompt('', OPTIONS)).not.toThrow()
-  })
-})

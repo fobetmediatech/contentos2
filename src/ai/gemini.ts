@@ -9,7 +9,7 @@
  *   empty candidates[]      → SAFETY block, surface as content policy error
  */
 
-import { buildCompetitorPrompt, buildDiscoveryPrompt, buildClarificationPrompt, buildContentPrompt, buildConfirmReplyPrompt, type AnalysisOutput, type DiscoveryOutput, type ClarificationQuestion, type ContentContext } from './prompts'
+import { buildCompetitorPrompt, buildDiscoveryPrompt, buildClarificationPrompt, buildContentPrompt, type AnalysisOutput, type DiscoveryOutput, type ClarificationQuestion, type ContentContext } from './prompts'
 import type { NormalizedProfile } from '../lib/transformers'
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta'
@@ -513,72 +513,6 @@ export async function callGeminiContent(
   }
 
   return text
-}
-
-// ----- Confirm reply mapping -----
-
-/**
- * Map a free-text confirming-state reply to one of the available pipeline option strings.
- *
- * Uses JSON mode at temperature 0 to deterministically select the best matching option.
- * Validates the returned string is actually in availableOptions — falls back to
- * availableOptions[0] if Gemini returns a near-miss or hallucinated string.
- *
- * @param geminiKey        Active Gemini API key.
- * @param userText         The user's free-text message (already sanitised — max 500 chars, newlines stripped).
- * @param availableOptions The exact option strings to choose between.
- * @param signal           AbortController signal.
- * @returns                One of availableOptions (guaranteed).
- */
-export async function callGeminiConfirmReply(
-  geminiKey: string,
-  userText: string,
-  availableOptions: string[],
-  signal?: AbortSignal,
-): Promise<string> {
-  if (availableOptions.length === 0) return ''
-
-  const prompt = buildConfirmReplyPrompt(userText, availableOptions)
-
-  const CONFIRM_SCHEMA = {
-    type: 'object',
-    properties: {
-      selectedOption: { type: 'string' },
-    },
-    required: ['selectedOption'],
-  }
-
-  let parsed: { selectedOption?: unknown; selected_option?: unknown; SelectedOption?: unknown }
-  try {
-    parsed = await callGeminiWithSchema<typeof parsed>(
-      geminiKey,
-      prompt,
-      CONFIRM_SCHEMA,
-      { temperature: 0, maxOutputTokens: 64, signal },
-    )
-  } catch (err) {
-    // Safety block falls back to default option silently; other errors propagate
-    if (err instanceof GeminiError && err.code === 'SAFETY_BLOCK') {
-      return availableOptions[0]
-    }
-    throw err
-  }
-
-  try {
-    // Try camelCase key first (canonical schema), then fallback variants (snake_case,
-    // PascalCase) in case different Gemini model variants return different key formats.
-    const selected = String(
-      parsed.selectedOption ?? parsed.selected_option ?? parsed.SelectedOption ?? '',
-    )
-    // Validate the returned string is an exact member of availableOptions.
-    // This prevents near-miss hallucinations from corrupting downstream pipeline logic.
-    if (availableOptions.includes(selected)) return selected
-  } catch {
-    // key extraction failure — fall through to default
-  }
-
-  console.warn('[callGeminiConfirmReply] returning fallback option — Gemini returned unrecognised selection')
-  return availableOptions[0]
 }
 
 // ----- Function-calling primitive (Phase 1b agent loop) -----

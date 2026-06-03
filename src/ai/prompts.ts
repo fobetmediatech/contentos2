@@ -543,31 +543,3 @@ HOW TO RESPOND:
 Respond directly in plain text (markdown bold and lists are fine). No filler preamble — lead with the value.`
 }
 
-/**
- * Build the prompt used to map a free-text confirming-state reply to one of the
- * available pipeline option strings.
- *
- * The return schema is { "selectedOption": "<one of availableOptions>" }.
- * Callers MUST validate that the returned value is actually in availableOptions
- * and fall back to availableOptions[0] if not.
- *
- * @param userText         The raw user message (should already be sanitised — max 500 chars, newlines stripped).
- * @param availableOptions The exact option strings Gemini must choose between.
- */
-export function buildConfirmReplyPrompt(userText: string, availableOptions: string[]): string {
-  // JSON.stringify produces a fully-escaped string (handles backslashes, control chars,
-  // Unicode, quotes). Slice off the surrounding " chars since we embed inline.
-  const safeText = JSON.stringify(userText.slice(0, 500).replace(/[\n\r]/g, ' ')).slice(1, -1)
-  const optionList = availableOptions.map((o, i) => `${i + 1}. "${o}"`).join('\n')
-
-  return `You are mapping a user's free-text reply to one of the available options for a social media analysis pipeline.
-
-USER REPLY: "${safeText}"
-
-AVAILABLE OPTIONS:
-${optionList}
-
-Pick the option the user most likely means. If they say "yes", "go", "ok", "start", "sure", or similar, choose option 1 (the default proceed option).
-
-Return JSON only: { "selectedOption": "<exact option string from the list above>" }`
-}
