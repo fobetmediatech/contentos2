@@ -108,6 +108,12 @@ export interface AnalysisState {
   clarificationAnswer: string | null
 
   inputProfiles: NormalizedProfile[]
+  /**
+   * Profiles of the scraped competitor candidates (the accounts behind output.competitors).
+   * Stored so competitor cards can render per-creator metrics (ER, followers) and the cross-
+   * search corpus can harvest them — inputProfiles holds only the user's reference accounts.
+   */
+  candidateProfiles: NormalizedProfile[]
   competitors: CompetitorAnalysisResult[]
   niche: string
   summary: string
@@ -133,7 +139,7 @@ export interface AnalysisState {
   setClarification: (data: PendingDiscovery) => void
   /** Stores the user's clarification answer and transitions back to 'running'. */
   answerClarification: (answer: string) => void
-  setResults: (output: AnalysisOutput, inputProfiles: NormalizedProfile[], candidateCount: number) => void
+  setResults: (output: AnalysisOutput, inputProfiles: NormalizedProfile[], candidateCount: number, candidateProfiles?: NormalizedProfile[]) => void
   setError: (message: string) => void
   setStepProgressDetail: (detail: string) => void
   setDidExpand: (value: boolean) => void
@@ -154,6 +160,7 @@ const initialState = {
   pendingDiscovery: null,
   clarificationAnswer: null,
   inputProfiles: [],
+  candidateProfiles: [] as NormalizedProfile[],
   competitors: [],
   niche: '',
   summary: '',
@@ -225,13 +232,14 @@ export const useAnalysisStore = create<AnalysisState>()(persist((set) => ({
   answerClarification: (answer) =>
     set({ status: 'running', clarificationAnswer: answer }),
 
-  setResults: (output, inputProfiles, candidateCount) =>
+  setResults: (output, inputProfiles, candidateCount, candidateProfiles = []) =>
     set({
       status: 'done',
       competitors: output.competitors,
       niche: output.niche,
       summary: output.summary,
       inputProfiles,
+      candidateProfiles,
       candidateCount,
     }),
 

@@ -9,8 +9,51 @@
  */
 
 import { describe, it, expect, vi } from 'vitest'
-import { AGENT_TOOLS, validateToolCall, decideAction, runAgentTurn } from './agentTools'
+import { AGENT_TOOLS, validateToolCall, decideAction, runAgentTurn, buildGeminiHistory } from './agentTools'
+import type { HistoryMessage } from './agentTools'
 import type { GeminiToolResult, GeminiTurn } from '../ai/gemini'
+
+describe('buildGeminiHistory', () => {
+  it('never emits two consecutive user turns when an error separated two user messages', () => {
+    // Repro: search 1 errored (filtered out), user retries with a fresh request. Without
+    // collapsing, the filtered error left [user, user] adjacent — Gemini conflated them
+    // ("@nike.training" + "ai" → "@nike.trainingai", "fitness" niche bleeding in).
+    const msgs: HistoryMessage[] = [
+      { role: 'user', content: 'Top fitness creators like @nike.training', type: 'text' },
+      { role: 'assistant', content: 'No verified competitors found — try again.', type: 'error' },
+      { role: 'user', content: 'ai and marketing creators like @pritka.loonia, @thesortedgirl', type: 'text' },
+    ]
+    const turns = buildGeminiHistory(msgs, 8)
+    // No adjacent same-role turns anywhere.
+    for (let i = 1; i < turns.length; i++) {
+      expect(turns[i].role).not.toBe(turns[i - 1].role)
+    }
+    // The latest request is the live intent; the stale failed one must not bleed in.
+    expect(turns[turns.length - 1].parts[0].text).toBe(
+      'ai and marketing creators like @pritka.loonia, @thesortedgirl',
+    )
+    expect(turns.some((t) => t.parts.some((p) => (p.text ?? '').includes('nike.training')))).toBe(false)
+  })
+
+  it('preserves normal alternating turns (user → model → user)', () => {
+    const msgs: HistoryMessage[] = [
+      { role: 'user', content: 'top vegan chefs', type: 'text' },
+      { role: 'assistant', content: 'Found 12 competitors in vegan food.', type: 'result' },
+      { role: 'user', content: 'now find some in mumbai', type: 'text' },
+    ]
+    const turns = buildGeminiHistory(msgs, 8)
+    expect(turns.map((t) => t.role)).toEqual(['user', 'model', 'user'])
+    expect(turns[2].parts[0].text).toBe('now find some in mumbai')
+  })
+
+  it('drops leading model turns so contents starts with a user turn', () => {
+    const msgs: HistoryMessage[] = [
+      { role: 'assistant', content: 'Welcome!', type: 'text' },
+      { role: 'user', content: 'top fitness creators', type: 'text' },
+    ]
+    expect(buildGeminiHistory(msgs, 8)[0].role).toBe('user')
+  })
+})
 
 describe('AGENT_TOOLS declarations', () => {
   it('declares exactly the 5 agent tools, each with name/description/parameters', () => {

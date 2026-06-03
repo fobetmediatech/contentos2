@@ -13,10 +13,12 @@
  *   unknown   → grey muted, 70% opacity
  */
 
-import { BadgeCheck, MapPin, Video, Mail, CheckSquare, Square } from 'lucide-react'
+import { BadgeCheck, MapPin, Video, Mail, CheckSquare, History, Square } from 'lucide-react'
 import type { DiscoveryResult } from '../ai/prompts'
 import type { NormalizedProfile } from '../lib/transformers'
 import { DISCOVERY_CATEGORIES } from '../shared/utils/categories'
+import { useCorpusStore } from '../store/corpusStore'
+import { recognition } from '../lib/corpus'
 
 interface DiscoveryCardProps {
   result: DiscoveryResult
@@ -67,6 +69,8 @@ export function DiscoveryCard({ result, profile, cohortAvgER, isSelected, onSele
     .slice(0, 2)
     .join('')
     .toUpperCase()
+  // Cross-search memory: if the corpus has seen this creator in a PRIOR search, surface it.
+  const seen = recognition(useCorpusStore((s) => s.creators[result.username]))
 
   return (
     <div
@@ -127,6 +131,15 @@ export function DiscoveryCard({ result, profile, cohortAvgER, isSelected, onSele
               <BadgeCheck size={14} className="text-[#C4A882] flex-shrink-0" />
             )}
             <LocationBadge confidence={result.locationConfidence} />
+            {seen && (
+              <span
+                title={seen.detail ? `Seen in ${seen.detail}` : undefined}
+                className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-[rgba(224,123,58,0.12)] text-[#F4A97B] border border-[rgba(224,123,58,0.20)]"
+              >
+                <History size={10} />
+                {seen.label}
+              </span>
+            )}
           </div>
           {profile?.fullName && profile.fullName !== result.username && (
             <p className="text-xs text-[#C4A882] mt-0.5 truncate">{profile.fullName}</p>

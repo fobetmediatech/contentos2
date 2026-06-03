@@ -11,6 +11,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useAnalysisStore } from './analysisStore'
 import type { ChatMessage } from './analysisStore'
+import type { NormalizedProfile } from '../lib/transformers'
 
 beforeEach(() => {
   useAnalysisStore.getState().reset()
@@ -147,6 +148,24 @@ describe('analysisStore — startAnalysis preserves the chat (agent continuity)'
     expect(useAnalysisStore.getState().competitors).toHaveLength(0)
     expect(useAnalysisStore.getState().candidateCount).toBe(0)
     expect(useAnalysisStore.getState().conversationMessages).toHaveLength(1)
+  })
+})
+
+describe('analysisStore — setResults stores candidate profiles', () => {
+  it('keeps candidateProfiles so competitor cards + the corpus can read their metrics', () => {
+    // Regression: setResults only stored inputProfiles (the reference accounts the user typed).
+    // The ranked competitors live in candidateProfiles — without storing them, competitor cards
+    // showed no ER/followers and the corpus harvested zero creators (no "Seen" badges, dead count).
+    const profs = [{ username: 'alice' }, { username: 'bob' }] as NormalizedProfile[]
+    useAnalysisStore
+      .getState()
+      .setResults({ competitors: [], niche: 'ai', summary: 's' }, [], profs.length, profs)
+    expect(useAnalysisStore.getState().candidateProfiles.map((p) => p.username)).toEqual(['alice', 'bob'])
+  })
+
+  it('defaults candidateProfiles to [] when omitted (back-compat for 3-arg callers)', () => {
+    useAnalysisStore.getState().setResults({ competitors: [], niche: 'x', summary: 's' }, [], 5)
+    expect(useAnalysisStore.getState().candidateProfiles).toEqual([])
   })
 })
 

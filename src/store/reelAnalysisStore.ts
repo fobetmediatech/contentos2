@@ -6,6 +6,9 @@
  */
 
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
+import { safePersistStorage } from './persistStorage'
+import { isCleanReelRun } from './reelPersist'
 import type { DeepReelAnalysis, DeepNicheReport } from '../ai/prompts/deepReelAnalysis'
 
 // ----- Creator status -----
@@ -129,7 +132,7 @@ const initialState = {
 
 // ----- Store -----
 
-export const useReelAnalysisStore = create<ReelAnalysisState>()((set) => ({
+export const useReelAnalysisStore = create<ReelAnalysisState>()(persist((set) => ({
   ...initialState,
 
   setSelectedHandles: (handles) => set({ selectedHandles: handles }),
@@ -174,4 +177,26 @@ export const useReelAnalysisStore = create<ReelAnalysisState>()((set) => ({
   setDeepReportStatus: (status) => set({ deepReportStatus: status }),
 
   reset: () => set(initialState),
+}), {
+  // Persist a finished reel analysis so it survives a reload (it used to vanish — the store
+  // reset to empty on refresh). Only the result data + terminal status are persisted; the
+  // merge guard drops an interrupted mid-run so the UI never restores onto stuck spinners.
+  name: 'contentos-reels',
+  storage: safePersistStorage,
+  partialize: (s) => ({
+    activeHandles: s.activeHandles,
+    creatorStates: s.creatorStates,
+    synthesis: s.synthesis,
+    synthesisStatus: s.synthesisStatus,
+    deepReport: s.deepReport,
+    deepReportStatus: s.deepReportStatus,
+  }),
+  merge: (persisted, current) => {
+    const p = (persisted ?? {}) as Partial<ReelAnalysisState>
+    const creatorStates = (p.creatorStates ?? {}) as Record<string, { status: string }>
+    if (!isCleanReelRun({ synthesisStatus: p.synthesisStatus ?? 'idle', creatorStates })) {
+      return current // interrupted run → discard, come back to a clean slate
+    }
+    return { ...current, ...p }
+  },
 }))

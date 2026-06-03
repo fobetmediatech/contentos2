@@ -24,7 +24,7 @@ import { useLocationDiscovery } from './useLocationDiscovery'
 import { useReelAnalysis } from './useReelAnalysis'
 import { callGeminiWithTools, callGeminiContent, GeminiError } from '../ai/gemini'
 import type { GeminiTurn } from '../ai/gemini'
-import { AGENT_TOOLS, AGENT_SYSTEM_PROMPT, runAgentTurn } from '../tools/agentTools'
+import { AGENT_TOOLS, AGENT_SYSTEM_PROMPT, runAgentTurn, buildGeminiHistory } from '../tools/agentTools'
 import type { AgentAction } from '../tools/agentTools'
 import { generateHashtags } from '../lib/hashtagGenerator'
 import { scrapeHashtagUsernames } from '../lib/apifyClient'
@@ -80,15 +80,8 @@ export function useAgentConversation() {
    * reflects the message we just added. Also drop any leading model turns so `contents`
    * starts with a user turn (the API requires it).
    */
-  const buildHistory = (): GeminiTurn[] => {
-    const turns = useAnalysisStore
-      .getState()
-      .conversationMessages.filter((m) => m.type !== 'error' && m.content)
-      .slice(-HISTORY_WINDOW)
-      .map((m): GeminiTurn => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.content }] }))
-    while (turns.length > 0 && turns[0].role === 'model') turns.shift()
-    return turns
-  }
+  const buildHistory = (): GeminiTurn[] =>
+    buildGeminiHistory(useAnalysisStore.getState().conversationMessages, HISTORY_WINDOW)
 
   /** True when there is genuinely live work to interrupt — a turn thinking or a scrape running. */
   const isAnyPipelineRunning = (): boolean => {

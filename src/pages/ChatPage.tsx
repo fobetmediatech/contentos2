@@ -22,6 +22,8 @@ import { CompetitorResultMessage } from '../components/CompetitorResultMessage'
 import { DiscoveryResultMessage } from '../components/DiscoveryResultMessage'
 import { InlineReelResults } from '../components/InlineReelResults'
 import type { NormalizedProfile } from '../lib/transformers'
+import { useCorpusStore } from '../store/corpusStore'
+import { harvestCompetitors, harvestDiscovery, harvestReelContent } from '../lib/corpusHarvest'
 
 // Tool chips shown in the empty state — one per independent tool, so all three
 // are discoverable at a glance. Tapping prefills the input with a representative prompt.
@@ -46,7 +48,7 @@ export function ChatPage() {
     currentStep,
     pendingDiscovery,
     competitors,
-    inputProfiles,
+    candidateProfiles,
     summary,
     niche,
     stepProgressDetail,
@@ -65,6 +67,7 @@ export function ChatPage() {
   const discoveryResults = useDiscoveryStore((s) => s.results)
   const discoveryProfiles = useDiscoveryStore((s) => s.candidateProfiles)
   const discoveryLocationRelaxed = useDiscoveryStore((s) => s.locationFilterRelaxed)
+  const discoveryNiche = useDiscoveryStore((s) => s.niche)
   const resetDiscovery = useDiscoveryStore((s) => s.reset)
   const activePipeline = useActivePipeline()
 
@@ -80,8 +83,12 @@ export function ChatPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const analysisErrorHandledRef = useRef(false)
   const competitorResultArmedRef = useRef(false) // armed while a competitor run is live; fires once on done
-  const reelActiveRef = useRef(false) // tracks reel-run active edges to drop one position marker per run
+  // Initialize from the (possibly persisted) reel state: if a finished reel run was restored
+  // on reload, activeHandles is already non-empty, so seed the ref true — otherwise the marker
+  // effect would see a 0→active edge and append a SECOND reel marker below the restored one.
+  const reelActiveRef = useRef(activeHandles.length > 0)
   const discoveryResultArmedRef = useRef(false) // armed while a discovery run is live; fires once on done
+  const reelContentArmedRef = useRef(false) // armed while a reel run is live; harvests content once on synthesis done
 
   // Selection state — shared across competitor + discovery results
   const [selectedHandles, setSelectedHandles] = useState<string[]>([])
@@ -150,6 +157,10 @@ export function ChatPage() {
     } else if (status === 'done' && competitorResultArmedRef.current) {
       competitorResultArmedRef.current = false
       const handles = new Set(competitors.map((c) => c.username))
+      // Match against candidateProfiles (the scraped competitors), NOT inputProfiles (the user's
+      // reference accounts) — the ranked competitors live in the candidate set, so this is what
+      // gives cards their metrics and feeds the corpus real creators.
+      const matched = candidateProfiles.filter((p) => handles.has(p.username))
       addMessage({
         role: 'assistant',
         type: 'result',
@@ -159,13 +170,19 @@ export function ChatPage() {
           competitors,
           summary,
           niche,
-          profiles: inputProfiles.filter((p) => handles.has(p.username)).map(trimProfile),
+          profiles: matched.map(trimProfile),
           didExpand: analysisDidExpand,
         },
       })
+      // Remember these creators in the cross-search corpus (untrimmed, so topHashtags
+      // survive as signal). Fire-and-forget — a corpus write never blocks the chat.
+      void useCorpusStore
+        .getState()
+        .remember(harvestCompetitors(competitors, matched, niche, Date.now()))
+        .catch(() => {})
       setStatus('chatting')
     }
-  }, [status, competitors, summary, niche, inputProfiles, analysisDidExpand, addMessage, setStatus])
+  }, [status, competitors, summary, niche, candidateProfiles, analysisDidExpand, addMessage, setStatus])
 
   // Reel position marker: when a reel run STARTS (activeHandles 0 → non-empty), drop a
   // `type:'reel'` marker into the conversation so the (live) reel block renders in place —
@@ -194,6 +211,7 @@ export function ChatPage() {
     } else if (discoveryStatus === 'done' && discoveryResultArmedRef.current) {
       discoveryResultArmedRef.current = false
       const handles = new Set(discoveryResults.map((r) => r.username))
+      const matched = discoveryProfiles.filter((p) => handles.has(p.username))
       addMessage({
         role: 'assistant',
         type: 'result',
@@ -202,14 +220,33 @@ export function ChatPage() {
           kind: 'discovery',
           results: discoveryResults,
           city: discoveryCity,
-          profiles: discoveryProfiles.filter((p) => handles.has(p.username)).map(trimProfile),
+          profiles: matched.map(trimProfile),
           didExpand: discoveryDidExpand,
           locationRelaxed: discoveryLocationRelaxed,
         },
       })
+      // Remember these creators in the cross-search corpus (untrimmed for signal).
+      void useCorpusStore
+        .getState()
+        .remember(harvestDiscovery(discoveryResults, matched, discoveryCity, discoveryNiche, Date.now()))
+        .catch(() => {})
       resetDiscovery()
     }
-  }, [discoveryStatus, discoveryResults, discoveryCity, discoveryProfiles, discoveryDidExpand, discoveryLocationRelaxed, addMessage, resetDiscovery])
+  }, [discoveryStatus, discoveryResults, discoveryCity, discoveryNiche, discoveryProfiles, discoveryDidExpand, discoveryLocationRelaxed, addMessage, resetDiscovery])
+
+  // Reel → corpus content: when a reel run's synthesis finishes, harvest each analyzed reel
+  // into the corpus as content tied to its creator (the "content" half of the corpus). Armed
+  // while the run is live so it fires exactly once — and NOT on reload, where the reel store
+  // restores with synthesisStatus 'done' but the ref starts false (the content was already
+  // harvested during the original run).
+  useEffect(() => {
+    if (synthesisStatus === 'running') {
+      reelContentArmedRef.current = true
+    } else if (synthesisStatus === 'done' && reelContentArmedRef.current) {
+      reelContentArmedRef.current = false
+      void useCorpusStore.getState().rememberContent(harvestReelContent(creatorStates, Date.now())).catch(() => {})
+    }
+  }, [synthesisStatus, creatorStates])
 
   // Scroll to bottom whenever messages or pipeline state changes
   useEffect(() => {

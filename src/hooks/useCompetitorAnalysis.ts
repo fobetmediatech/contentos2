@@ -156,7 +156,7 @@ export function useCompetitorAnalysis() {
           )
         }
 
-        setResults(output, inputProfiles, candidateProfiles.length)
+        setResults(output, inputProfiles, candidateProfiles.length, candidateProfiles)
         return output
 
       } catch (err) {

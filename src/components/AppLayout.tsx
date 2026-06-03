@@ -1,5 +1,7 @@
+import { useEffect } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
-import { Settings, MessageSquare } from 'lucide-react'
+import { Brain, Settings, MessageSquare } from 'lucide-react'
+import { useCorpusStore } from '../store/corpusStore'
 
 interface AppLayoutProps {
   /**
@@ -13,6 +15,13 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
   const location = useLocation()
   const isSettings = location.pathname === '/settings'
   const isChat = location.pathname === '/'
+  const corpusCount = useCorpusStore((s) => s.count)
+
+  // Hydrate the creator memory once for the whole app — the shell is always mounted, so the
+  // remembered-count and "seen before" badges populate on whichever route the user lands on.
+  useEffect(() => {
+    void useCorpusStore.getState().hydrate().catch(() => {})
+  }, [])
 
   return (
     <div className={`${noPadding ? 'h-[100dvh] flex flex-col overflow-hidden' : 'min-h-screen'} bg-chai`}>
@@ -29,6 +38,18 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
 
           {/* Nav links */}
           <nav className="flex items-center gap-1">
+            {/* Creator memory count — ambient signal that the OS is learning. Not a link
+                (no Memory page yet); reads as a status indicator with a tooltip. */}
+            {corpusCount > 0 && (
+              <span
+                title="Creators remembered across your searches"
+                className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md text-secondary"
+              >
+                <Brain size={14} className="text-[#E07B3A]" />
+                <span className="tabular-nums">{corpusCount}</span>
+              </span>
+            )}
+
             <Link
               to="/"
               className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md transition-colors ${
