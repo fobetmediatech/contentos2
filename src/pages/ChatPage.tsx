@@ -13,6 +13,7 @@ import { useAnalysisStore } from '../store/analysisStore'
 import { useDiscoveryStore } from '../store/discoveryStore'
 import { useKeysStore } from '../store/keysStore'
 import { useConversation } from '../hooks/useConversation'
+import { useAgentConversation } from '../hooks/useAgentConversation'
 import { useCompetitorAnalysis } from '../hooks/useCompetitorAnalysis'
 import { useActivePipeline } from '../hooks/useActivePipeline'
 import { useReelAnalysis } from '../hooks/useReelAnalysis'
@@ -64,6 +65,9 @@ export function ChatPage() {
 
   const { isReady } = useKeysStore()
   const { sendMessage, confirmSeeds, isConfirmingPending, isConfirmingLocked, isAnswering } = useConversation()
+  // Phase 1b T8: flag-gated agent loop. Both hooks mount (Rules of Hooks); we route to one.
+  const AGENT_LOOP = import.meta.env.VITE_AGENT_LOOP === 'true'
+  const agentConv = useAgentConversation()
   const { answerClarification, isPending: clarificationPending } = useCompetitorAnalysis()
   const { startAnalysis: startReelAnalysis, startDeepReport, activeHandles, creatorStates, synthesisStatus, synthesis, synthesisError, deepReport, deepReportStatus, reset: resetReel } = useReelAnalysis()
 
@@ -83,7 +87,7 @@ export function ChatPage() {
   const isReelDone = activeHandles.length > 0 && (synthesisStatus === 'done' || synthesisStatus === 'failed')
   const isInPipeline = ['running', 'clarifying', 'done', 'error'].includes(status) ||
     ['running', 'done', 'error'].includes(discoveryStatus)
-  const canSend =
+  const legacyCanSend =
     (status === 'chatting' || status === 'confirming' || activePipeline.followUpAllowed) &&
     inputText.trim().length > 0 &&
     ready &&
@@ -91,6 +95,8 @@ export function ChatPage() {
     !isConfirmingLocked &&
     !isReelRunning &&
     !isAnswering
+  // Agent loop (TD3): input stays live during runs — a new message steers (latest-wins).
+  const canSend = AGENT_LOOP ? ready && inputText.trim().length > 0 : legacyCanSend
 
   // Initialise chat state on mount
   useEffect(() => {
@@ -163,7 +169,7 @@ export function ChatPage() {
     const text = inputText.trim()
     setInputText('')
     resetTextareaHeight()
-    await sendMessage(text)
+    await (AGENT_LOOP ? agentConv.sendMessage(text) : sendMessage(text))
   }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -310,6 +316,7 @@ export function ChatPage() {
               {isDiscovering && <TypingIndicator />}
               {isConfirmingPending && <TypingIndicator />}
               {isAnswering && <TypingIndicator />}
+              {AGENT_LOOP && agentConv.isThinking && <TypingIndicator />}
 
               {/* ── Competitor analysis progress ──────────────────────── */}
               {(isAnalysisRunning || isAnalysisClarifying) && (
@@ -630,11 +637,13 @@ export function ChatPage() {
               maxLength={500}
               rows={1}
               disabled={
-                (status !== 'chatting' && status !== 'confirming' && !activePipeline.followUpAllowed) ||
-                isConfirmingPending ||
-                isConfirmingLocked ||
-                isReelRunning ||
-                isAnswering
+                AGENT_LOOP
+                  ? !ready
+                  : (status !== 'chatting' && status !== 'confirming' && !activePipeline.followUpAllowed) ||
+                    isConfirmingPending ||
+                    isConfirmingLocked ||
+                    isReelRunning ||
+                    isAnswering
               }
               aria-label="Message input"
               className={`w-full px-3 py-2.5 text-sm bg-[#1A1410] text-primary border rounded-xl focus:outline-none focus:ring-1 focus:ring-[#E07B3A] focus:border-[#E07B3A] resize-none disabled:opacity-40 disabled:cursor-not-allowed leading-relaxed placeholder:text-muted ${
