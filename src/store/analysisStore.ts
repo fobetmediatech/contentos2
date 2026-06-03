@@ -16,7 +16,6 @@
  */
 
 import { create } from 'zustand'
-import { persist, createJSONStorage } from 'zustand/middleware'
 import type { NormalizedProfile } from '../lib/transformers'
 import type { CompetitorAnalysisResult, DiscoveryResult, AnalysisOutput, ClarificationQuestion } from '../ai/prompts'
 import type { ParsedIntent } from '../ai/intentParser'
@@ -125,8 +124,8 @@ export interface AnalysisState {
   /** True when the competitor pipeline found < 8 candidates (sparse niche indicator). */
   didExpand: boolean
 
-  /** Conversation history for the chat UI. Capped at 50 messages to prevent unbounded growth. */
-  conversationMessages: ChatMessage[]
+  // NOTE: the chat transcript moved to conversationsStore (multi-conversation history) — this
+  // store now holds ONLY analysis state. The active conversation's messages live there.
   /** Populated after successful seed discovery; read by confirmSeeds() in useConversation. */
   discoveredSeeds: string[]
   /** Populated after parseIntent() succeeds; read by confirmSeeds() to build analyze() params. */
@@ -148,7 +147,6 @@ export interface AnalysisState {
   // Conversational actions
   startChat: () => void
   setStatus: (status: AnalysisStatus) => void
-  addMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'> & { id?: string; timestamp?: number }) => void
   setDiscoveredSeeds: (seeds: string[]) => void
   setParsedIntent: (intent: ParsedIntent | null) => void
 }
@@ -169,60 +167,17 @@ const initialState = {
   stepProgressDetail: '',
   didExpand: false,
   // Conversational fields — T22: included in initialState for proper reset()
-  conversationMessages: [] as ChatMessage[],
   discoveredSeeds: [] as string[],
   parsedIntent: null,
 }
 
-// Monotonic message-id sequence for stable React keys (M13). The old
-// `${timestamp}-${index}` key collided on same-millisecond messages and churned when
-// the 50-message slice slid. Module-scope so ids stay unique across store resets.
-let _msgSeq = 0
-// Per-load epoch (base36) so message ids stay unique across reloads even though _msgSeq
-// resets. Without this, restored persisted ids (msg-…-0, …-1) would collide with fresh ones.
-const _idEpoch = Date.now().toString(36)
-
-// Instrumented localStorage wrapper: surfaces WHY the chat might not survive a reload.
-// A failed write (quota, or Brave/privacy treating localhost storage as session-only) is
-// logged with the payload size instead of failing silently. Pair with the onRehydrateStorage
-// log below: write logs + a restore count of 0 = the store isn't being read back.
-const safeStorage = {
-  getItem: (key: string): string | null => {
-    try {
-      const v = localStorage.getItem(key)
-      console.info(`[persist] read "${key}":`, v ? `${(v.length / 1024).toFixed(1)}KB` : 'EMPTY')
-      return v
-    } catch (e) {
-      console.error('[persist] read failed', e)
-      return null
-    }
-  },
-  setItem: (key: string, value: string): void => {
-    try {
-      localStorage.setItem(key, value)
-    } catch (e) {
-      console.error(`[persist] WRITE FAILED (${(value.length / 1024).toFixed(1)}KB) — chat will NOT survive reload`, e)
-    }
-  },
-  removeItem: (key: string): void => {
-    try { localStorage.removeItem(key) } catch { /* ignore */ }
-  },
-}
-
-export const useAnalysisStore = create<AnalysisState>()(persist((set) => ({
+export const useAnalysisStore = create<AnalysisState>()((set) => ({
   ...initialState,
 
-  // Reset analysis-specific state for a new run, but KEEP the chat transcript — wiping it
-  // (the old `set({ ...initialState })`) made the conversation vanish the instant a search
-  // started, which read as being thrown onto a separate results screen.
+  // Reset analysis-specific state for a new run. The chat transcript lives in
+  // conversationsStore now, so this no longer needs to preserve it.
   startAnalysis: (params) =>
-    set((state) => ({
-      ...initialState,
-      conversationMessages: state.conversationMessages,
-      status: 'running',
-      params,
-      currentStep: 1,
-    })),
+    set({ ...initialState, status: 'running', params, currentStep: 1 }),
 
   setStep: (step) => set({ currentStep: step }),
 
@@ -256,27 +211,7 @@ export const useAnalysisStore = create<AnalysisState>()(persist((set) => ({
 
   setStatus: (status) => set({ status }),
 
-  addMessage: (message) =>
-    set((state) => ({
-      conversationMessages: [
-        ...state.conversationMessages,
-        // id includes a per-load epoch so persisted ids (restored on reload) never collide
-        // with fresh ones — _msgSeq resets to 0 each load, but the epoch differs.
-        { ...message, id: message.id ?? `msg-${_idEpoch}-${_msgSeq++}`, timestamp: message.timestamp ?? Date.now() },
-      ].slice(-50),  // cap at 50 messages
-    })),
-
   setDiscoveredSeeds: (seeds) => set({ discoveredSeeds: seeds }),
 
   setParsedIntent: (intent) => set({ parsedIntent: intent }),
-}), {
-  // Persist ONLY the chat transcript — not transient status/results — so a reload restores
-  // the conversation without resurrecting a dead "running" progress bar or stale cards.
-  name: 'contentos-chat',
-  version: 1,
-  storage: createJSONStorage(() => safeStorage),
-  partialize: (state) => ({ conversationMessages: state.conversationMessages }),
-  onRehydrateStorage: () => (state) => {
-    console.info('[persist] rehydrated', state?.conversationMessages?.length ?? 0, 'messages from storage')
-  },
 }))

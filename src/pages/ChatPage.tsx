@@ -6,10 +6,11 @@
  * analysis all happen here.
  */
 
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { AlertTriangle, Bot, Send, Video } from 'lucide-react'
 import { useAnalysisStore } from '../store/analysisStore'
+import { useConversationsStore, sortConversations } from '../store/conversationsStore'
 import { useDiscoveryStore } from '../store/discoveryStore'
 import { useKeysStore } from '../store/keysStore'
 import { useAgentConversation } from '../hooks/useAgentConversation'
@@ -20,8 +21,10 @@ import { ChatMessage, ProgressBubble, TypingIndicator } from '../components/Chat
 import { ClarificationCard } from '../components/ClarificationCard'
 import { CompetitorResultMessage } from '../components/CompetitorResultMessage'
 import { DiscoveryResultMessage } from '../components/DiscoveryResultMessage'
+import { ConversationSwitcher } from '../components/ConversationSwitcher'
 import { InlineReelResults } from '../components/InlineReelResults'
 import type { NormalizedProfile } from '../lib/transformers'
+import type { ChatMessage as ChatMessageData } from '../store/analysisStore'
 import { useCorpusStore } from '../store/corpusStore'
 import { harvestCompetitors, harvestDiscovery, harvestReelContent } from '../lib/corpusHarvest'
 
@@ -40,11 +43,14 @@ function trimProfile(p: NormalizedProfile): NormalizedProfile {
   return { ...p, biography: '', relatedHandles: [], topHashtags: [] }
 }
 
+// Stable empty reference for an empty/missing conversation — handing a fresh [] to effect
+// deps each render would re-run the scroll effect needlessly.
+const EMPTY_MESSAGES: ChatMessageData[] = []
+
 export function ChatPage() {
   const analysisStore = useAnalysisStore()
   const {
     status,
-    conversationMessages,
     currentStep,
     pendingDiscovery,
     competitors,
@@ -55,10 +61,21 @@ export function ChatPage() {
     didExpand: analysisDidExpand,
     error: analysisError,
     startChat,
-    reset,
-    addMessage,
     setStatus,
   } = analysisStore
+
+  // The chat transcript lives in conversationsStore now (multi-conversation history). Select
+  // only STABLE values (the raw record + active id + action fns) — never a freshly-computed
+  // array, or useSyncExternalStore loops forever. Derive the list/messages in the render body.
+  const conversations = useConversationsStore((s) => s.conversations)
+  const activeConversationId = useConversationsStore((s) => s.activeId)
+  const addMessage = useConversationsStore((s) => s.addMessage)
+  const startNew = useConversationsStore((s) => s.startNew)
+  const switchConversation = useConversationsStore((s) => s.switchTo)
+  const deleteConversation = useConversationsStore((s) => s.deleteConversation)
+  // Keep the `conversationMessages` name so the rest of this component is unchanged.
+  const conversationMessages = conversations[activeConversationId]?.messages ?? EMPTY_MESSAGES
+  const conversationList = useMemo(() => sortConversations(conversations), [conversations])
 
   const discoveryStatus = useDiscoveryStore((s) => s.status)
   const discoveryError = useDiscoveryStore((s) => s.error)
@@ -101,16 +118,11 @@ export function ChatPage() {
   // Input stays live during runs (TD3) — sending while something runs steers it (latest-wins).
   const canSend = ready && inputText.trim().length > 0
 
-  // On mount: RESUME a persisted conversation if one exists (never wipe a restored
-  // transcript — startChat() clears conversationMessages, which silently defeated persistence).
-  // With no persisted chat, start fresh. A dead transient status (a mid-run state can't resume
-  // after a reload/remount) is dropped to 'chatting' so the input is live with no stuck progress.
+  // On mount: the active conversation is restored by conversationsStore. analysisStore isn't
+  // persisted, so its status is 'idle' on reload — make it live. (A dead transient from a
+  // mid-run that can't resume is likewise dropped to 'chatting'.)
   useEffect(() => {
-    if (conversationMessages.length === 0) {
-      startChat()
-    } else if (status !== 'chatting' && status !== 'done') {
-      setStatus('chatting')
-    }
+    if (status !== 'chatting' && status !== 'done') setStatus('chatting')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -278,12 +290,28 @@ export function ChatPage() {
     el.style.height = `${Math.min(el.scrollHeight, 120)}px`
   }
 
-  const handleStartOver = () => {
-    reset()
-    resetDiscovery()
-    resetReel()
+  // Reset the transient analysis state (results live in the conversation's messages, so this
+  // just clears the live status/selection without touching history).
+  const freshenAnalysis = () => {
     startChat()
+    resetDiscovery()
     setSelectedHandles([])
+  }
+
+  const handleStartOver = () => {
+    resetReel()
+    startNew() // a fresh conversation — the finished one stays in history (switchable)
+    freshenAnalysis()
+  }
+
+  const handleSwitchConversation = (id: string) => {
+    switchConversation(id)
+    freshenAnalysis()
+  }
+
+  const handleDeleteConversation = (id: string) => {
+    deleteConversation(id)
+    freshenAnalysis()
   }
 
   const handleToggleSelect = (handle: string) => {
@@ -343,6 +371,19 @@ export function ChatPage() {
 
       {/* ── Message area ──────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto">
+        {/* Conversation history switcher — appears once there's more than one chat or any
+            content, so a fresh single-chat welcome screen stays uncluttered. */}
+        {(conversationList.length > 1 || hasMessages) && (
+          <div className="px-4 pt-4 max-w-4xl mx-auto w-full">
+            <ConversationSwitcher
+              conversations={conversationList}
+              activeId={activeConversationId}
+              onSwitch={handleSwitchConversation}
+              onNew={handleStartOver}
+              onDelete={handleDeleteConversation}
+            />
+          </div>
+        )}
         {!hasMessages && !showInlineContent ? (
           // Welcome / empty state
           <div className="h-full flex flex-col items-center justify-center px-6 py-12">
