@@ -149,8 +149,17 @@ const _idEpoch = Date.now().toString(36)
 export const useAnalysisStore = create<AnalysisState>()(persist((set) => ({
   ...initialState,
 
+  // Reset analysis-specific state for a new run, but KEEP the chat transcript — wiping it
+  // (the old `set({ ...initialState })`) made the conversation vanish the instant a search
+  // started, which read as being thrown onto a separate results screen.
   startAnalysis: (params) =>
-    set({ ...initialState, status: 'running', params, currentStep: 1 }),
+    set((state) => ({
+      ...initialState,
+      conversationMessages: state.conversationMessages,
+      status: 'running',
+      params,
+      currentStep: 1,
+    })),
 
   setStep: (step) => set({ currentStep: step }),
 
