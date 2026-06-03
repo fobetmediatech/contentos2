@@ -247,16 +247,19 @@ export function useReelAnalysis() {
    */
   const startDeepReport = async (handles: string[]) => {
     if (handles.length === 0) return
-    abortRef.current?.abort()
-    const controller = new AbortController()
-    abortRef.current = controller
 
-    // Preflight BEFORE reset(): if the deep-analysis function isn't deployed, surface one note
-    // and keep the quick results intact instead of wiping them and failing every reel.
-    if (!(await deepFnAvailable(controller.signal))) {
+    // Preflight with a THROWAWAY controller BEFORE touching the shared abortRef: if the
+    // deep-analysis function isn't deployed (404 under plain `vite dev`), surface one note and
+    // keep the quick results intact — without aborting an in-flight quick run or resetting.
+    const probe = new AbortController()
+    if (!(await deepFnAvailable(probe.signal))) {
       setDeepReportStatus('unavailable')
       return
     }
+
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
     if (controller.signal.aborted) return
 
     reset()
