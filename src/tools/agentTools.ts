@@ -17,7 +17,7 @@
  */
 
 import { z } from 'zod'
-import type { GeminiFunctionDeclaration, GeminiToolResult } from '../ai/gemini'
+import type { GeminiFunctionDeclaration, GeminiToolResult, GeminiTurn } from '../ai/gemini'
 
 export type AgentToolName =
   | 'ask_clarification'
@@ -58,6 +58,30 @@ export function decideAction(result: GeminiToolResult): AgentAction {
     return { type: 'answer', message: String((v.args as { message: string }).message) }
   }
   return { type: 'dispatch', name: v.name, args: v.args }
+}
+
+/**
+ * Run one agent turn: call the model, decide the action, and on an invalid/hallucinated
+ * tool call re-prompt the model ONCE with the repair detail. If repairs are exhausted,
+ * fall back to a clarifying question rather than loop forever. `callModel` is injected
+ * (the hook passes a closure over callGeminiWithTools) so the repair loop is unit-tested.
+ */
+export async function runAgentTurn(
+  history: GeminiTurn[],
+  callModel: (history: GeminiTurn[], repairNote?: string) => Promise<GeminiToolResult>,
+  opts?: { maxRepairs?: number },
+): Promise<AgentAction> {
+  const maxRepairs = opts?.maxRepairs ?? 1
+  let action = decideAction(await callModel(history))
+  let repairs = 0
+  while (action.type === 'repair' && repairs < maxRepairs) {
+    repairs++
+    action = decideAction(await callModel(history, action.detail))
+  }
+  if (action.type === 'repair') {
+    return { type: 'ask', question: "I didn't catch which creators or niche to look at — can you say it another way?" }
+  }
+  return action
 }
 
 /** Normalize a handle list: strip @, lowercase, trim, drop empties + over-length. */

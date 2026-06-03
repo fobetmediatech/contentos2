@@ -8,9 +8,9 @@
  * no React, fully testable.
  */
 
-import { describe, it, expect } from 'vitest'
-import { AGENT_TOOLS, validateToolCall, decideAction } from './agentTools'
-import type { GeminiToolResult } from '../ai/gemini'
+import { describe, it, expect, vi } from 'vitest'
+import { AGENT_TOOLS, validateToolCall, decideAction, runAgentTurn } from './agentTools'
+import type { GeminiToolResult, GeminiTurn } from '../ai/gemini'
 
 describe('AGENT_TOOLS declarations', () => {
   it('declares exactly the 5 agent tools, each with name/description/parameters', () => {
@@ -121,5 +121,41 @@ describe('decideAction', () => {
   it('routes invalid args → repair', () => {
     const a = decideAction({ kind: 'call', name: 'discover_competitors', args: {} })
     expect(a.type).toBe('repair')
+  })
+})
+
+describe('runAgentTurn', () => {
+  const HISTORY: GeminiTurn[] = [{ role: 'user', parts: [{ text: 'top fitness creators' }] }]
+
+  it('returns a valid dispatch with a single model call (no repair)', async () => {
+    const callModel = vi.fn().mockResolvedValue({
+      kind: 'call', name: 'discover_by_location', args: { niche: 'food', city: 'Pune' },
+    } as GeminiToolResult)
+    const action = await runAgentTurn(HISTORY, callModel)
+    expect(action.type).toBe('dispatch')
+    expect(callModel).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns a free-text reply as a message', async () => {
+    const callModel = vi.fn().mockResolvedValue({ kind: 'text', text: 'which city?' } as GeminiToolResult)
+    expect(await runAgentTurn(HISTORY, callModel)).toEqual({ type: 'message', text: 'which city?' })
+  })
+
+  it('repairs an invalid call once, then succeeds — 2nd call gets the repair detail', async () => {
+    const callModel = vi
+      .fn()
+      .mockResolvedValueOnce({ kind: 'call', name: 'discover_competitors', args: {} } as GeminiToolResult)
+      .mockResolvedValueOnce({ kind: 'call', name: 'discover_competitors', args: { niche: 'fitness' } } as GeminiToolResult)
+    const action = await runAgentTurn(HISTORY, callModel)
+    expect(action.type).toBe('dispatch')
+    expect(callModel).toHaveBeenCalledTimes(2)
+    expect(callModel.mock.calls[1][1]).toBeTruthy() // repair detail passed on the retry
+  })
+
+  it('falls back to ask when repairs are exhausted', async () => {
+    const callModel = vi.fn().mockResolvedValue({ kind: 'call', name: 'frobnicate', args: {} } as GeminiToolResult)
+    const action = await runAgentTurn(HISTORY, callModel, { maxRepairs: 1 })
+    expect(action.type).toBe('ask')
+    expect(callModel).toHaveBeenCalledTimes(2) // initial + 1 repair
   })
 })
