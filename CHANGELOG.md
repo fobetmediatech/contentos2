@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [3.1.0.0] — 2026-06-04
+
+**Env-only keys.** API keys now come entirely from environment variables — there's no in-app key entry. Add any number of Apify keys (the 10-key cap is gone) plus your Gemini key via `.env` / Vercel env vars; the Settings page is removed.
+
+### Added
+
+- **Unlimited Apify keys** — set `VITE_APIFY_KEYS` to a comma-separated list of any length (numbered `VITE_APIFY_KEY_1..10` still work). The rotator round-robins all of them; the old 10-key cap is gone.
+
+### Changed
+
+- **Keys are env-only** — `VITE_GEMINI_KEY` + `VITE_APIFY_KEYS` (browser) and `GEMINI_API_KEY` (the deep-reel serverless function). The keys store no longer persists, so the environment is always the source of truth.
+- Error messages that pointed to "Settings" now point at the relevant `.env` variable.
+
+### Removed
+
+- **The Settings page** and all in-app key entry — keys are configured via the environment now.
+
 ## [3.0.1.0] — 2026-06-04
 
 **Hardening.** Three fixes from a full codebase audit: deep reports no longer vanish on reload, scraped captions can't hijack the reel analysis, and your extra Apify keys are actually used in parallel instead of one key carrying the whole run.
