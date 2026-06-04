@@ -22,6 +22,9 @@ export function makeAuthStore(client: SupabaseClient) {
     init: async () => {
       if (initialized) return // idempotent — StrictMode double-invoke safe
       initialized = true
+      // Subscription is intentionally app-lifetime (never unsubscribed): useAuthStore is a
+      // singleton that lives for the whole app, and the `initialized` guard above — not an
+      // unsubscribe — is what keeps StrictMode's dev double-invoke from double-subscribing.
       client.auth.onAuthStateChange((_event, session) => {
         set({ session, user: session?.user ?? null, status: session ? 'signed-in' : 'signed-out' })
       })

@@ -39,7 +39,7 @@ export function LoginPage() {
         <h1 className="font-serif italic text-2xl text-primary tracking-tight mb-1">
           Content OS
         </h1>
-        <p className="text-sm text-secondary font-outfit mb-8">
+        <p className="text-sm text-secondary mb-8">
           Sign in to continue
         </p>
 
