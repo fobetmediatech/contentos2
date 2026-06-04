@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { mergeCreator, createMemoryCorpus, recognition, creatorContexts, SIGHTINGS_CAP } from './corpus'
+import { mergeCreator, createMemoryCorpus, recognition, creatorContexts, SIGHTINGS_CAP, applyFeedback, nextFeedback, dropDismissedCandidates, selectPreferenceExemplars } from './corpus'
 import type { CreatorRecord, Sighting, ContentRecord } from './corpus'
 import type { NormalizedProfile } from './transformers'
 
@@ -207,6 +207,142 @@ describe('createMemoryCorpus — content', () => {
     const list = await c.listContentFor('alice')
     expect(list).toHaveLength(1)
     expect(list[0].hookArchetype).toBe('new')
+  })
+})
+
+describe('feedback (Phase 3 — self-training signal)', () => {
+  it('applyFeedback sets the signal + timestamp, preserving everything else', () => {
+    const rec = mergeCreator(undefined, { profile: profile('alice'), sighting: sighting(100) })
+    const saved = applyFeedback(rec, 'saved', 500)
+    expect(saved.feedback).toBe('saved')
+    expect(saved.feedbackAt).toBe(500)
+    expect(saved.username).toBe('alice')          // identity preserved
+    expect(saved.timesSeen).toBe(1)               // bookkeeping untouched
+    expect(saved.sightings).toEqual(rec.sightings)
+  })
+
+  it('applyFeedback(null) clears the signal back to neutral', () => {
+    const rec = applyFeedback(
+      mergeCreator(undefined, { profile: profile('alice'), sighting: sighting(100) }),
+      'dismissed',
+      500,
+    )
+    const cleared = applyFeedback(rec, null, 900)
+    expect(cleared.feedback).toBeUndefined()
+    expect(cleared.feedbackAt).toBeUndefined()
+  })
+
+  it('mergeCreator preserves feedback when the creator is seen again', () => {
+    // A saved creator who resurfaces in a later search must keep their verdict —
+    // re-seeing them is not a reason to forget what the user told us.
+    const first = mergeCreator(undefined, { profile: profile('alice'), sighting: sighting(100) })
+    const saved = applyFeedback(first, 'saved', 500)
+    const reSeen = mergeCreator(saved, {
+      profile: profile('alice', { followersCount: 2000 }),
+      sighting: sighting(900, { niche: 'travel' }),
+    })
+    expect(reSeen.feedback).toBe('saved')         // verdict survives the re-sighting
+    expect(reSeen.feedbackAt).toBe(500)
+    expect(reSeen.timesSeen).toBe(2)              // still accumulates
+    expect(reSeen.followersCount).toBe(2000)      // metrics still refresh
+  })
+
+  it('setFeedback marks a remembered creator and persists it', async () => {
+    const corpus = createMemoryCorpus()
+    await corpus.remember([{ profile: profile('alice'), sighting: sighting(100) }])
+    const updated = await corpus.setFeedback('alice', 'saved', 500)
+    expect(updated?.feedback).toBe('saved')
+    expect((await corpus.get('alice'))?.feedback).toBe('saved')   // persisted
+    expect((await corpus.get('alice'))?.feedbackAt).toBe(500)
+  })
+
+  it('setFeedback(null) clears a creator\'s feedback', async () => {
+    const corpus = createMemoryCorpus()
+    await corpus.remember([{ profile: profile('alice'), sighting: sighting(100) }])
+    await corpus.setFeedback('alice', 'dismissed', 500)
+    await corpus.setFeedback('alice', null, 900)
+    expect((await corpus.get('alice'))?.feedback).toBeUndefined()
+  })
+
+  it('setFeedback on an unknown creator is a no-op (never mints a profileless record)', async () => {
+    const corpus = createMemoryCorpus()
+    const res = await corpus.setFeedback('ghost', 'saved', 500)
+    expect(res).toBeUndefined()
+    expect(await corpus.count()).toBe(0)
+  })
+
+  it('nextFeedback toggles the active verdict off, and switches otherwise', () => {
+    // The click semantics behind the card buttons: tapping the verdict you already have
+    // clears it (toggle off); tapping the other one switches.
+    expect(nextFeedback(undefined, 'saved')).toBe('saved')        // neutral → set
+    expect(nextFeedback('saved', 'saved')).toBeNull()             // tap active → clear
+    expect(nextFeedback('saved', 'dismissed')).toBe('dismissed')  // switch verdict
+    expect(nextFeedback('dismissed', 'dismissed')).toBeNull()     // tap active → clear
+  })
+})
+
+describe('dropDismissedCandidates (Phase 3, 3a — hard filter)', () => {
+  const creators = (): Record<string, CreatorRecord> => ({
+    bob: applyFeedback(mergeCreator(undefined, { profile: profile('bob'), sighting: sighting(1) }), 'dismissed', 5),
+    carol: applyFeedback(mergeCreator(undefined, { profile: profile('carol'), sighting: sighting(1) }), 'saved', 5),
+    dave: mergeCreator(undefined, { profile: profile('dave'), sighting: sighting(1) }), // neutral
+  })
+
+  it('drops only dismissed candidates; keeps saved, neutral, and unknown', () => {
+    const candidates = [{ username: 'alice' }, { username: 'bob' }, { username: 'carol' }, { username: 'dave' }]
+    const kept = dropDismissedCandidates(candidates, creators())
+    // bob (dismissed) removed; alice (unknown), carol (saved), dave (neutral) kept
+    expect(kept.map((c) => c.username)).toEqual(['alice', 'carol', 'dave'])
+  })
+
+  it('empty candidate list → empty', () => {
+    expect(dropDismissedCandidates([], creators())).toEqual([])
+  })
+})
+
+describe('selectPreferenceExemplars (Phase 3, 3b — soft bias selection)', () => {
+  const rec = (username: string, fb: 'saved' | 'dismissed', at: number, niche: string, over: Partial<NormalizedProfile> = {}): CreatorRecord =>
+    applyFeedback(mergeCreator(undefined, { profile: profile(username, over), sighting: sighting(1, { niche }) }), fb, at)
+
+  it('splits saved/dismissed, orders same-niche first then by recency', () => {
+    const creators = [
+      rec('a', 'saved', 100, 'food'),     // same-niche, older
+      rec('b', 'saved', 300, 'fitness'),  // other-niche, newest
+      rec('c', 'saved', 200, 'food'),     // same-niche, newer
+      rec('d', 'dismissed', 150, 'food'),
+      rec('e', 'dismissed', 50, 'travel'),
+    ]
+    const { saved, dismissed } = selectPreferenceExemplars(creators, 'food', 5)
+    expect(saved.map((e) => e.username)).toEqual(['c', 'a', 'b'])   // food(recent→old) then other-niche
+    expect(saved.find((e) => e.username === 'c')?.sameNiche).toBe(true)
+    expect(saved.find((e) => e.username === 'b')?.sameNiche).toBe(false)
+    expect(dismissed.map((e) => e.username)).toEqual(['d', 'e'])    // food then travel
+  })
+
+  it('respects the cap, keeping the most relevant', () => {
+    const many = Array.from({ length: 8 }, (_, i) => rec(`s${i}`, 'saved', i, 'food'))
+    expect(selectPreferenceExemplars(many, 'food', 5).saved).toHaveLength(5)
+  })
+
+  it('ignores neutral creators (no verdict)', () => {
+    const creators = [mergeCreator(undefined, { profile: profile('neutral'), sighting: sighting(1) })]
+    const { saved, dismissed } = selectPreferenceExemplars(creators, 'food', 5)
+    expect(saved).toEqual([])
+    expect(dismissed).toEqual([])
+  })
+
+  it('sameNiche uses token overlap, not exact match (food bloggers ~ food creators)', () => {
+    const { saved } = selectPreferenceExemplars([rec('a', 'saved', 100, 'food bloggers')], 'food creators', 5)
+    expect(saved[0].sameNiche).toBe(true)
+  })
+
+  it('carries the traits the prompt needs', () => {
+    const { saved } = selectPreferenceExemplars(
+      [rec('a', 'saved', 100, 'food', { followersCount: 50000, engagementRate: 7.2, verified: true })],
+      'food',
+      5,
+    )
+    expect(saved[0]).toMatchObject({ username: 'a', followersCount: 50000, engagementRate: 7.2, verified: true, niches: ['food'], sameNiche: true })
   })
 })
 

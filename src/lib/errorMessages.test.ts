@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { friendlyApify, friendlyGemini, sparseSeedMessage } from './errorMessages'
+import { friendlyApify, friendlyGemini, sparseSeedMessage, ALL_DISMISSED_MESSAGE } from './errorMessages'
 
 describe('friendlyApify / friendlyGemini', () => {
   it('maps known codes and falls back for unknown ones', () => {
@@ -35,5 +35,13 @@ describe('sparseSeedMessage', () => {
 
   it('falls back to a generic subject when no handles are given', () => {
     expect(sparseSeedMessage([], false)).toContain('that account')
+  })
+})
+
+describe('ALL_DISMISSED_MESSAGE', () => {
+  it('points the user at clearing dismissals, distinct from handle-not-found', () => {
+    expect(ALL_DISMISSED_MESSAGE).toMatch(/dismissed/i)
+    expect(ALL_DISMISSED_MESSAGE).toMatch(/Memory|clear/i)
+    expect(ALL_DISMISSED_MESSAGE).not.toMatch(/misspelled|couldn't find/i) // not the not-found message
   })
 })

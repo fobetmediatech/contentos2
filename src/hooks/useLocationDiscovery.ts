@@ -27,6 +27,9 @@ import { markKeyCooldown } from '../lib/keyRotator'
 import { ApifyError } from '../lib/apifyCore'
 import { GeminiError } from '../ai/gemini'
 import { linkAbort } from '../lib/abortControl'
+import { useCorpusStore } from '../store/corpusStore'
+import { dropDismissedCandidates, selectPreferenceExemplars } from '../lib/corpus'
+import { ALL_DISMISSED_MESSAGE, friendlyGemini } from '../lib/errorMessages'
 
 const TIMEOUT_MS = 150_000
 // Minimum post-filter results before triggering a second hashtag batch
@@ -141,11 +144,24 @@ export function useLocationDiscovery() {
           )
         }
 
+        // 3a (Phase 3): drop creators the user dismissed before ranking, so they stop
+        // resurfacing in discovery too. Re-check with a distinct message if it empties the pool.
+        finalFiltered = dropDismissedCandidates(finalFiltered, useCorpusStore.getState().creators)
+        if (finalFiltered.length === 0) {
+          throw new Error(ALL_DISMISSED_MESSAGE)
+        }
+
         // Build hallucination filter set from ALL candidate profiles (including expansion)
         const knownHandles = new Set(finalCandidates.map((p) => p.username.toLowerCase()))
 
         // Step 5: AI analysis — pass pool composition so Gemini has grounded context
         setStep(5)
+        // 3b (Phase 3): bias discovery ranking toward saved traits, away from dismissed.
+        // No-op on a cold corpus; safeNiche drives same-niche weighting.
+        const preferenceExemplars = selectPreferenceExemplars(
+          Object.values(useCorpusStore.getState().creators),
+          safeNiche,
+        )
         let output = await analyzeDiscovery(
           geminiKey,
           safeCity,
@@ -154,6 +170,7 @@ export function useLocationDiscovery() {
           abort.signal,
           creatorCount,
           businessCount,
+          preferenceExemplars,
         )
 
         // Zero-result guard: if Gemini returned nothing, retry without city/niche context
@@ -209,7 +226,9 @@ export function useLocationDiscovery() {
             message = `Scraping error — try again or check your Apify key.`
           }
         } else if (err instanceof GeminiError) {
-          message = `AI error (${err.code}): ${err.message}`
+          // SECURITY (C2/H11): map the code to a fixed string — never forward err.message,
+          // which can echo the raw Gemini response body (prompt text / key fragments).
+          message = friendlyGemini(err.code)
         } else if (err instanceof TypeError && err.message.includes('fetch')) {
           message = `Network blocked — could not reach Apify API. If you're using Brave, disable shields for this page.`
         } else if (err instanceof Error) {

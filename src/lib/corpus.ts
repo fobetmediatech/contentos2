@@ -15,6 +15,10 @@ import type { NormalizedProfile } from './transformers'
 
 export type Pipeline = 'competitor' | 'discovery'
 
+/** The user's verdict on a creator — the Phase 3 self-training signal. `saved` = more like
+ *  this; `dismissed` = not relevant. Absent = neutral (no verdict yet). */
+export type Feedback = 'saved' | 'dismissed'
+
 /** One appearance of a creator in a search result. */
 export interface Sighting {
   /** Timestamp (ms) of the search that surfaced this creator. */
@@ -56,6 +60,11 @@ export interface CreatorRecord {
   /** Total sightings ever — NOT capped (sightings[] is capped, this count is not). */
   timesSeen: number
   sightings: Sighting[]
+  /** The user's verdict (Phase 3). Absent = neutral. Survives re-sightings (mergeCreator
+   *  preserves it) so a saved/dismissed call sticks even as the creator resurfaces. */
+  feedback?: Feedback
+  /** When the verdict was last set (ms) — drives recency for few-shot exemplar selection. */
+  feedbackAt?: number
 }
 
 /** The unit fed into the corpus: a profile snapshot + the sighting that surfaced it. */
@@ -97,6 +106,9 @@ export interface CorpusRepository {
   remember(inputs: CreatorInput[]): Promise<CreatorRecord[]>
   get(username: string): Promise<CreatorRecord | undefined>
   getMany(usernames: string[]): Promise<CreatorRecord[]>
+  /** Set (feedback) or clear (null) the user's verdict on a remembered creator. Returns the
+   *  updated record, or undefined when the creator isn't in the corpus (never mints one). */
+  setFeedback(username: string, feedback: Feedback | null, at: number): Promise<CreatorRecord | undefined>
   list(opts?: { sort?: CorpusSort; limit?: number }): Promise<CreatorRecord[]>
   count(): Promise<number>
   /** Upsert analyzed content (reels) by id — re-analysis overwrites. */
@@ -161,6 +173,113 @@ export function mergeCreator(existing: CreatorRecord | undefined, incoming: Crea
   }
 }
 
+/**
+ * Pure: set or clear the user's feedback verdict on a record. `null` resets to neutral
+ * (both fields undefined). Everything else — identity, metrics, sightings, bookkeeping — is
+ * untouched, so a verdict is orthogonal to the objective memory it annotates.
+ */
+export function applyFeedback(record: CreatorRecord, feedback: Feedback | null, at: number): CreatorRecord {
+  if (feedback === null) {
+    return { ...record, feedback: undefined, feedbackAt: undefined }
+  }
+  return { ...record, feedback, feedbackAt: at }
+}
+
+/**
+ * The verdict after a feedback button is clicked: tapping the verdict you already have clears
+ * it (returns null → neutral); tapping the other one switches to it. Pure — drives the card
+ * toggle so the two buttons behave like a tri-state (neutral / saved / dismissed).
+ */
+export function nextFeedback(current: Feedback | undefined, clicked: Feedback): Feedback | null {
+  return current === clicked ? null : clicked
+}
+
+// ----- Phase 3 slice 3: preference-aware ranking -----
+
+/**
+ * Hard filter (3a): drop candidates the user has dismissed so they stop resurfacing in future
+ * rankings. Generic over anything with a `username`; pure — verdicts come from the live
+ * creators map. Order preserved. Callers apply this AFTER the empty-pool guard and re-check
+ * the count (dismissing can shrink a thin pool — see useCompetitorAnalysis).
+ */
+export function dropDismissedCandidates<T extends { username: string }>(
+  candidates: T[],
+  creators: Record<string, CreatorRecord>,
+): T[] {
+  return candidates.filter((c) => creators[c.username]?.feedback !== 'dismissed')
+}
+
+/** A saved/dismissed creator distilled to the traits Gemini can actually learn from (3b). */
+export interface PreferenceExemplar {
+  username: string
+  followersCount: number
+  engagementRate: number | null
+  niches: string[]
+  verified: boolean
+  /** True when this creator's niches overlap the current search niche — weighted heavily in
+   *  the prompt; cross-niche exemplars are demoted to weak style hints. */
+  sameNiche: boolean
+}
+export interface PreferenceExemplars {
+  saved: PreferenceExemplar[]
+  dismissed: PreferenceExemplar[]
+}
+
+// Niche labels are free-text Gemini output ("food bloggers" vs "food creators"), so an exact
+// match almost never fires. Token overlap (minus generic filler words) is the forgiving
+// heuristic that makes same-niche weighting actually trigger in practice.
+const NICHE_STOPWORDS = new Set([
+  'creators', 'creator', 'bloggers', 'blogger', 'content', 'accounts', 'account', 'influencers', 'influencer', 'the', 'and', 'for',
+])
+function nicheTokens(s: string): Set<string> {
+  return new Set(s.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2 && !NICHE_STOPWORDS.has(w)))
+}
+function nicheOverlap(a: string, b: string): boolean {
+  const tb = nicheTokens(b)
+  for (const t of nicheTokens(a)) if (tb.has(t)) return true
+  return false
+}
+
+/** Distinct niches a creator has surfaced in (sightings' niche field, deduped). */
+function creatorNiches(record: CreatorRecord): string[] {
+  return Array.from(new Set(record.sightings.map((s) => s.niche).filter((n): n is string => !!n)))
+}
+
+function toExemplar(record: CreatorRecord, currentNiche: string): PreferenceExemplar {
+  const niches = creatorNiches(record)
+  return {
+    username: record.username,
+    followersCount: record.followersCount,
+    engagementRate: record.engagementRate,
+    niches,
+    verified: record.verified,
+    sameNiche: niches.some((n) => nicheOverlap(n, currentNiche)),
+  }
+}
+
+/**
+ * Select up to `cap` saved + `cap` dismissed exemplars for the preference prompt block (3b).
+ * Ordered same-niche-first (token overlap with the current search), then most-recent by
+ * feedbackAt — so the cap keeps the most relevant signal. Neutral creators are ignored.
+ */
+export function selectPreferenceExemplars(
+  creators: CreatorRecord[],
+  currentNiche: string,
+  cap = 5,
+): PreferenceExemplars {
+  const pick = (verdict: Feedback): PreferenceExemplar[] =>
+    creators
+      .filter((r) => r.feedback === verdict)
+      .map((r) => ({ record: r, ex: toExemplar(r, currentNiche) }))
+      .sort((a, b) => {
+        if (a.ex.sameNiche !== b.ex.sameNiche) return a.ex.sameNiche ? -1 : 1 // same-niche first
+        return (b.record.feedbackAt ?? 0) - (a.record.feedbackAt ?? 0) // then most-recent
+      })
+      .slice(0, cap)
+      .map((x) => x.ex)
+  return { saved: pick('saved'), dismissed: pick('dismissed') }
+}
+
 /** Numeric key for a sort dimension — all dimensions sort descending. */
 function sortValue(r: CreatorRecord, sort: CorpusSort): number {
   switch (sort) {
@@ -222,6 +341,13 @@ export function createMemoryCorpus(): CorpusRepository {
       return usernames
         .map((u) => store.get(u))
         .filter((r): r is CreatorRecord => r !== undefined)
+    },
+    async setFeedback(username, feedback, at) {
+      const existing = store.get(username)
+      if (!existing) return undefined // never mint a profileless record from a verdict alone
+      const updated = applyFeedback(existing, feedback, at)
+      store.set(username, updated)
+      return updated
     },
     async list(opts) {
       return sortCreators([...store.values()], opts?.sort, opts?.limit)

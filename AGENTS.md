@@ -144,6 +144,7 @@ src/
     ClarificationCard.tsx     # Inline clarification prompt
     CompetitorCard.tsx        # Competitor card for analysis results
     DiscoveryCard.tsx         # Creator card for discovery results
+    FeedbackControl.tsx       # Save/dismiss verdict control (Phase 3 self-training capture)
     ProgressSteps.tsx         # Inline progress step indicator
   shared/
     utils/categories.ts       # COMPETITOR_CATEGORIES + DISCOVERY_CATEGORIES

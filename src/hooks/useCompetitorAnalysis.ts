@@ -28,8 +28,10 @@ import { analyzeCompetitors, generateClarificationQuestion } from '../ai/gemini'
 import { markKeyCooldown } from '../lib/keyRotator'
 import { ApifyError } from '../lib/apifyClient'
 import { GeminiError } from '../ai/gemini'
-import { friendlyApify, friendlyGemini, sparseSeedMessage } from '../lib/errorMessages'
+import { friendlyApify, friendlyGemini, sparseSeedMessage, ALL_DISMISSED_MESSAGE } from '../lib/errorMessages'
 import { linkAbort } from '../lib/abortControl'
+import { useCorpusStore } from '../store/corpusStore'
+import { dropDismissedCandidates, selectPreferenceExemplars } from '../lib/corpus'
 
 const TIMEOUT_MS = 150_000
 const MIN_COMPETITOR_RESULTS = 8
@@ -70,11 +72,19 @@ export function useCompetitorAnalysis() {
           throw new Error(sparseSeedMessage(params.handles, inputProfiles.length > 0))
         }
 
-        const isSparse = candidateProfiles.length < MIN_COMPETITOR_RESULTS
+        // 3a (Phase 3): drop creators the user has dismissed so they never resurface. Live
+        // verdicts come from the corpus store. Re-check AFTER filtering with a DISTINCT message —
+        // an all-dismissed pool means "clear some dismissals", not "handle not found".
+        const candidates = dropDismissedCandidates(candidateProfiles, useCorpusStore.getState().creators)
+        if (candidates.length === 0) {
+          throw new Error(ALL_DISMISSED_MESSAGE)
+        }
+
+        const isSparse = candidates.length < MIN_COMPETITOR_RESULTS
         setStepProgressDetail(
           isSparse
-            ? `Found only ${candidateProfiles.length} profiles — this niche may be sparse on Instagram`
-            : `Found ${candidateProfiles.length} candidate accounts`
+            ? `Found only ${candidates.length} profiles — this niche may be sparse on Instagram`
+            : `Found ${candidates.length} candidate accounts`
         )
         if (isSparse) setDidExpand(true)
         setStep(4)
@@ -86,16 +96,16 @@ export function useCompetitorAnalysis() {
           ? await generateClarificationQuestion(
               geminiKey,
               referenceProfile,
-              candidateProfiles,
+              candidates,
               params.nicheContext,
               abort.signal,
             )
           : { question: 'Which direction best fits your client?', options: ['Exact niche match', 'Broader category'] }
 
         // Transition to clarifying state — UI shows <ClarificationCard>
-        setClarification({ inputProfiles, candidateProfiles, clarificationQuestion })
+        setClarification({ inputProfiles, candidateProfiles: candidates, clarificationQuestion })
 
-        return { inputProfiles, candidateProfiles }
+        return { inputProfiles, candidateProfiles: candidates }
 
       } catch (err) {
         // Superseded by the agent loop (latest-wins steer) — silent, not a failure.
@@ -129,7 +139,15 @@ export function useCompetitorAnalysis() {
         const { inputProfiles, candidateProfiles } = discovery
         const knownHandles = new Set(candidateProfiles.map((p) => p.username.toLowerCase()))
 
-        // Step 5: AI rationale — pass both nicheContext and clarification answer
+        // 3b (Phase 3): bias ranking toward the strategist's saved traits, away from dismissed.
+        // Empty when the corpus has no verdicts → buildPreferenceBlock emits nothing (a no-op),
+        // so this only kicks in once there's real feedback. nicheContext drives same-niche weighting.
+        const preferenceExemplars = selectPreferenceExemplars(
+          Object.values(useCorpusStore.getState().creators),
+          nicheContext,
+        )
+
+        // Step 5: AI rationale — nicheContext + clarification answer + preference signal (tiebreaker)
         let output = await analyzeCompetitors(
           geminiKey,
           inputProfiles,
@@ -137,6 +155,7 @@ export function useCompetitorAnalysis() {
           abort.signal,
           nicheContext || undefined,
           answer || undefined,
+          preferenceExemplars,
         )
 
         // Zero-result guard: if filter signals were set and Gemini returned nothing,

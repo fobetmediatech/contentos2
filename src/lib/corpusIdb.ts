@@ -9,6 +9,7 @@
 import { openDB, type IDBPDatabase } from 'idb'
 import {
   mergeCreator,
+  applyFeedback,
   sortCreators,
   createMemoryCorpus,
   type CorpusRepository,
@@ -67,6 +68,19 @@ export function createIdbCorpus(): CorpusRepository {
         usernames.map((u) => d.get(STORE, u) as Promise<CreatorRecord | undefined>),
       )
       return recs.filter((r): r is CreatorRecord => r !== undefined)
+    },
+    async setFeedback(username, feedback, at) {
+      const d = await db()
+      const tx = d.transaction(STORE, 'readwrite')
+      const existing = (await tx.store.get(username)) as CreatorRecord | undefined
+      if (!existing) {
+        await tx.done
+        return undefined // never mint a profileless record from a verdict alone
+      }
+      const updated = applyFeedback(existing, feedback, at)
+      await tx.store.put(updated)
+      await tx.done
+      return updated
     },
     async list(opts) {
       const all = (await (await db()).getAll(STORE)) as CreatorRecord[]
