@@ -202,7 +202,7 @@ export const useReelAnalysisStore = create<ReelAnalysisState>()(persist((set) =>
   merge: (persisted, current) => {
     const p = (persisted ?? {}) as Partial<ReelAnalysisState>
     const creatorStates = (p.creatorStates ?? {}) as Record<string, { status: string }>
-    if (!isCleanReelRun({ synthesisStatus: p.synthesisStatus ?? 'idle', creatorStates })) {
+    if (!isCleanReelRun({ synthesisStatus: p.synthesisStatus ?? 'idle', deepReportStatus: p.deepReportStatus ?? 'idle', creatorStates })) {
       return current // interrupted run → discard, come back to a clean slate
     }
     return { ...current, ...p }
