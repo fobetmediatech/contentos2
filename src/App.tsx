@@ -1,9 +1,12 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AppLayout } from './components/AppLayout'
 import { ChatPage } from './pages/ChatPage'
 import { ReportPage } from './pages/ReportPage'
 import { MemoryPage } from './pages/MemoryPage'
+import { AuthGate } from './components/AuthGate'
+import { useAuthStore } from './store/authStore'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -15,8 +18,11 @@ const queryClient = new QueryClient({
 })
 
 export default function App() {
+  useEffect(() => { void useAuthStore.getState().init() }, [])
+
   return (
     <QueryClientProvider client={queryClient}>
+      <AuthGate>
       <BrowserRouter>
         <Routes>
           {/* Chat route — noPadding for full-bleed h-[100dvh] layout */}
@@ -41,6 +47,7 @@ export default function App() {
           </Route>
         </Routes>
       </BrowserRouter>
+      </AuthGate>
     </QueryClientProvider>
   )
 }

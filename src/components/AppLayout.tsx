@@ -1,7 +1,8 @@
 import { useEffect } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
-import { Brain, FileText, MessageSquare } from 'lucide-react'
+import { Brain, FileText, LogOut, MessageSquare } from 'lucide-react'
 import { useCorpusStore } from '../store/corpusStore'
+import { useAuthStore } from '../store/authStore'
 
 interface AppLayoutProps {
   /**
@@ -17,6 +18,7 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
   const isMemory = location.pathname === '/memory'
   const isReport = location.pathname === '/report'
   const corpusCount = useCorpusStore((s) => s.count)
+  const authUser = useAuthStore((s) => s.user)
 
   // Shared nav-link styling (active = filled + primary text; idle = secondary, hover-lifts).
   const navClass = (active: boolean) =>
@@ -67,6 +69,22 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
               <FileText size={14} />
               Report
             </Link>
+
+            {/* Sign-out — only shown when a user session exists */}
+            {authUser && (
+              <div className="flex items-center gap-2 ml-2 pl-2 border-l border-[rgba(245,237,214,0.08)]">
+                <span className="text-xs text-muted font-mono truncate max-w-[140px]" title={authUser.email}>
+                  {authUser.email}
+                </span>
+                <button
+                  onClick={() => void useAuthStore.getState().signOut()}
+                  title="Sign out"
+                  className="flex items-center gap-1 text-xs text-secondary hover:text-primary hover:bg-surface-raised px-2 py-1 rounded-md transition-colors"
+                >
+                  <LogOut size={13} />
+                </button>
+              </div>
+            )}
           </nav>
         </div>
       </header>

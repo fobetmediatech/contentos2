@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { makeAuthStore } from './authStore'
 
 // Minimal fake of the supabase auth surface the store uses.
