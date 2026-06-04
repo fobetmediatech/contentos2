@@ -2,7 +2,6 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AppLayout } from './components/AppLayout'
 import { ChatPage } from './pages/ChatPage'
-import { SettingsPage } from './pages/SettingsPage'
 import { ReportPage } from './pages/ReportPage'
 import { MemoryPage } from './pages/MemoryPage'
 
@@ -36,10 +35,8 @@ export default function App() {
             {/* Creator/content memory — browse everything the corpus has remembered */}
             <Route path="memory" element={<MemoryPage />} />
 
-            {/* Settings */}
-            <Route path="settings" element={<SettingsPage />} />
-
-            {/* Redirect all legacy / dead routes back to Chat */}
+            {/* Redirect all legacy / dead routes back to Chat (incl. the removed /settings —
+                keys are env-only now, configured via .env / Vercel env, no in-app entry) */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

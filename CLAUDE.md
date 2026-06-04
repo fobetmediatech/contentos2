@@ -89,7 +89,6 @@ src/
     ChatPage.tsx              # Primary entry point — single-surface conversational UX (results render inline)
     MemoryPage.tsx            # Browse the creator/content corpus remembered across searches
     ReportPage.tsx            # Full-page deep niche report (client-ready view)
-    SettingsPage.tsx          # API key management
   hooks/
     useAgentConversation.ts   # Turn-based agent loop — THE conversation engine (latest-wins steering)
     useActivePipeline.ts      # Reads PIPELINE_REGISTRY, computes active pipeline state

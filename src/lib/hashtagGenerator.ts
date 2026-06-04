@@ -148,7 +148,7 @@ Return ONLY a JSON array of strings. No # prefix. No explanation. No markdown.`
       status === 'UNAUTHENTICATED' ||
       status === 'PERMISSION_DENIED' ||
       (body?.error?.message ?? '').toLowerCase().includes('api key')
-    if (isAuth) throw new GeminiError('AUTH_ERROR', 'Invalid Gemini API key. Check Settings.', false)
+    if (isAuth) throw new GeminiError('AUTH_ERROR', 'Invalid Gemini API key. Check VITE_GEMINI_KEY in .env.', false)
     throw new Error(`Gemini hashtag call failed: ${res.status}`)
   }
 

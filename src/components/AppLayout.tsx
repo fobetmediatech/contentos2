@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
-import { Brain, FileText, Settings, MessageSquare } from 'lucide-react'
+import { Brain, FileText, MessageSquare } from 'lucide-react'
 import { useCorpusStore } from '../store/corpusStore'
 
 interface AppLayoutProps {
@@ -13,7 +13,6 @@ interface AppLayoutProps {
 
 export function AppLayout({ noPadding = false }: AppLayoutProps) {
   const location = useLocation()
-  const isSettings = location.pathname === '/settings'
   const isChat = location.pathname === '/'
   const isMemory = location.pathname === '/memory'
   const isReport = location.pathname === '/report'
@@ -44,7 +43,7 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
             Content OS
           </Link>
 
-          {/* Nav links — Chat | Memory | Report | Settings */}
+          {/* Nav links — Chat | Memory | Report */}
           <nav className="flex items-center gap-1">
             <Link to="/" className={navClass(isChat)}>
               <MessageSquare size={14} />
@@ -67,11 +66,6 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
             <Link to="/report" className={navClass(isReport)}>
               <FileText size={14} />
               Report
-            </Link>
-
-            <Link to="/settings" className={navClass(isSettings)}>
-              <Settings size={15} />
-              Settings
             </Link>
           </nav>
         </div>
