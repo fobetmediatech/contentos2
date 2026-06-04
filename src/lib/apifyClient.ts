@@ -21,7 +21,7 @@
 import pLimit from 'p-limit'
 import { ACTORS, buildProfileScraperInput, buildHashtagScraperInput } from './actors'
 import { normalizeProfiles, type ApifyProfileRaw, type NormalizedProfile } from './transformers'
-import { startRun, pollRun, fetchDataset, chunk } from './apifyCore'
+import { startRun, pollRun, fetchDataset, chunk, pickRunKey } from './apifyCore'
 
 // Re-export shared error class so existing callers don't need to change their imports
 export { ApifyError, type ApifyErrorCode } from './apifyCore'
@@ -48,9 +48,10 @@ interface HashtagPostRaw {
  */
 async function scrapeHandles(
   handles: string[],
-  apiKey: string,
+  apifyKeys: string[],
   signal?: AbortSignal,
 ): Promise<NormalizedProfile[]> {
+  const apiKey = pickRunKey(apifyKeys) // per-run key: spreads parallel batches across accounts
   const input = buildProfileScraperInput(handles)
   const { runId, datasetId } = await startRun(ACTORS.PROFILE_SCRAPER, input, apiKey, signal)
   const resolvedDatasetId = await pollRun(runId, apiKey, signal)
@@ -68,18 +69,19 @@ async function scrapeHandles(
  * and then running a profile scrape batch on the resulting handles.
  *
  * @param hashtags     Top hashtags from reference profiles (plain strings, no #)
- * @param apiKey       Active Apify API key
+ * @param apifyKeys    All Apify keys; a fresh one is picked for this run
  * @param signal       AbortController signal
  * @param perHashtag   Max posts to fetch per hashtag (default: 20)
  */
 export async function scrapeHashtagUsernames(
   hashtags: string[],
-  apiKey: string,
+  apifyKeys: string[],
   signal?: AbortSignal,
   perHashtag = 20,
 ): Promise<string[]> {
   if (hashtags.length === 0) return []
 
+  const apiKey = pickRunKey(apifyKeys)
   const top3 = hashtags.slice(0, 3)
   const input = buildHashtagScraperInput(top3, perHashtag)
   const { runId, datasetId } = await startRun(ACTORS.HASHTAG_SCRAPER, input, apiKey, signal)
@@ -128,18 +130,18 @@ const ROUND3_CAP: Record<'standard' | 'deep', number> = {
  * Combining both signals gives Gemini a better, more niche-relevant pool.
  *
  * @param inputHandles  1–5 reference Instagram handles
- * @param apiKey        Active Apify API key (pre-selected by keyRotator)
+ * @param apifyKeys     All Apify keys; each scrape RUN picks a fresh one (load-spreading)
  * @param signal        AbortController signal for 120s timeout
  * @param depth         Controls Round 3 cap: 'standard' = 10, 'deep' = 20
  */
 export async function discoverCompetitors(
   inputHandles: string[],
-  apiKey: string,
+  apifyKeys: string[],
   signal?: AbortSignal,
   depth: 'standard' | 'deep' = 'standard',
 ): Promise<ScrapeResult> {
   // Round 1: scrape input handles → get profiles, relatedHandles, topHashtags
-  const inputProfiles = await scrapeHandles(inputHandles, apiKey, signal)
+  const inputProfiles = await scrapeHandles(inputHandles, apifyKeys, signal)
 
   // Build seen set to avoid re-scraping any handle
   const seenHandles = new Set(inputHandles.map((h) => h.replace(/^@/, '').toLowerCase()))
@@ -164,11 +166,11 @@ export async function discoverCompetitors(
   const [round2Results, hashtagUsernames] = await Promise.all([
     // Round 2: scrape relatedProfile candidates
     Promise.all(
-      round2Batches.map((batch) => limit(() => scrapeHandles(batch, apiKey, signal))),
+      round2Batches.map((batch) => limit(() => scrapeHandles(batch, apifyKeys, signal))),
     ),
     // Hashtag expansion: post authors from top-3 hashtags (guard: empty → [])
     uniqueHashtags.length > 0
-      ? scrapeHashtagUsernames(uniqueHashtags, apiKey, signal)
+      ? scrapeHashtagUsernames(uniqueHashtags, apifyKeys, signal)
       : Promise.resolve([] as string[]),
   ])
 
@@ -208,7 +210,7 @@ export async function discoverCompetitors(
         return []
       }
       const batches = chunk(hashtagHandles, 10)
-      const results = await Promise.all(batches.map((b) => limit(() => scrapeHandles(b, apiKey, signal))))
+      const results = await Promise.all(batches.map((b) => limit(() => scrapeHandles(b, apifyKeys, signal))))
       const profiles = results.flat()
       console.log(`[hashtag] scraped ${profiles.length} profiles from content-niche path`)
       return profiles
@@ -220,7 +222,7 @@ export async function discoverCompetitors(
         return []
       }
       const batches = chunk(round3Handles, 10)
-      const results = await Promise.all(batches.map((b) => limit(() => scrapeHandles(b, apiKey, signal))))
+      const results = await Promise.all(batches.map((b) => limit(() => scrapeHandles(b, apifyKeys, signal))))
       const profiles = results.flat()
       console.log(`[round3] scraped ${profiles.length} profiles`)
       return profiles

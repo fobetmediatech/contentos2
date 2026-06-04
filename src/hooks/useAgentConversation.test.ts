@@ -94,7 +94,7 @@ vi.mock('../store/reelAnalysisStore', () => ({
 }))
 
 vi.mock('../store/keysStore', () => ({
-  useKeysStore: vi.fn(() => ({ geminiKey: 'test-key', pickKey: () => 'apify-key' })),
+  useKeysStore: vi.fn(() => ({ geminiKey: 'test-key', apifyKeys: ['apify-key'], pickKey: () => 'apify-key' })),
 }))
 
 const analyzeMock = vi.fn()

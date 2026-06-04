@@ -38,7 +38,7 @@
 import pLimit from 'p-limit'
 import { ACTORS, buildHashtagScraperInput, buildProfileScraperInput } from './actors'
 import { normalizeProfiles, type ApifyProfileRaw, type NormalizedProfile } from './transformers'
-import { startRun, pollRun, fetchDataset, chunk } from './apifyCore'
+import { startRun, pollRun, fetchDataset, chunk, pickRunKey } from './apifyCore'
 import { filterByLocation, type FilterResult } from './locationFilter'
 
 // Re-export FilterResult so consumers (and tests) can import it from the
@@ -137,10 +137,11 @@ interface HashtagPostRaw {
  */
 async function scrapeProfiles(
   handles: string[],
-  apiKey: string,
+  apifyKeys: string[],
   signal?: AbortSignal,
 ): Promise<NormalizedProfile[]> {
   if (handles.length === 0) return []
+  const apiKey = pickRunKey(apifyKeys) // per-run key: spreads parallel batches across accounts
   const input = buildProfileScraperInput(handles)
   const { runId, datasetId } = await startRun(ACTORS.PROFILE_SCRAPER, input, apiKey, signal)
   const resolvedDatasetId = await pollRun(runId, apiKey, signal)
@@ -204,7 +205,7 @@ export function collectExpansionHandles(
  */
 async function enrichCreatorPool(
   initialProfiles: NormalizedProfile[],
-  apiKey: string,
+  apifyKeys: string[],
   signal?: AbortSignal,
 ): Promise<{ enrichedCandidates: NormalizedProfile[]; creatorCount: number; businessCount: number }> {
   // Split initial pool by creator likelihood — single pass to avoid evaluating twice
@@ -247,7 +248,7 @@ async function enrichCreatorPool(
     try {
       const expansionBatches = chunk(expansionHandles, 10)
       const expansionResults = await Promise.all(
-        expansionBatches.map((batch) => limit(() => scrapeProfiles(batch, apiKey, signal))),
+        expansionBatches.map((batch) => limit(() => scrapeProfiles(batch, apifyKeys, signal))),
       )
       const expansionProfiles = expansionResults.flat()
       expansionCreators = expansionProfiles.filter(isCreatorLikely)
@@ -304,14 +305,14 @@ export interface DiscoveryPipelineResult {
  *
  * @param hashtags   Location-aware hashtags from hashtagGenerator.ts
  * @param city       Target city for location filter
- * @param apiKey     Active Apify API key
+ * @param apifyKeys  All Apify keys; each scrape RUN picks a fresh one (load-spreading)
  * @param depth      Controls posts-per-hashtag scrape depth
  * @param signal     AbortController signal for 150s timeout
  */
 export async function runLocationDiscovery(
   hashtags: string[],
   city: string,
-  apiKey: string,
+  apifyKeys: string[],
   depth: 'standard' | 'deep' = 'standard',
   signal?: AbortSignal,
 ): Promise<DiscoveryPipelineResult> {
@@ -320,6 +321,7 @@ export async function runLocationDiscovery(
   console.log(`[discovery] Scraping ${hashtags.length} hashtags in one run (${postsLimit} posts each)`)
 
   // Step 1: ALL hashtags in ONE actor run → pay startup cost once, not N times.
+  const apiKey = pickRunKey(apifyKeys) // per-run key for the single hashtag scrape
   const hashtagInput = buildHashtagScraperInput(hashtags, postsLimit)
   const { runId: hRunId, datasetId: hDatasetId } = await startRun(ACTORS.HASHTAG_SCRAPER, hashtagInput, apiKey, signal)
   const hResolved = await pollRun(hRunId, apiKey, signal)
@@ -348,7 +350,7 @@ export async function runLocationDiscovery(
   // Step 2: Scrape profiles in batches of 10, parallelized with pLimit
   const batches = chunk(cappedHandles, 10)
   const batchResults = await Promise.all(
-    batches.map((batch) => limit(() => scrapeProfiles(batch, apiKey, signal))),
+    batches.map((batch) => limit(() => scrapeProfiles(batch, apifyKeys, signal))),
   )
   const initialProfiles = batchResults.flat()
   console.log(`[discovery] Scraped ${initialProfiles.length} profiles`)
@@ -360,7 +362,7 @@ export async function runLocationDiscovery(
   // Step 2b: Creator enrichment — ensure the candidate pool has enough creators
   const { enrichedCandidates, creatorCount, businessCount } = await enrichCreatorPool(
     qualifiedProfiles,
-    apiKey,
+    apifyKeys,
     signal,
   )
 
