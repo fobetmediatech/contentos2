@@ -126,6 +126,14 @@ export async function startRun(
       markKeyCooldown(apiKey)
       throw new ApifyError('RATE_LIMITED', `Apify key rate limited. Marked for cooldown.`, res.status)
     }
+    // 402 Payment Required = this key's Apify account is out of prepaid credit (free-tier $5 used
+    // up, or a usage limit reached). Cool the key so the rotator routes around it, and surface
+    // QUOTA_EXCEEDED so withKeyFailover rolls the run over to a key that still has budget. Without
+    // this, a single tapped-out account failed the whole scrape even with 30 funded keys waiting.
+    if (res.status === 402) {
+      markKeyCooldown(apiKey)
+      throw new ApifyError('QUOTA_EXCEEDED', `Apify account out of credit`, res.status)
+    }
     // 403 with a usage/limit/feature-disabled body = this key's Apify account hit its monthly
     // hard limit. Cool the key down (like a rate-limit) so the rotator routes around it — a key
     // from another account has its own budget. Other 403s (genuine permission errors) fall through.
@@ -202,6 +210,44 @@ export async function fetchDataset<T>(datasetId: string, apiKey: string, signal?
   const json = (await res.json()) as ApifyDatasetResponse<T>
   // Apify returns items directly as array for clean=true, or as { items: [] }
   return Array.isArray(json) ? json : (json.items ?? [])
+}
+
+/**
+ * Run one Apify scrape with PER-RUN KEY FAILOVER.
+ *
+ * `run` performs ONE actor lifecycle (startRun → pollRun → fetchDataset) with the key it is
+ * handed. withKeyFailover picks a fresh key per attempt and, if that key is out of budget or
+ * rate-limited (QUOTA_EXCEEDED / RATE_LIMITED — both cool the key down in startRun), retries
+ * with the NEXT available key, up to one attempt per key. THIS is what makes a pool of N keys
+ * actually resilient: one tapped-out account ($5 free credit gone → 402) no longer fails the
+ * whole scrape — the run rolls over to a key that still has credit. Any other error (abort, run
+ * failure, genuine permission error) is not per-key, so it is rethrown immediately.
+ *
+ * Callback-based on purpose: the caller keeps the (independently mockable) startRun/pollRun/
+ * fetchDataset calls inside `run`, so this composes with the existing per-client tests.
+ */
+export async function withKeyFailover<T>(
+  apifyKeys: string[],
+  run: (apiKey: string) => Promise<T>,
+): Promise<T> {
+  const maxAttempts = Math.max(1, apifyKeys.filter((k) => k.trim()).length)
+  let lastErr: unknown
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const apiKey = pickRunKey(apifyKeys) // throws RATE_LIMITED once every key is on cooldown
+    try {
+      return await run(apiKey)
+    } catch (err) {
+      lastErr = err
+      // Fail over to a fresh key only for per-key budget/rate errors. The dead key was already
+      // cooled in startRun, so the next pickRunKey skips it. Everything else is not key-specific.
+      if (err instanceof ApifyError && (err.code === 'QUOTA_EXCEEDED' || err.code === 'RATE_LIMITED')) {
+        continue
+      }
+      throw err
+    }
+  }
+  // Every key was tried and each was out of budget / rate-limited.
+  throw lastErr ?? new ApifyError('RATE_LIMITED', 'All Apify keys are exhausted or on cooldown', 429)
 }
 
 // ----- Utilities -----

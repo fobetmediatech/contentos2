@@ -15,7 +15,7 @@
  * that reel skipped). Direct reel URLs avoid the IG block that profile scrapes hit.
  */
 
-import { startRun, pollRun, fetchDataset, ApifyError, apifyRunLimiter, pickRunKey } from './apifyCore'
+import { startRun, pollRun, fetchDataset, ApifyError, apifyRunLimiter, withKeyFailover } from './apifyCore'
 import { ACTORS, buildReelVideoScraperInput } from './actors'
 
 // Video download (10 reels) is slower than a list scrape — give it a wider poll budget.
@@ -66,12 +66,13 @@ export async function scrapeReelVideos(
   if (reelUrls.length === 0) return new Map()
 
   return apifyRunLimiter(async () => {
-    const apiKey = pickRunKey(apifyKeys) // per-run key (throws RATE_LIMITED if all cooled)
-
     const input = buildReelVideoScraperInput(reelUrls)
-    const { runId, datasetId } = await startRun(ACTORS.REEL_VIDEO_SCRAPER, input, apiKey, signal)
-    await pollRun(runId, apiKey, signal, VIDEO_POLL_MS)
-    const raw = await fetchDataset<RawReelVideoItem>(datasetId, apiKey, signal)
+    // Per-run key failover: a tapped-out account (402) rolls over to a funded key.
+    const raw = await withKeyFailover(apifyKeys, async (apiKey) => {
+      const { runId, datasetId } = await startRun(ACTORS.REEL_VIDEO_SCRAPER, input, apiKey, signal)
+      await pollRun(runId, apiKey, signal, VIDEO_POLL_MS)
+      return fetchDataset<RawReelVideoItem>(datasetId, apiKey, signal)
+    })
 
     const { videos, errors } = extractReelVideos(raw)
     // Fully blocked (IG anti-bot): no videos AND every item errored -> creator failed.

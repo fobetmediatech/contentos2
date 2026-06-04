@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [3.1.1.0] — 2026-06-04
+
+**Apify key failover.** A pool of Apify keys is now actually resilient: when one account runs out of credit (HTTP 402) or gets rate-limited, the scrape rolls over to the next funded key instead of failing. Previously a single tapped-out key could fail a whole run — including deep reel analysis — even with dozens of funded keys sitting unused.
+
+### Fixed
+
+- **402 "Payment Required" is now handled.** A key whose Apify account is out of prepaid credit is cooled down and the run fails over to another key, instead of throwing `RUN_START_FAILED` and leaving the dead key in rotation. This is what broke deep reel analysis ("nothing happens") once some accounts had spent their free credit.
+- **Per-run key failover** across every scrape path (competitor, discovery, reel list, reel video) via a shared `withKeyFailover` helper — one run retries on the next available key, up to one attempt per key, so the full key pool's budget is actually used.
+
 ## [3.1.0.0] — 2026-06-04
 
 **Env-only keys.** API keys now come entirely from environment variables — there's no in-app key entry. Add any number of Apify keys (the 10-key cap is gone) plus your Gemini key via `.env` / Vercel env vars; the Settings page is removed.
