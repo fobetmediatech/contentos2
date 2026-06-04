@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [3.0.1.0] — 2026-06-04
+
+**Hardening.** Three fixes from a full codebase audit: deep reports no longer vanish on reload, scraped captions can't hijack the reel analysis, and your extra Apify keys are actually used in parallel instead of one key carrying the whole run.
+
+### Fixed
+
+- **Deep niche reports survive a reload.** A finished deep report was dropped on refresh because the persistence guard only recognized the quick-synthesis path as "done". The guard now restores a finished deep report (or a backend-unavailable one) too, so a client-ready report no longer disappears when you reload.
+- **Scraped reel captions can no longer inject instructions.** The deep multimodal prompt embedded the raw Instagram caption inside a quote fence, so a crafted caption (even one spoken in the reel and transcribed) could break out and issue its own instructions to the model. Captions are now JSON-encoded in both the in-app and serverless prompt builders, the way the quick path already did it.
+- **Apify keys rotate per scrape run.** The competitor and discovery pipelines picked one key once and reused it for every round and every parallel batch, so a single rate-limit could cool down the one key the whole analysis depended on while your other keys sat idle. Each scrape run now pulls a fresh key, matching the reel pipeline.
+
+### Changed
+
+- Per-run key selection is one shared helper (`pickRunKey`) used by every scrape path — competitor, discovery, reel list, and reel video — so a 429 cools only the key that hit it.
+
+### Infrastructure
+
+- New tests for all three fixes: deep-report persistence across reload, caption injection-safety in both prompt copies, and per-run key rotation in both the competitor and discovery pipelines (rotates across runs; raises a clear "all keys cooling down" error when none are free). 551 tests.
+
 ## [3.0.0.0] — 2026-06-04
 
 **Phase 3 — self-training.** The OS now learns your taste. Save or dismiss any creator and it sticks across searches: dismissed creators stop resurfacing, and new rankings lean toward the kind of creators you keep — without re-explaining what you want each time. Memory became a logbook in Phase 2; now it shapes the results.

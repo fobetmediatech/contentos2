@@ -40,7 +40,7 @@ const SEED_LIMIT = 10          // competitor seeds scraped from hashtags when no
 export function useAgentConversation() {
   // The transcript lives in conversationsStore now; addMessage writes to the active conversation.
   const addMessage = useConversationsStore((s) => s.addMessage)
-  const { geminiKey, pickKey } = useKeysStore()
+  const { geminiKey, apifyKeys, pickKey } = useKeysStore()
   const { analyze } = useCompetitorAnalysis()
   const { discover } = useLocationDiscovery()
   const { startAnalysis: startReelAnalysis } = useReelAnalysis()
@@ -229,13 +229,13 @@ export function useAgentConversation() {
     }
 
     // Niche-only: scrape seed accounts from hashtags, then rank.
-    const apifyKey = pickKey()
-    if (!apifyKey) {
+    // Guard only — scrapeHashtagUsernames picks a fresh key per run from the full array.
+    if (!pickKey()) {
       bot('No Apify keys available. Add one in Settings.', 'error')
       return
     }
     const { hashtags } = await generateHashtags(geminiKey, '', niche, 'standard', signal)
-    const seeds = await scrapeHashtagUsernames(hashtags, apifyKey, signal)
+    const seeds = await scrapeHashtagUsernames(hashtags, apifyKeys, signal)
     if (signal.aborted) return
     if (seeds.length === 0) {
       bot(`Couldn't find accounts for "${niche}" automatically. Know any @handles I can start from?`)

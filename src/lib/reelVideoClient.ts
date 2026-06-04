@@ -15,8 +15,7 @@
  * that reel skipped). Direct reel URLs avoid the IG block that profile scrapes hit.
  */
 
-import { startRun, pollRun, fetchDataset, ApifyError, apifyRunLimiter } from './apifyCore'
-import { pickAvailableKey } from './keyRotator'
+import { startRun, pollRun, fetchDataset, ApifyError, apifyRunLimiter, pickRunKey } from './apifyCore'
 import { ACTORS, buildReelVideoScraperInput } from './actors'
 
 // Video download (10 reels) is slower than a list scrape — give it a wider poll budget.
@@ -67,10 +66,7 @@ export async function scrapeReelVideos(
   if (reelUrls.length === 0) return new Map()
 
   return apifyRunLimiter(async () => {
-    const apiKey = pickAvailableKey(apifyKeys)
-    if (!apiKey) {
-      throw new ApifyError('RATE_LIMITED', 'All Apify keys are on cooldown — wait a few minutes and retry', 429)
-    }
+    const apiKey = pickRunKey(apifyKeys) // per-run key (throws RATE_LIMITED if all cooled)
 
     const input = buildReelVideoScraperInput(reelUrls)
     const { runId, datasetId } = await startRun(ACTORS.REEL_VIDEO_SCRAPER, input, apiKey, signal)

@@ -23,7 +23,6 @@ import { generateHashtags } from '../lib/hashtagGenerator'
 import { runLocationDiscovery } from '../lib/discoveryClient'
 import { analyzeDiscovery } from '../ai/gemini'
 import type { DiscoveryResult } from '../ai/prompts'
-import { markKeyCooldown } from '../lib/keyRotator'
 import { ApifyError } from '../lib/apifyCore'
 import { GeminiError } from '../ai/gemini'
 import { linkAbort } from '../lib/abortControl'
@@ -37,12 +36,12 @@ export const MIN_LOCATION_RESULTS = 4
 
 export function useLocationDiscovery() {
   const { startDiscovery, setStep, setStepProgressDetail, setResults, setError, reset } = useDiscoveryStore()
-  const { geminiKey, pickKey } = useKeysStore()
+  const { geminiKey, apifyKeys, pickKey } = useKeysStore()
 
   const mutation = useMutation({
     mutationFn: async ({ params, externalSignal }: { params: DiscoveryParams; externalSignal?: AbortSignal }) => {
-      const apifyKey = pickKey()
-      if (!apifyKey) throw new Error('No Apify keys available. All keys are in cooldown.')
+      // Guard only — the client picks a fresh key PER RUN from the full array (load-spreading).
+      if (!pickKey()) throw new Error('No Apify keys available. All keys are in cooldown.')
       if (!geminiKey?.trim()) throw new Error('Gemini API key is not configured.')
 
       // linkAbort: internal 150s timeout + an optional external (agent-loop) signal.
@@ -74,7 +73,7 @@ export function useLocationDiscovery() {
         const { candidateProfiles, filterResult, scrapedHashtags: firstPassHashtags, creatorCount, businessCount } = await runLocationDiscovery(
           hashtags,
           safeCity,
-          apifyKey,
+          apifyKeys,
           params.depth,
           abort.signal,
         )
@@ -112,7 +111,7 @@ export function useLocationDiscovery() {
               const expansion = await runLocationDiscovery(
                 expandedHashtags,
                 safeCity,
-                apifyKey,
+                apifyKeys,
                 params.depth,
                 abort.signal,
               )
@@ -218,7 +217,7 @@ export function useLocationDiscovery() {
           message = 'Discovery timed out after 150 seconds. Try Standard depth or check your Apify key.'
         } else if (err instanceof ApifyError) {
           if (err.code === 'RATE_LIMITED') {
-            markKeyCooldown(apifyKey)
+            // The failing key was already cooled down inside startRun (apifyCore owns per-key cooldown).
             message = `Apify key rate limited. ${
               pickKey() ? 'Retrying with next key — please try again.' : 'All keys are in cooldown.'
             }`

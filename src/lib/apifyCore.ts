@@ -11,7 +11,7 @@
  */
 
 import pLimit from 'p-limit'
-import { markKeyCooldown } from './keyRotator'
+import { markKeyCooldown, pickAvailableKey } from './keyRotator'
 
 export const BASE_URL = 'https://api.apify.com/v2'
 export const POLL_INTERVAL_MS = 2000   // 2 seconds between polls
@@ -53,6 +53,26 @@ export class ApifyError extends Error {
     this.code = code
     this.status = status
   }
+}
+
+/**
+ * Pick a fresh Apify key for ONE actor run, throwing RATE_LIMITED if all are on cooldown.
+ *
+ * Call this once per RUN (the run's start→poll→fetch must share a key, but each run may use
+ * a different account). The competitor + discovery clients call it per scrape so multi-round
+ * analyses and parallel batches spread across the user's keys instead of hammering one — the
+ * same per-run rotation the reel pipeline already uses (see reelScraper.scrapeTopReels).
+ */
+export function pickRunKey(apifyKeys: string[]): string {
+  const apiKey = pickAvailableKey(apifyKeys)
+  if (!apiKey) {
+    throw new ApifyError(
+      'RATE_LIMITED',
+      'All Apify keys are on cooldown — please wait a few minutes and try again',
+      429,
+    )
+  }
+  return apiKey
 }
 
 // ----- Raw Apify response types -----

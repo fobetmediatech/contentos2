@@ -25,7 +25,6 @@ import { useAnalysisStore, type AnalysisParams } from '../store/analysisStore'
 import { useKeysStore } from '../store/keysStore'
 import { discoverCompetitors } from '../lib/apifyClient'
 import { analyzeCompetitors, generateClarificationQuestion } from '../ai/gemini'
-import { markKeyCooldown } from '../lib/keyRotator'
 import { ApifyError } from '../lib/apifyClient'
 import { GeminiError } from '../ai/gemini'
 import { friendlyApify, friendlyGemini, sparseSeedMessage, ALL_DISMISSED_MESSAGE } from '../lib/errorMessages'
@@ -39,14 +38,15 @@ const MIN_COMPETITOR_RESULTS = 8
 export function useCompetitorAnalysis() {
   const store = useAnalysisStore()
   const { startAnalysis, setStep, setResults, setError, reset, setClarification, setStepProgressDetail, setDidExpand, answerClarification: storeAnswerClarification } = store
-  const { geminiKey, pickKey } = useKeysStore()
+  const { geminiKey, apifyKeys, pickKey } = useKeysStore()
 
   // ── Phase 1: Discovery + clarification question generation ────────────────
 
   const discoverMutation = useMutation({
     mutationFn: async ({ params, externalSignal }: { params: AnalysisParams; externalSignal?: AbortSignal }) => {
-      const apifyKey = pickKey()
-      if (!apifyKey) throw new Error('No Apify keys available. All keys are in cooldown.')
+      // Guard: at least one key must be available. The scrape clients pick a fresh key
+      // PER RUN from the full array (load-spreading), so we pass apifyKeys, not one key.
+      if (!pickKey()) throw new Error('No Apify keys available. All keys are in cooldown.')
       if (!geminiKey?.trim()) throw new Error('Gemini API key is not configured.')
 
       // linkAbort: internal 150s timeout + an optional external (agent-loop) signal.
@@ -59,7 +59,7 @@ export function useCompetitorAnalysis() {
         setStep(1)
         const { inputProfiles, candidateProfiles } = await discoverCompetitors(
           params.handles,
-          apifyKey,
+          apifyKeys,
           abort.signal,
           params.depth,
         )
@@ -111,7 +111,7 @@ export function useCompetitorAnalysis() {
         // Superseded by the agent loop (latest-wins steer) — silent, not a failure.
         if (abort.wasSuperseded()) return undefined
         console.error('[analysis:discover] failed:', err)
-        const message = buildErrorMessage(err, abort.signal, apifyKey, pickKey)
+        const message = buildErrorMessage(err, abort.signal, pickKey)
         setError(message)
         throw new Error(message, { cause: err })
       } finally {
@@ -187,7 +187,7 @@ export function useCompetitorAnalysis() {
       } catch (err) {
         if (abort.wasSuperseded()) return undefined
         console.error('[analysis:analyze] failed:', err)
-        const message = buildErrorMessage(err, abort.signal, null, () => null)
+        const message = buildErrorMessage(err, abort.signal, () => null)
         setError(message)
         throw new Error(message, { cause: err })
       } finally {
@@ -235,7 +235,6 @@ export function useCompetitorAnalysis() {
 function buildErrorMessage(
   err: unknown,
   signal: AbortSignal,
-  apifyKey: string | null,
   pickKey: () => string | null,
 ): string {
   if (signal.aborted) {
@@ -243,7 +242,8 @@ function buildErrorMessage(
   }
   if (err instanceof ApifyError) {
     if (err.code === 'RATE_LIMITED') {
-      if (apifyKey) markKeyCooldown(apifyKey)
+      // The failing key was already placed in cooldown inside startRun (apifyCore owns
+      // per-key cooldown). We only report; pickKey() tells us if a retry can still proceed.
       return `Apify key rate limited and placed in 15-minute cooldown. ${
         pickKey() ? 'Retrying with next key — please try again.' : 'All keys are in cooldown.'
       }`
