@@ -59,3 +59,11 @@ export function sparseSeedMessage(handles: string[], refFound: boolean): string 
   const verb = handles.length > 1 ? 'have' : 'has'
   return `${subject} ${verb} no related public accounts to compare against. Try a more established reference account in the same niche.`
 }
+
+/**
+ * Shown when the dismissed-filter (Phase 3, 3a) empties an otherwise non-empty candidate pool —
+ * i.e. every account found was one the user previously dismissed. Distinct from the
+ * handle-not-found case so the fix is clear: clear some dismissals, don't change the handle.
+ */
+export const ALL_DISMISSED_MESSAGE =
+  "Every account found here is one you've dismissed before. Clear some dismissals in Memory, or try a different reference account."

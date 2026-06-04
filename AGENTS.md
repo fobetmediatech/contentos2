@@ -75,7 +75,7 @@ Entry point: `ChatPage` — conversational interface that routes to either pipel
 ```bash
 npm run dev          # Start Vite dev server
 npm run build        # TypeScript check + Vite build
-npm run test         # Run 551 unit tests (vitest)
+npm run test         # Run 578 unit tests (vitest)
 npm run test:watch   # Watch mode
 npm run lint         # ESLint
 npm run test:discovery  # Integration test for discovery pipeline (needs real API keys)
@@ -144,6 +144,7 @@ src/
     ClarificationCard.tsx     # Inline clarification prompt
     CompetitorCard.tsx        # Competitor card for analysis results
     DiscoveryCard.tsx         # Creator card for discovery results
+    FeedbackControl.tsx       # Save/dismiss verdict control (Phase 3 self-training capture)
     ProgressSteps.tsx         # Inline progress step indicator
   shared/
     utils/categories.ts       # COMPETITOR_CATEGORIES + DISCOVERY_CATEGORIES

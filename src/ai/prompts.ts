@@ -13,6 +13,49 @@
 
 import { COMPETITOR_CATEGORIES, DISCOVERY_CATEGORIES } from '../shared/utils/categories'
 import type { NormalizedProfile } from '../lib/transformers'
+import type { PreferenceExemplar, PreferenceExemplars } from '../lib/corpus'
+
+// ----- Phase 3 slice 3: preference (self-training) prompt block -----
+
+function fmtPreferenceFollowers(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${Math.round(n / 1_000)}K`
+  return String(n)
+}
+
+// niche strings are free-text Gemini output stored in the corpus — strip newlines + cap length
+// before embedding, same as bio/username elsewhere, so a poisoned stored niche can't break out
+// of its line and inject prompt instructions (indirect prompt injection).
+const sanitizeForPrompt = (s: string, max: number) => s.replace(/[\n\r]/g, ' ').slice(0, max)
+
+function preferenceExemplarLine(e: PreferenceExemplar): string {
+  const er = e.engagementRate != null ? `${e.engagementRate.toFixed(1)}%` : 'N/A'
+  const verified = e.verified ? ', verified' : ''
+  const niche = e.niches.length > 0 ? e.niches.map((n) => sanitizeForPrompt(n, 40)).join('/') : 'unknown'
+  const weight = e.sameNiche ? ' [SAME NICHE — weight heavily]' : ' [other niche — weak style hint]'
+  return `- @${sanitizeForPrompt(e.username, 40)} | ${fmtPreferenceFollowers(e.followersCount)} followers | ER ${er}${verified} | niche: ${niche}${weight}`
+}
+
+/**
+ * The PREFERENCE block (3b): distils the strategist's saved/dismissed verdicts into a SOFT
+ * tiebreaker for ranking. Returns '' when there's no signal (so the prompt stays unchanged for
+ * a cold corpus). Framed as the lowest-priority signal — it must never override hard niche
+ * relevance or the tier rules. Same-niche exemplars are weighted heavily; cross-niche ones are
+ * demoted to weak style hints (the niche-bleed decision).
+ */
+export function buildPreferenceBlock(exemplars: PreferenceExemplars): string {
+  const { saved, dismissed } = exemplars
+  if (saved.length === 0 && dismissed.length === 0) return ''
+  const savedLines = saved.length > 0
+    ? `SAVED (favor candidates with similar traits):\n${saved.map(preferenceExemplarLine).join('\n')}`
+    : ''
+  const dismissedLines = dismissed.length > 0
+    ? `DISMISSED (disfavor candidates with similar traits):\n${dismissed.map(preferenceExemplarLine).join('\n')}`
+    : ''
+  return `\nPREFERENCE SIGNAL (the strategist's saves/dismissals from past searches — a SOFT TIEBREAKER ONLY; do NOT override niche relevance, EXPLICIT NICHE CONTEXT, USER REFINEMENT, source priority, or the Top/Trending tier rules):
+${[savedLines, dismissedLines].filter(Boolean).join('\n')}
+Weight SAME-NICHE preferences heavily; treat other-niche ones as weak style hints. All else equal, lean toward SAVED-like traits and away from DISMISSED-like traits. This is the lowest-priority signal.\n`
+}
 
 /**
  * Clarification question returned by Gemini after discovery.
@@ -52,6 +95,7 @@ export function buildCompetitorPrompt(
   candidates: NormalizedProfile[],
   nicheContext?: string,
   clarificationAnswer?: string,
+  preferenceExemplars?: PreferenceExemplars,
 ): string {
   const topCategory = COMPETITOR_CATEGORIES.top
   const trendingCategory = COMPETITOR_CATEGORIES.trending
@@ -143,11 +187,15 @@ STEP 2 — Identify 2–3 ADJACENT-BUT-NOT-TARGET niches to explicitly exclude:
 Populate "derivedNiche" as: "<sub-niche> | EXCLUDE: <adjacent1>, <adjacent2>"\n`
     : ''
 
+  // Preference block (3b) — lowest-priority tiebreaker from saved/dismissed verdicts. Empty
+  // string when the corpus has no verdicts yet, so a cold corpus leaves the prompt unchanged.
+  const preferenceSection = preferenceExemplars ? buildPreferenceBlock(preferenceExemplars) : ''
+
   return `You are an Instagram competitive intelligence analyst for a social media agency.
 
 REFERENCE ACCOUNTS (the client's handles or known competitors in their niche):
 ${inputSummary}
-${clarificationSection}${nicheContextSection}${nicheSignalsSection}${nicheDeriveBlock}
+${clarificationSection}${nicheContextSection}${nicheSignalsSection}${nicheDeriveBlock}${preferenceSection}
 YOUR TASK:
 Analyze the candidate accounts below and select ${countInstruction}:
 - 5 "${topCategory.label}" competitors: ${topCategory.taxonomy}
@@ -233,6 +281,7 @@ export function buildDiscoveryPrompt(
   candidates: NormalizedProfile[],
   creatorCount?: number,
   businessCount?: number,
+  preferenceExemplars?: PreferenceExemplars,
 ): string {
   const topCategory = DISCOVERY_CATEGORIES.top
   const trendingCategory = DISCOVERY_CATEGORIES.trending
@@ -255,6 +304,10 @@ export function buildDiscoveryPrompt(
     ? `\nCANDIDATE POOL COMPOSITION: ${creatorCount} creator accounts (type: creator) + ${businessCount} business accounts (type: business) in this list.\n`
     : ''
 
+  // Preference block (3b) — same lowest-priority tiebreaker as the competitor prompt, reused.
+  // Empty when the corpus has no verdicts, so a cold corpus leaves the prompt unchanged.
+  const preferenceSection = preferenceExemplars ? buildPreferenceBlock(preferenceExemplars) : ''
+
   return `You are a social media analyst specializing in creator discovery for brand partnerships.
 
 TASK: Find the top 10 ${niche}-related Instagram accounts based in ${city} from the list below.
@@ -274,7 +327,7 @@ SELECTION CRITERIA:
 - "${topCategory.label}" (Top 5): ${topCategory.taxonomy}
 - "${trendingCategory.label}" (Trending 5): ${trendingCategory.taxonomy}
 - If fewer than 5 good accounts exist in a category, reduce that category's count rather than padding with off-niche accounts.
-
+${preferenceSection}
 CANDIDATE PROFILES:
 ${candidateSummary}
 
