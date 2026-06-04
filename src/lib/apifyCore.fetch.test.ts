@@ -65,6 +65,21 @@ describe('startRun', () => {
     })
   })
 
+  it('throws QUOTA_EXCEEDED on 402 Payment Required (so the run fails over to a funded key)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValueOnce({
+        ok: false,
+        status: 402,
+        text: () => Promise.resolve('Payment Required'),
+      }),
+    )
+    await expect(startRun('actor-id', {}, 'api-key')).rejects.toMatchObject({
+      code: 'QUOTA_EXCEEDED',
+      status: 402,
+    })
+  })
+
   it('throws RUN_START_FAILED on generic non-ok response', async () => {
     vi.stubGlobal(
       'fetch',

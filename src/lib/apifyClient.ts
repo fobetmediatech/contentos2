@@ -21,7 +21,7 @@
 import pLimit from 'p-limit'
 import { ACTORS, buildProfileScraperInput, buildHashtagScraperInput } from './actors'
 import { normalizeProfiles, type ApifyProfileRaw, type NormalizedProfile } from './transformers'
-import { startRun, pollRun, fetchDataset, chunk, pickRunKey } from './apifyCore'
+import { startRun, pollRun, fetchDataset, chunk, withKeyFailover } from './apifyCore'
 
 // Re-export shared error class so existing callers don't need to change their imports
 export { ApifyError, type ApifyErrorCode } from './apifyCore'
@@ -51,11 +51,13 @@ async function scrapeHandles(
   apifyKeys: string[],
   signal?: AbortSignal,
 ): Promise<NormalizedProfile[]> {
-  const apiKey = pickRunKey(apifyKeys) // per-run key: spreads parallel batches across accounts
   const input = buildProfileScraperInput(handles)
-  const { runId, datasetId } = await startRun(ACTORS.PROFILE_SCRAPER, input, apiKey, signal)
-  const resolvedDatasetId = await pollRun(runId, apiKey, signal)
-  const raw = await fetchDataset<ApifyProfileRaw>(resolvedDatasetId || datasetId, apiKey, signal)
+  // Per-run key failover: spreads across accounts AND rolls a tapped-out key (402) to a funded one.
+  const raw = await withKeyFailover(apifyKeys, async (apiKey) => {
+    const { runId, datasetId } = await startRun(ACTORS.PROFILE_SCRAPER, input, apiKey, signal)
+    const resolvedDatasetId = await pollRun(runId, apiKey, signal)
+    return fetchDataset<ApifyProfileRaw>(resolvedDatasetId || datasetId, apiKey, signal)
+  })
   return normalizeProfiles(raw)
 }
 
@@ -81,12 +83,13 @@ export async function scrapeHashtagUsernames(
 ): Promise<string[]> {
   if (hashtags.length === 0) return []
 
-  const apiKey = pickRunKey(apifyKeys)
   const top3 = hashtags.slice(0, 3)
   const input = buildHashtagScraperInput(top3, perHashtag)
-  const { runId, datasetId } = await startRun(ACTORS.HASHTAG_SCRAPER, input, apiKey, signal)
-  const resolvedDatasetId = await pollRun(runId, apiKey, signal)
-  const posts = await fetchDataset<HashtagPostRaw>(resolvedDatasetId || datasetId, apiKey, signal)
+  const posts = await withKeyFailover(apifyKeys, async (apiKey) => {
+    const { runId, datasetId } = await startRun(ACTORS.HASHTAG_SCRAPER, input, apiKey, signal)
+    const resolvedDatasetId = await pollRun(runId, apiKey, signal)
+    return fetchDataset<HashtagPostRaw>(resolvedDatasetId || datasetId, apiKey, signal)
+  })
 
   // Extract ownerUsername from each post, drop missing/empty values
   const usernames = posts

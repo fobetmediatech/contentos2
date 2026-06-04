@@ -38,7 +38,7 @@
 import pLimit from 'p-limit'
 import { ACTORS, buildHashtagScraperInput, buildProfileScraperInput } from './actors'
 import { normalizeProfiles, type ApifyProfileRaw, type NormalizedProfile } from './transformers'
-import { startRun, pollRun, fetchDataset, chunk, pickRunKey } from './apifyCore'
+import { startRun, pollRun, fetchDataset, chunk, withKeyFailover } from './apifyCore'
 import { filterByLocation, type FilterResult } from './locationFilter'
 
 // Re-export FilterResult so consumers (and tests) can import it from the
@@ -141,11 +141,13 @@ async function scrapeProfiles(
   signal?: AbortSignal,
 ): Promise<NormalizedProfile[]> {
   if (handles.length === 0) return []
-  const apiKey = pickRunKey(apifyKeys) // per-run key: spreads parallel batches across accounts
   const input = buildProfileScraperInput(handles)
-  const { runId, datasetId } = await startRun(ACTORS.PROFILE_SCRAPER, input, apiKey, signal)
-  const resolvedDatasetId = await pollRun(runId, apiKey, signal)
-  const raw = await fetchDataset<ApifyProfileRaw>(resolvedDatasetId || datasetId, apiKey, signal)
+  // Per-run key failover: spreads across accounts AND rolls a tapped-out key (402) to a funded one.
+  const raw = await withKeyFailover(apifyKeys, async (apiKey) => {
+    const { runId, datasetId } = await startRun(ACTORS.PROFILE_SCRAPER, input, apiKey, signal)
+    const resolvedDatasetId = await pollRun(runId, apiKey, signal)
+    return fetchDataset<ApifyProfileRaw>(resolvedDatasetId || datasetId, apiKey, signal)
+  })
   return normalizeProfiles(raw)
 }
 
@@ -321,11 +323,12 @@ export async function runLocationDiscovery(
   console.log(`[discovery] Scraping ${hashtags.length} hashtags in one run (${postsLimit} posts each)`)
 
   // Step 1: ALL hashtags in ONE actor run → pay startup cost once, not N times.
-  const apiKey = pickRunKey(apifyKeys) // per-run key for the single hashtag scrape
   const hashtagInput = buildHashtagScraperInput(hashtags, postsLimit)
-  const { runId: hRunId, datasetId: hDatasetId } = await startRun(ACTORS.HASHTAG_SCRAPER, hashtagInput, apiKey, signal)
-  const hResolved = await pollRun(hRunId, apiKey, signal)
-  const posts = await fetchDataset<HashtagPostRaw>(hResolved || hDatasetId, apiKey, signal)
+  const posts = await withKeyFailover(apifyKeys, async (apiKey) => {
+    const { runId: hRunId, datasetId: hDatasetId } = await startRun(ACTORS.HASHTAG_SCRAPER, hashtagInput, apiKey, signal)
+    const hResolved = await pollRun(hRunId, apiKey, signal)
+    return fetchDataset<HashtagPostRaw>(hResolved || hDatasetId, apiKey, signal)
+  })
 
   const allHandles = posts
     .map((p) => p.ownerUsername?.trim().toLowerCase())
