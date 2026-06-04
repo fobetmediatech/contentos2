@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [3.1.2.0] — 2026-06-04
+
+**Deep report no longer wipes the screen.** Clicking "Generate deep report" used to `reset()` the whole reel store — which erased the hook analysis, the button, and the conversation binding, leaving a blank screen while the deep run worked invisibly in the background ("click it and everything vanishes"). The deep report now enriches the existing results in place.
+
+### Fixed
+
+- **No more blank screen on "Generate deep report".** `startDeepReport` no longer calls `reset()` (which nulled `reelConversationId` and hid the live block). It keeps the creators, their scraped reels, the quick hook analyses, and the conversation binding visible; the deep video grid layers on top progressively as each reel finishes.
+- **Reuses the already-scraped reels** instead of re-scraping from scratch — keeps the hook grid intact, finishes faster, and saves an Apify run per creator.
+
 ## [3.1.1.0] — 2026-06-04
 
 **Apify key failover.** A pool of Apify keys is now actually resilient: when one account runs out of credit (HTTP 402) or gets rate-limited, the scrape rolls over to the next funded key instead of failing. Previously a single tapped-out key could fail a whole run — including deep reel analysis — even with dozens of funded keys sitting unused.

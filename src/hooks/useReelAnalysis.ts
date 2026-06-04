@@ -176,10 +176,17 @@ export function useReelAnalysis() {
   // reel via the Vercel function. Leaves the quick startAnalysis path untouched.
   async function runCreatorDeepPipeline(handle: string, signal: AbortSignal) {
     try {
-      const reels = await scrapeTopReels(handle, 10, apifyKeys, signal)
+      // Reuse the reels the quick pass already scraped — keeps the hook grid intact and skips a
+      // redundant Apify scrape. Only scrape when they're absent (deep report on a trimmed snapshot).
+      const existing = useReelAnalysisStore.getState().creatorStates[handle]
+      const reels =
+        existing?.reels && existing.reels.length > 0
+          ? existing.reels
+          : await scrapeTopReels(handle, 10, apifyKeys, signal)
       if (signal.aborted) return
 
-      // Seed every reel as pending so the UI shows the full set immediately.
+      // Seed every reel as pending so the UI shows the full set immediately. setCreatorState merges,
+      // so the quick `analyses` survive (we don't pass them) — we only add reels + the deep maps.
       const seededStatus: Record<string, DeepReelStatus> = {}
       for (const r of reels) seededStatus[r.shortCode] = 'pending'
       setCreatorState(handle, { reels, status: 'analyzing', deepStatus: seededStatus, deepAnalyses: {} })
@@ -262,12 +269,20 @@ export function useReelAnalysis() {
     abortRef.current = controller
     if (controller.signal.aborted) return
 
-    reset()
-
+    // ENRICH IN PLACE — do NOT reset(). reset() wiped the quick hook analysis AND nulled
+    // reelConversationId, which hid the entire live block, so the deep run rendered to nothing
+    // ("click Generate deep report and everything vanishes"). Keep the existing creators, their
+    // scraped reels, the quick analyses, and the conversation binding intact; the deep video grid
+    // layers on top as each reel finishes (runCreatorDeepPipeline reuses the already-scraped reels).
     setActiveHandles(handles)
-    handles.forEach((handle) =>
-      setCreatorState(handle, { handle, status: 'scraping', reels: [], analyses: {}, deepStatus: {}, deepAnalyses: {} }),
-    )
+    const seededStates = useReelAnalysisStore.getState().creatorStates
+    handles.forEach((handle) => {
+      // Only seed a creator that isn't already present (e.g. deep report fired from a trimmed
+      // snapshot whose live state was cleared). Never clobber an existing creator's reels/analyses.
+      if (!seededStates[handle]) {
+        setCreatorState(handle, { handle, status: 'scraping', reels: [], analyses: {}, deepStatus: {}, deepAnalyses: {} })
+      }
+    })
 
     await Promise.allSettled(handles.map((handle) => runCreatorDeepPipeline(handle, controller.signal)))
     if (controller.signal.aborted) return
