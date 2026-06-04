@@ -231,7 +231,7 @@ export function useAgentConversation() {
     // Niche-only: scrape seed accounts from hashtags, then rank.
     // Guard only — scrapeHashtagUsernames picks a fresh key per run from the full array.
     if (!pickKey()) {
-      bot('No Apify keys available. Add one in Settings.', 'error')
+      bot('No Apify keys available. Add VITE_APIFY_KEYS in .env.', 'error')
       return
     }
     const { hashtags } = await generateHashtags(geminiKey, '', niche, 'standard', signal)

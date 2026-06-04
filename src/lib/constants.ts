@@ -16,7 +16,7 @@ export const PROCEED_LABEL = 'Looks right, proceed as-is'
 export const DISCOVERY_REDIRECT_TO_COMPETITOR = 'Actually, show me who dominates this niche globally'
 
 /** Shared error message when Gemini API key is absent. Used in multiple useConversation paths. */
-export const GEMINI_KEY_MISSING_MSG = 'Gemini API key missing. Add it in Settings.'
+export const GEMINI_KEY_MISSING_MSG = 'Gemini API key missing. Set VITE_GEMINI_KEY in .env.'
 
 /**
  * Option label shown in the reel/hook analysis confirming state.

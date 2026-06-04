@@ -391,9 +391,9 @@ export function ChatPage() {
         <div className="flex-shrink-0 flex items-start gap-2.5 px-4 py-2.5 bg-[rgba(217,119,6,0.08)] border-b border-[rgba(217,119,6,0.2)]">
           <AlertTriangle size={14} className="text-warning flex-shrink-0 mt-0.5" />
           <p className="text-xs text-secondary">
-            Add your Gemini and Apify keys in{' '}
-            <a href="/settings" className="underline font-medium text-[#F4A97B]">Settings</a>{' '}
-            to get started.
+            Add your Gemini and Apify keys to{' '}
+            <code className="px-1 py-0.5 rounded bg-surface-raised font-mono text-[#F4A97B]">.env</code>{' '}
+            (or the Vercel project env) to get started.
           </p>
         </div>
       )}

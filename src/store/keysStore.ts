@@ -1,102 +1,74 @@
 /**
- * Keys store — Zustand with persistence and cross-tab sync.
+ * Keys store — env-sourced API keys (no in-app entry, no persistence).
  *
- * UC1: Cooldown timestamps stored as epoch milliseconds (numbers, not Date).
- * UC1: storage event listener syncs state across browser tabs.
+ * Keys come exclusively from .env at build time (VITE_GEMINI_KEY, VITE_APIFY_KEY_1..10 or a
+ * comma-separated VITE_APIFY_KEYS); the deep-reel serverless function reads GEMINI_API_KEY at
+ * runtime. There is no Settings UI and this store is NOT persisted — every load reflects the
+ * current env, so changing a key is a redeploy, not a localStorage edit. Apify cooldowns are
+ * tracked separately by keyRotator (its own localStorage), so rotation still works at runtime.
  */
 
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 import { isReady, pickAvailableKey, getKeyExpiry } from '../lib/keyRotator'
 
-// VITE_ env vars are baked in at build time — acceptable for internal team deployments.
-// Team members who manually enter keys in Settings override these; they're just defaults.
+// VITE_ env vars are inlined at build time. This Gemini key powers all browser-side Gemini
+// calls; the serverless deep-reel function uses its own GEMINI_API_KEY (server-side env).
 const ENV_GEMINI_KEY: string = import.meta.env.VITE_GEMINI_KEY ?? ''
-// Read up to 10 keys from env — matches the store's 10-key cap (setApifyKeys
-// slices to 10, addApifyKey guards at 10). More keys = more rotation headroom
-// for keyRotator to dodge per-key Apify rate limits.
+// Numbered slots (back-compat) PLUS an optional comma-separated VITE_APIFY_KEYS for any number
+// of keys — there's no fixed cap; keyRotator round-robins whatever it's given. Deduped.
 const ENV_APIFY_KEYS: string[] = [
-  import.meta.env.VITE_APIFY_KEY_1,
-  import.meta.env.VITE_APIFY_KEY_2,
-  import.meta.env.VITE_APIFY_KEY_3,
-  import.meta.env.VITE_APIFY_KEY_4,
-  import.meta.env.VITE_APIFY_KEY_5,
-  import.meta.env.VITE_APIFY_KEY_6,
-  import.meta.env.VITE_APIFY_KEY_7,
-  import.meta.env.VITE_APIFY_KEY_8,
-  import.meta.env.VITE_APIFY_KEY_9,
-  import.meta.env.VITE_APIFY_KEY_10,
-].filter((k): k is string => typeof k === 'string' && k.trim().length > 0)
+  ...new Set(
+    [
+      import.meta.env.VITE_APIFY_KEY_1,
+      import.meta.env.VITE_APIFY_KEY_2,
+      import.meta.env.VITE_APIFY_KEY_3,
+      import.meta.env.VITE_APIFY_KEY_4,
+      import.meta.env.VITE_APIFY_KEY_5,
+      import.meta.env.VITE_APIFY_KEY_6,
+      import.meta.env.VITE_APIFY_KEY_7,
+      import.meta.env.VITE_APIFY_KEY_8,
+      import.meta.env.VITE_APIFY_KEY_9,
+      import.meta.env.VITE_APIFY_KEY_10,
+      ...String(import.meta.env.VITE_APIFY_KEYS ?? '').split(','),
+    ]
+      .map((k) => (typeof k === 'string' ? k.trim() : ''))
+      .filter((k) => k.length > 0),
+  ),
+]
 
 interface KeysState {
   geminiKey: string
-  apifyKeys: string[]  // up to 10 keys
+  apifyKeys: string[]  // no fixed cap — keyRotator round-robins any count
 
   // Derived selectors
   isReady: () => boolean
   pickKey: () => string | null
   getKeyExpiry: (key: string) => number | null
 
-  // Setters
+  // Setters — internal/test seeding only (prod keys come from .env; there is no UI).
   setGeminiKey: (key: string) => void
   setApifyKeys: (keys: string[]) => void
   addApifyKey: (key: string) => void
   removeApifyKey: (index: number) => void
 }
 
-export const useKeysStore = create<KeysState>()(
-  persist(
-    (set, get) => ({
-      geminiKey: ENV_GEMINI_KEY,
-      apifyKeys: ENV_APIFY_KEYS,
+export const useKeysStore = create<KeysState>()((set, get) => ({
+  geminiKey: ENV_GEMINI_KEY,
+  apifyKeys: ENV_APIFY_KEYS,
 
-      isReady: () => isReady(get().geminiKey, get().apifyKeys),
-      pickKey: () => pickAvailableKey(get().apifyKeys),
-      getKeyExpiry: (key: string) => getKeyExpiry(key),
+  isReady: () => isReady(get().geminiKey, get().apifyKeys),
+  pickKey: () => pickAvailableKey(get().apifyKeys),
+  getKeyExpiry: (key: string) => getKeyExpiry(key),
 
-      setGeminiKey: (key) => set({ geminiKey: key }),
-      setApifyKeys: (keys) => set({ apifyKeys: keys.slice(0, 10) }),
-      addApifyKey: (key) => {
-        const current = get().apifyKeys
-        if (current.length >= 10) return
-        if (!current.includes(key)) set({ apifyKeys: [...current, key] })
-      },
-      removeApifyKey: (index) => {
-        const current = [...get().apifyKeys]
-        current.splice(index, 1)
-        set({ apifyKeys: current })
-      },
-    }),
-    {
-      name: 'keys-store',
-      // Only persist the key values, not derived functions
-      partialize: (state) => ({
-        geminiKey: state.geminiKey,
-        apifyKeys: state.apifyKeys,
-      }),
-    },
-  ),
-)
-
-// Cross-tab sync via storage events (UC1)
-// When another tab writes to localStorage, re-read and update this tab's state
-if (typeof window !== 'undefined') {
-  window.addEventListener('storage', (event) => {
-    if (event.key === 'keys-store') {
-      try {
-        const newState = JSON.parse(event.newValue ?? '{}')
-        const incoming = newState?.state
-        if (!incoming || typeof incoming !== 'object') return
-        // H9: patch ONLY the fields actually present in the payload. A partial or
-        // mid-migration write from another tab must never wipe this tab's keys —
-        // the old `?? '' / ?? []` reset the user to "logged out" on any odd write.
-        const patch: Partial<Pick<KeysState, 'geminiKey' | 'apifyKeys'>> = {}
-        if (typeof incoming.geminiKey === 'string') patch.geminiKey = incoming.geminiKey
-        if (Array.isArray(incoming.apifyKeys)) patch.apifyKeys = incoming.apifyKeys
-        if (Object.keys(patch).length > 0) useKeysStore.setState(patch)
-      } catch {
-        // Ignore malformed storage events
-      }
-    }
-  })
-}
+  setGeminiKey: (key) => set({ geminiKey: key }),
+  setApifyKeys: (keys) => set({ apifyKeys: keys }),
+  addApifyKey: (key) => {
+    const current = get().apifyKeys
+    if (!current.includes(key)) set({ apifyKeys: [...current, key] })
+  },
+  removeApifyKey: (index) => {
+    const current = [...get().apifyKeys]
+    current.splice(index, 1)
+    set({ apifyKeys: current })
+  },
+}))

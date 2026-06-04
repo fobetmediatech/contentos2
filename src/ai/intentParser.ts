@@ -144,7 +144,7 @@ async function fetchIntent(
       status === 'PERMISSION_DENIED' ||
       msg.toLowerCase().includes('api key')
     if (isAuthError) {
-      throw new GeminiError('AUTH_ERROR', 'Invalid Gemini API key. Check Settings.', false)
+      throw new GeminiError('AUTH_ERROR', 'Invalid Gemini API key. Check VITE_GEMINI_KEY in .env.', false)
     }
     throw new GeminiError(
       res.status === 429 ? 'RATE_LIMITED' : 'UNKNOWN',
@@ -155,7 +155,7 @@ async function fetchIntent(
 
   // Also handle inline error objects returned with 200 (edge case)
   if (json?.error?.code === 401 || json?.error?.status === 'UNAUTHENTICATED') {
-    throw new GeminiError('AUTH_ERROR', 'Invalid Gemini API key. Check Settings.', false)
+    throw new GeminiError('AUTH_ERROR', 'Invalid Gemini API key. Check VITE_GEMINI_KEY in .env.', false)
   }
 
   const candidate = json?.candidates?.[0]
