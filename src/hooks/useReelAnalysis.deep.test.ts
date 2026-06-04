@@ -182,4 +182,36 @@ describe('useReelAnalysis.startDeepReport — R2 partial-failure', () => {
     expect(mocks.scrapeReelVideos).not.toHaveBeenCalled()
     expect(mocks.analyzeReelDeep).not.toHaveBeenCalled()
   })
+
+  it('enriches in place — keeps quick analyses + reelConversationId, reuses reels (no reset/wipe)', async () => {
+    // A finished quick run already in the store: conversation binding + scraped reels + hook analyses.
+    const store = useReelAnalysisStore.getState()
+    store.setReelConversationId('conv-1')
+    store.setActiveHandles(['nike'])
+    store.setCreatorState('nike', {
+      handle: 'nike',
+      status: 'done',
+      reels: [reel('a')],
+      analyses: {
+        a: {
+          hookArchetype: 'Curiosity gap',
+          commentsLikesRatio: 0.1,
+          retentionMechanism: 'r',
+          psychologyTrigger: 'pt',
+          replicationTemplate: 't',
+        },
+      },
+    })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('bad request', { status: 400 })))
+    mocks.scrapeReelVideos.mockResolvedValue(new Map([['a', 'urlA']]))
+    mocks.analyzeReelDeep.mockResolvedValue(deepResult())
+
+    await run(['nike'])
+
+    const s = useReelAnalysisStore.getState()
+    expect(s.reelConversationId).toBe('conv-1') // NOT nulled by a reset() — the live block stays visible
+    expect(s.creatorStates.nike.analyses.a).toBeTruthy() // quick hook analysis preserved (not wiped)
+    expect(s.creatorStates.nike.deepAnalyses?.a).toBeTruthy() // deep analysis layered on top
+    expect(mocks.scrapeTopReels).not.toHaveBeenCalled() // reused the already-scraped reels, no re-scrape
+  })
 })
