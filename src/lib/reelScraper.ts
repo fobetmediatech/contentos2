@@ -10,8 +10,7 @@
  * Serialized via global pLimit(1) — one Apify run at a time (free-tier concurrency protection).
  */
 
-import { startRun, pollRun, fetchDataset, ApifyError, apifyRunLimiter } from './apifyCore'
-import { pickAvailableKey } from './keyRotator'
+import { startRun, pollRun, fetchDataset, apifyRunLimiter, pickRunKey } from './apifyCore'
 import { ACTORS, buildReelScraperInput } from './actors'
 import type { ReelData } from '../store/reelAnalysisStore'
 
@@ -101,15 +100,7 @@ export async function scrapeTopReels(
   signal?: AbortSignal,
 ): Promise<ReelData[]> {
   return apifyLimiter(async () => {
-    // Pick an available key — throw RATE_LIMITED if all are on cooldown
-    const apiKey = pickAvailableKey(apifyKeys)
-    if (!apiKey) {
-      throw new ApifyError(
-        'RATE_LIMITED',
-        'All Apify keys are on cooldown — please wait a few minutes and try again',
-        429,
-      )
-    }
+    const apiKey = pickRunKey(apifyKeys) // per-run key (throws RATE_LIMITED if all cooled)
 
     // Build actor input: fetch 30 recent posts, filter to reels client-side
     const input = buildReelScraperInput(handle, 30)
