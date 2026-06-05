@@ -167,13 +167,17 @@ per query (initplan), not once per row.
 | File | Change |
 |---|---|
 | **New** `src/lib/supabaseClient.ts` | Client singleton + `setClerkTokenGetter()` |
-| **New** `src/store/supabaseStorage.ts` | Zustand `StateStorage` adapter → `user_state` (replaces `safePersistStorage` for the two private stores) |
-| **New** `src/lib/supabaseCorpus.ts` | `CorpusRepository` impl over the 3 corpus tables |
-| **Edit** `src/store/conversationsStore.ts` | Swap storage adapter; add `skipHydration: true` |
-| **Edit** `src/store/reelAnalysisStore.ts` | Swap storage adapter; add `skipHydration: true` |
-| **Edit** `src/lib/corpusIdb.ts` | Default `corpus` export → `supabaseCorpus`; drop the IDB impl (or keep behind a flag for tests) |
+| **New** `src/store/supabaseStorage.ts` | **Async** adapter implementing Zustand's object-based **`PersistStorage<T>`** interface (not the string-based `StateStorage` + `createJSONStorage`), passed via the `storage` option. `getItem` returns the `{ state, version }` envelope object (or `null`); `setItem` takes it — both async, backed by `user_state.value` `jsonb`. Storing the object natively (Supabase handles serialization) avoids the double JSON-string round-trip `safePersistStorage` did. `partialize`/`merge` from each store are retained unchanged |
+| **New** `src/lib/supabaseCorpus.ts` | `CorpusRepository` impl over the 3 corpus tables. **Constructs with zero I/O** — the token getter is read lazily inside each method (mirrors `corpusIdb.ts`'s lazy `db()` open), so it is safe to build at module import even before Clerk has a token |
+| **Edit** `src/store/conversationsStore.ts` | Swap storage adapter; add `skipHydration: true`; **remove** the dead `contentos-chat` legacy-migration (`onRehydrateStorage`) — it reads `localStorage`, which is dropped under cloud-first + start-fresh |
+| **Edit** `src/store/reelAnalysisStore.ts` | Swap storage adapter; add `skipHydration: true`; **keep** the `merge`/`isCleanReelRun` guard (it's behavioral — drops interrupted mid-runs on restore — not storage-specific) |
+| **Edit** `src/lib/corpusIdb.ts` | Point the existing **`corpus` export at `supabaseCorpus`** (keep the export *name* so `corpusStore.ts` and `MemoryPage.tsx` need no change); drop the IDB impl (the pure in-memory double from `corpus.ts` covers tests) |
 | **Edit** `src/App.tsx` | On sign-in: wire token getter → rehydrate both stores + `corpus.hydrate()`. On sign-out: reset stores |
 | **Edit** `.env.example` | Document `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` |
+
+> `corpusStore.ts` (`makeCorpusStore(corpus)`) and `MemoryPage.tsx` import `corpus`
+> from `corpusIdb.ts` and are **not** edited — preserving the `corpus` export name
+> in `corpusIdb.ts` keeps both working unchanged.
 
 ### CorpusRepository mapping (interface unchanged)
 
@@ -183,14 +187,25 @@ changes. Mapping from IDB ops to SQL:
 - `remember(inputs)` → per creator: `upsert` identity+freshest-metrics into
   `corpus_creators` (freshest-wins on conflict) with `times_seen = times_seen + 1`
   and `last_seen_at = now()`; `insert` one `corpus_sightings` row. Batched.
-- `get(username)` → `select … where username = ?` (+ join/2nd query for sightings).
+- `get(username)` → `select … where username = ?` (+ 2nd query for recent sightings).
 - `getMany(usernames)` → **single** `select … where username in (…)` (fixes N+1).
 - `setFeedback(username, fb, at)` → `update corpus_creators set feedback…` ;
   returns undefined if the creator row doesn't exist (never mint from a verdict).
 - `list({sort, limit})` → `select … order by <sort> limit <limit>` (server-side).
+  **Parity:** `engagementRate` is nullable — `sortCreators` coerces null→0, so the
+  SQL must use `order by engagement_rate desc nulls last` (or
+  `coalesce(engagement_rate,0)`) to match the existing in-memory ordering.
 - `count()` → `select count(*)`.
-- `rememberContent(records)` → `upsert` into `corpus_content`.
+- `rememberContent(records)` → `upsert` into `corpus_content` (by `id`). **Shared
+  semantics:** a re-analysis overwrites the row's `payload` for that reel team-wide
+  (consistent with the shared-brain model — reel shortCodes are globally unique).
 - `listContentFor(username)` → `select … where creator_username = ?`.
+- `clear()` → on the Supabase impl this is a **destructive cross-user op on shared
+  data**, so it is **not** wired to a real `delete from`. It **throws** in the
+  Supabase impl (an explicit throw is safer than a silent no-op that could mask a
+  caller expecting a real clear); `clear()` remains fully functional only on the
+  in-memory double, which is what the corpus tests exercise. No production code
+  calls `corpus.clear()` — only tests do.
 
 The pure logic in `corpus.ts` (`mergeCreator`, `sortCreators`, `applyFeedback`,
 `createMemoryCorpus`) stays for unit tests and the in-memory test double.
@@ -202,7 +217,9 @@ The pure logic in `corpus.ts` (`mergeCreator`, `sortCreators`, `applyFeedback`,
 3. `App.tsx` effect (signed-in): `setClerkTokenGetter(() => getToken())`, then
    `useConversationsStore.persist.rehydrate()`,
    `useReelAnalysisStore.persist.rehydrate()`, and `corpusStore.hydrate()`.
-4. Reads/writes go straight to Supabase (RLS scopes them).
+4. Reads/writes go straight to Supabase (RLS scopes them). The `accessToken`
+   callback runs per request, but Clerk's `getToken()` is **cached in-memory and
+   only refreshes ~every 60s** — it is not a network round-trip per query.
 5. Sign-out → reset in-memory stores so the next user on a shared machine never
    sees the previous user's private data.
 
@@ -211,11 +228,21 @@ import — before Clerk has issued a token. Deferring rehydration to the signed-
 effect guarantees the token getter is wired and a valid JWT exists before the
 first DB read.
 
+**Shared-feedback ranking implication (behavior change):** `feedback` moves from
+per-browser IndexedDB to the shared corpus. Because `dropDismissedCandidates`
+(used by `useCompetitorAnalysis` and `useLocationDiscovery`) filters against the
+corpus, **one teammate dismissing a creator removes it from everyone's future
+rankings**, and saved creators become team-wide few-shot exemplars (Phase 3).
+This is intended for the team-brain model, but it is a real change from today's
+per-device behavior and is called out here so it isn't a surprise.
+
 ## Error handling
 
 - **Offline = degraded, by design.** Cloud-first with no local cache (explicit
-  decision). A failed write surfaces a toast and is **not** silently shadowed to
-  localStorage. Reads fall back to empty state and can be retried.
+  decision). A failed write is surfaced through the app's **existing inline-error
+  pattern** (the same in-chat / inline surface the competitor & discovery
+  pipelines already use — there is no toast system) and is **not** silently
+  shadowed to localStorage. Reads fall back to empty state and can be retried.
 - **No silent failures.** Supabase errors are mapped to fixed, user-safe strings
   via the existing `errorMessages.ts` pattern (code-keyed; never raw API bodies).
 - **Sign-out store reset** prevents cross-user data leakage on shared browsers.
