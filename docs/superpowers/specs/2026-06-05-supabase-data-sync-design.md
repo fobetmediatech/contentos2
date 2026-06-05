@@ -75,6 +75,10 @@ gate — Clerk is always loaded and a token is available first.
 ### Shared "team brain" — RLS = any authenticated user
 
 ```sql
+-- Identity + freshest metrics + feedback ONLY. The bookkeeping (times_seen,
+-- first/last_seen_at) is DERIVED from corpus_sightings via a view (below) — no
+-- counter column to increment, so the only creator-row write is an idempotent
+-- metrics upsert. This is what makes concurrent team writes race-free.
 create table corpus_creators (
   username            text primary key,
   full_name           text,
@@ -89,9 +93,6 @@ create table corpus_creators (
   engagement_rate     numeric,                 -- nullable
   top_hashtags        jsonb default '[]'::jsonb,
   last_post_date      text,
-  first_seen_at       timestamptz default now(),
-  last_seen_at        timestamptz default now(),
-  times_seen          integer default 0,       -- atomic SET = times_seen + 1, no race
   feedback            text,                    -- 'saved' | 'dismissed' (shared, team-wide)
   feedback_at         timestamptz
 );
@@ -114,19 +115,37 @@ create table corpus_sightings (               -- append-only → race-free
 );
 create index corpus_sightings_creator_idx on corpus_sightings(creator_username);
 
+-- Derived bookkeeping: times_seen = COUNT, first/last_seen_at = MIN/MAX(at).
+create view corpus_creators_view as
+  select c.*,
+         coalesce(s.times_seen, 0)  as times_seen,
+         s.first_seen_at,
+         s.last_seen_at
+  from corpus_creators c
+  left join (
+    select creator_username,
+           count(*)  as times_seen,
+           min(at)   as first_seen_at,
+           max(at)   as last_seen_at
+    from corpus_sightings
+    group by creator_username
+  ) s on s.creator_username = c.username;
+
 create table corpus_content (                  -- analyzed reels per creator
   id                  text primary key,        -- reel shortCode
   creator_username    text references corpus_creators(username) on delete cascade,
-  payload             jsonb not null,          -- ContentRecord minus the FK fields
+  analyzed_at         timestamptz default now(),
+  payload             jsonb not null,          -- the full ContentRecord
   updated_at          timestamptz default now()
 );
 create index corpus_content_creator_idx on corpus_content(creator_username);
 ```
 
 **Sightings cap:** the in-memory model capped `sightings[]` at N most-recent.
-The DB keeps all sighting rows (append-only); `listSightingsFor` applies
-`order by at desc limit N` at read time so callers still see the capped, recent
-view. `times_seen` remains the lifetime count (a column, atomically incremented).
+The DB keeps all sighting rows (append-only); reads apply `order by at desc
+limit N` so callers still see the capped, recent view. `times_seen` is the
+lifetime count, derived as `COUNT(sightings)` via `corpus_creators_view` — never
+clobbered, never raced.
 
 ### Private per-user — RLS = `(select auth.jwt()->>'sub') = user_id`
 
@@ -184,17 +203,26 @@ per query (initplan), not once per row.
 The existing async `CorpusRepository` interface is preserved; only the impl
 changes. Mapping from IDB ops to SQL:
 
-- `remember(inputs)` → per creator: `upsert` identity+freshest-metrics into
-  `corpus_creators` (freshest-wins on conflict) with `times_seen = times_seen + 1`
-  and `last_seen_at = now()`; `insert` one `corpus_sightings` row. Batched.
-- `get(username)` → `select … where username = ?` (+ 2nd query for recent sightings).
-- `getMany(usernames)` → **single** `select … where username in (…)` (fixes N+1).
-- `setFeedback(username, fb, at)` → `update corpus_creators set feedback…` ;
-  returns undefined if the creator row doesn't exist (never mint from a verdict).
-- `list({sort, limit})` → `select … order by <sort> limit <limit>` (server-side).
-  **Parity:** `engagementRate` is nullable — `sortCreators` coerces null→0, so the
-  SQL must use `order by engagement_rate desc nulls last` (or
-  `coalesce(engagement_rate,0)`) to match the existing in-memory ordering.
+- `remember(inputs)` → per creator: `insert` one `corpus_sightings` row (append,
+  race-free); and upsert the creator row — `upsert(row)` when the scrape has data
+  (`followersCount > 0`, freshest-metrics-win) or `upsert(row, {ignoreDuplicates:
+  true})` when it doesn't (ensure the row exists without clobbering good metrics
+  with zeros). No counter to increment. Then return `getMany(usernames)` so callers
+  get fully-hydrated records (identity + derived bookkeeping + recent sightings).
+- `get(username)` → `select … from corpus_creators_view where username = ?` (+ 2nd
+  query: recent sightings, `order by at desc limit SIGHTINGS_CAP`), assembled into
+  a `CreatorRecord`.
+- `getMany(usernames)` → **single** `select … from corpus_creators_view where
+  username in (…)` + one sightings query `where creator_username in (…)`, grouped
+  in JS (fixes N+1).
+- `setFeedback(username, fb, at)` → `update corpus_creators set feedback…
+  .eq('username', …).select()` ; returns undefined if no row updated (never mint
+  from a verdict).
+- `list({sort, limit})` → `select … from corpus_creators_view order by <sort>
+  limit <limit>` (server-side; the view exposes `times_seen` / `last_seen_at` /
+  `followers_count` / `engagement_rate`). **Parity:** `engagementRate` is nullable
+  and `sortCreators` coerces null→0, so use `order by engagement_rate desc nulls
+  last` to match the in-memory ordering.
 - `count()` → `select count(*)`.
 - `rememberContent(records)` → `upsert` into `corpus_content` (by `id`). **Shared
   semantics:** a re-analysis overwrites the row's `payload` for that reel team-wide
