@@ -186,7 +186,7 @@ create table if not exists corpus_sightings (
   content_focus       text,
   partnership_ready   boolean,
   location_confidence text,
-  created_by          text
+  created_by          text default (auth.jwt() ->> 'sub')  -- auto-filled: who contributed it
 );
 create index if not exists corpus_sightings_creator_idx on corpus_sightings(creator_username);
 
@@ -484,7 +484,9 @@ describe('getMany', () => {
 
 describe('setFeedback', () => {
   it('returns undefined when no creator row is updated', async () => {
-    mock = makeSupabaseMock({ update: [[]] }) // update returns no rows
+    // The impl reads `data` from the trailing .select(), so the "no rows" result is
+    // queued under `select` (not `update`): .update().eq().select() resolves [].
+    mock = makeSupabaseMock({ select: [[]] })
     const corpus = createSupabaseCorpus()
     const out = await corpus.setFeedback('ghost', 'saved', 123)
     expect(mock.calls.update[0]).toMatchObject({ feedback: 'saved' })
@@ -601,7 +603,9 @@ async function fetchSightings(usernames: string[]): Promise<Record<string, Sight
 }
 
 export function createSupabaseCorpus(): CorpusRepository {
-  return {
+  // Capture `repo` so methods call repo.getMany()/repo.get() instead of `this.*` —
+  // survives destructuring (const { remember } = corpus) without unbinding.
+  const repo: CorpusRepository = {
     async remember(inputs: CreatorInput[]) {
       for (const { profile, sighting } of inputs) {
         const hasData = profile.followersCount > 0
@@ -641,11 +645,11 @@ export function createSupabaseCorpus(): CorpusRepository {
         })
         if (sErr) throw sErr
       }
-      return this.getMany(inputs.map((i) => i.profile.username))
+      return repo.getMany(inputs.map((i) => i.profile.username))
     },
 
     async get(username: string) {
-      const recs = await this.getMany([username])
+      const recs = await repo.getMany([username])
       return recs[0]
     },
 
@@ -669,7 +673,7 @@ export function createSupabaseCorpus(): CorpusRepository {
         .select()
       if (error) throw error
       if (!data || (data as unknown[]).length === 0) return undefined
-      return this.get(username)
+      return repo.get(username)
     },
 
     async list(opts?: { sort?: CorpusSort; limit?: number }) {
@@ -687,6 +691,8 @@ export function createSupabaseCorpus(): CorpusRepository {
     },
 
     async count() {
+      // Count over corpus_creators (PK = username), so this is distinct creators —
+      // parity with the in-memory impl's store.size (NOT a sightings count).
       const { count, error } = await supabase
         .from('corpus_creators')
         .select('*', { count: 'exact', head: true })
@@ -723,6 +729,7 @@ export function createSupabaseCorpus(): CorpusRepository {
       throw new Error('clear() is not supported on the shared Supabase corpus')
     },
   }
+  return repo
 }
 ```
 
