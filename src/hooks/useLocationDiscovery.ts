@@ -36,13 +36,13 @@ export const MIN_LOCATION_RESULTS = 4
 
 export function useLocationDiscovery() {
   const { startDiscovery, setStep, setStepProgressDetail, setResults, setError, reset } = useDiscoveryStore()
-  const { geminiKey, apifyKeys, pickKey } = useKeysStore()
+  const { geminiKeys, apifyKeys, pickKey } = useKeysStore()
 
   const mutation = useMutation({
     mutationFn: async ({ params, externalSignal }: { params: DiscoveryParams; externalSignal?: AbortSignal }) => {
       // Guard only — the client picks a fresh key PER RUN from the full array (load-spreading).
       if (!pickKey()) throw new Error('No Apify keys available. All keys are in cooldown.')
-      if (!geminiKey?.trim()) throw new Error('Gemini API key is not configured.')
+      if (!geminiKeys.length) throw new Error('Gemini API key is not configured.')
 
       // linkAbort: internal 150s timeout + an optional external (agent-loop) signal.
       // wasSuperseded() tells an intentional steer (silent) from a timeout (real error).
@@ -58,7 +58,7 @@ export function useLocationDiscovery() {
         // Step 1: Generate location-aware hashtags
         setStep(1)
         const { hashtags } = await generateHashtags(
-          geminiKey,
+          geminiKeys,
           safeCity,
           safeNiche,
           params.depth,
@@ -99,7 +99,7 @@ export function useLocationDiscovery() {
 
           try {
             const { hashtags: expandedHashtags } = await generateHashtags(
-              geminiKey,
+              geminiKeys,
               safeCity,
               safeNiche,
               'deep',          // always deep for expansion — more hashtags, different angle
@@ -162,7 +162,7 @@ export function useLocationDiscovery() {
           safeNiche,
         )
         let output = await analyzeDiscovery(
-          geminiKey,
+          geminiKeys,
           safeCity,
           safeNiche,
           finalFiltered,
@@ -176,7 +176,7 @@ export function useLocationDiscovery() {
         // (removes Gemini's geographic/niche framing so it ranks by engagement alone)
         if (output.results.length === 0) {
           output = await analyzeDiscovery(
-            geminiKey,
+            geminiKeys,
             '',  // remove city context
             '',  // remove niche context
             finalCandidates,  // use ALL candidates (including expansion), not just filtered

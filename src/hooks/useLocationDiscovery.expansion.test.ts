@@ -62,6 +62,7 @@ vi.mock('../store/discoveryStore', async (importOriginal) => {
 vi.mock('../store/keysStore', () => ({
   useKeysStore: vi.fn(() => ({
     geminiKey: 'test-key',
+    geminiKeys: ['test-key'],
     apifyKeys: ['test-apify-key'],
     pickKey: vi.fn(() => 'test-apify-key'),
   })),

@@ -96,7 +96,7 @@ export async function analyzeReelDeep(
  */
 export async function analyzeReel(
   reel: ReelData,
-  geminiKey: string,
+  geminiKey: string | string[],
   signal?: AbortSignal,
 ): Promise<ReelAnalysis> {
   const prompt = buildReelAnalysisPrompt(reel)
@@ -136,7 +136,7 @@ export async function analyzeReel(
  */
 export async function synthesizeNiche(
   summaries: PerCreatorSummary[],
-  geminiKey: string,
+  geminiKey: string | string[],
   benchmarks: SynthesisOutput['benchmarks'],
   signal?: AbortSignal,
 ): Promise<SynthesisOutput> {
@@ -361,7 +361,7 @@ export function buildDeepReportTable(playbooks: DeepCreatorPlaybook[]): DeepRepo
  */
 export async function synthesizeDeepReport(
   playbooks: DeepCreatorPlaybook[],
-  geminiKey: string,
+  geminiKey: string | string[],
   signal?: AbortSignal,
 ): Promise<DeepReportSynthesis> {
   const raw = await callGeminiWithSchema<Partial<DeepReportSynthesis>>(
