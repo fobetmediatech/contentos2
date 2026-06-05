@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { Brain, FileText, MessageSquare } from 'lucide-react'
+import { UserButton } from '@clerk/react'
 import { useCorpusStore } from '../store/corpusStore'
 
 interface AppLayoutProps {
@@ -68,6 +69,17 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
               Report
             </Link>
           </nav>
+
+          {/* User avatar — Clerk's UserButton shows initials/photo; click opens profile + sign-out popup */}
+          <UserButton
+            appearance={{
+              variables: {
+                colorBackground: '#3D3025',
+                colorText: '#F5EDD6',
+                colorPrimary: '#E07B3A',
+              },
+            }}
+          />
         </div>
       </header>
 

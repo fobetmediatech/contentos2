@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [3.3.0.0] — 2026-06-05
+
+**Clerk auth gate.** The app now requires a Clerk login before anything is accessible. Team members sign in via magic link or Google (configured in the Clerk dashboard); the sign-in card is themed to the chai dark design system. All protected routes redirect to `/sign-in` when unauthenticated.
+
+### Added
+
+- **Auth gate** — all routes (`/`, `/memory`, `/report`) are protected by a `ProtectedRoute` layout that wraps `<SignedIn>/<SignedOut>` from Clerk. Unauthenticated visitors are redirected to `/sign-in`.
+- **`/sign-in` page** — a full-screen chai dark page hosting Clerk's `<SignIn>` component, themed to DESIGN.md tokens (saffron accent, warm dark card background, Outfit font).
+- **`<UserButton>` in the nav** — a user avatar/initials button in the top-right of every page that opens Clerk's profile popup with a sign-out option.
+- **`VITE_CLERK_PUBLISHABLE_KEY`** — new required env var (publishable key from clerk.com, safe to expose publicly). Documented in `.env.example`.
+
 ## [3.2.0.0] — 2026-06-04
 
 **Gemini key rotation.** Gemini calls now rotate across a pool of keys, so a team sharing the app no longer rate-limits a single Gemini key. Mirrors the Apify key pool — add several Gemini keys and concurrent load fans out across them.
