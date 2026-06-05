@@ -12,6 +12,7 @@
 import { buildCompetitorPrompt, buildDiscoveryPrompt, buildClarificationPrompt, buildContentPrompt, type AnalysisOutput, type DiscoveryOutput, type ClarificationQuestion, type ContentContext } from './prompts'
 import type { NormalizedProfile } from '../lib/transformers'
 import type { PreferenceExemplars } from '../lib/corpus'
+import { pickGeminiKey, markGeminiKeyCooldown, hasFreshGeminiKey } from '../lib/geminiKeyRotator'
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta'
 // Model precedence: env override → default. Update default here when Google deprecates.
@@ -123,20 +124,74 @@ function joinThoughtFilteredText(parts: GeminiPart[] | undefined): string {
   return (parts ?? []).filter((p) => !p.thought).map((p) => p.text ?? '').join('')
 }
 
-// ----- Generic schema-constrained Gemini call with retry -----
+// ----- Key rotation + generate (shared by every Gemini call) -----
+
+/** Exponential backoff with jitter (ms), honoring a Retry-After header (seconds) when present. */
+function geminiBackoffMs(attempt: number, retryAfter: string | null): number {
+  const ra = retryAfter ? Number(retryAfter) : NaN
+  if (Number.isFinite(ra) && ra > 0) return Math.min(ra * 1000, 8000) + Math.random() * 250
+  return Math.min(Math.pow(2, attempt) * 1000, 8000) + Math.random() * 500 // ~1s,2s,4s,8s + jitter
+}
 
 /**
- * Low-level helper for all JSON-mode Gemini calls.
+ * POST to Gemini generateContent with KEY ROTATION + 429 failover.
  *
- * Builds and POSTs to Gemini with a caller-supplied responseSchema, applies
- * 3-attempt exponential backoff on 429, filters thought parts, handles
- * MAX_TOKENS and safety blocks, and JSON-parses the result as T.
+ * Picks a round-robin key from the pool per attempt (spreads concurrent multi-user load so no
+ * single key's RPM/TPM is the bottleneck). On 429 / RESOURCE_EXHAUSTED it cools that key (60s)
+ * and fails over to a fresh key immediately, or backs off (jittered, honoring Retry-After) when
+ * every key is cooling down. Returns the parsed response for any non-rate-limit outcome — the
+ * caller maps non-OK via mapGeminiHttpError and parses candidates.
  *
- * Use this for every structured-output call. For plain-text output
- * (conversational follow-ups) keep using direct fetch — see callGeminiFollowUp.
+ * Accepts a single key (back-compat) or a pool; a single key still gets backoff/retry, a pool
+ * additionally rotates + fails over. This is the ONE place 429s + rotation are handled, so every
+ * caller (schema / content / tools / intent / hashtags) inherits multi-user resilience.
+ */
+export async function geminiGenerate(
+  apiKeys: string | string[],
+  requestBody: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<{ ok: boolean; status: number; json: GeminiResponse }> {
+  const pool = (Array.isArray(apiKeys) ? apiKeys : [apiKeys]).map((k) => k.trim()).filter(Boolean)
+  if (pool.length === 0) {
+    throw new GeminiError('AUTH_ERROR', 'No Gemini API key configured — set VITE_GEMINI_KEY or VITE_GEMINI_KEYS.', false)
+  }
+  const url = `${GEMINI_BASE}/models/${MODEL}:generateContent`
+  const maxAttempts = Math.max(3, pool.length) + 1
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const picked = pickGeminiKey(pool)! // pool non-empty → never null
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: geminiHeaders(picked.key),
+      body: JSON.stringify(requestBody),
+      signal,
+    })
+    const json = (await res.json().catch(() => ({
+      error: { code: res.status, message: res.statusText, status: 'UNKNOWN' },
+    }))) as GeminiResponse
+
+    if (!isRateLimited(res.status, json)) return { ok: res.ok, status: res.status, json }
+
+    markGeminiKeyCooldown(picked.key) // route the next pick around this just-limited key
+    if (attempt >= maxAttempts - 1) break
+    // Fail over to a fresh key immediately; back off only when the whole pool is cooling down.
+    const wait = hasFreshGeminiKey(pool) ? 0 : geminiBackoffMs(attempt, res.headers?.get('retry-after') ?? null)
+    if (wait > 0) await abortableSleep(wait, signal)
+  }
+  throw new GeminiError('RATE_LIMITED', 'Gemini API rate limit exceeded after retries across all keys.', false)
+}
+
+// ----- Generic schema-constrained Gemini call -----
+
+/**
+ * Low-level helper for all JSON-mode Gemini calls. Builds + POSTs with a caller-supplied
+ * responseSchema through geminiGenerate (key rotation + 429 failover), filters thought parts,
+ * handles MAX_TOKENS + safety blocks, and JSON-parses the result as T.
+ *
+ * @param apiKeys A single key (back-compat) or the rotation pool (keysStore.geminiKeys).
  */
 export async function callGeminiWithSchema<T>(
-  apiKey: string,
+  apiKeys: string | string[],
   prompt: string,
   schema: Record<string, unknown>,          // responseSchema object
   options?: {
@@ -146,28 +201,7 @@ export async function callGeminiWithSchema<T>(
     signal?: AbortSignal
   },
 ): Promise<T> {
-  return _callGeminiWithRetry<T>(apiKey, prompt, schema, options, 0)
-}
-
-/**
- * Internal retry helper — not exported. Carries the attempt counter privately
- * so callers never see or pass it.
- */
-async function _callGeminiWithRetry<T>(
-  apiKey: string,
-  prompt: string,
-  schema: Record<string, unknown>,
-  options: Parameters<typeof callGeminiWithSchema>[3],
-  attempt: number,
-): Promise<T> {
-  const {
-    temperature = 0.3,
-    maxOutputTokens = 8192,
-    thinkingBudget,
-    signal,
-  } = options ?? {}
-
-  const url = `${GEMINI_BASE}/models/${MODEL}:generateContent`
+  const { temperature = 0.3, maxOutputTokens = 8192, thinkingBudget, signal } = options ?? {}
 
   const generationConfig: Record<string, unknown> = {
     temperature,
@@ -175,41 +209,14 @@ async function _callGeminiWithRetry<T>(
     responseMimeType: 'application/json',
     responseSchema: schema,
   }
+  if (thinkingBudget !== undefined) generationConfig.thinkingConfig = { thinkingBudget }
 
-  if (thinkingBudget !== undefined) {
-    generationConfig.thinkingConfig = { thinkingBudget }
-  }
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: geminiHeaders(apiKey),
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig,
-    }),
+  const { ok, status, json } = await geminiGenerate(
+    apiKeys,
+    { contents: [{ parts: [{ text: prompt }] }], generationConfig },
     signal,
-  })
-
-  // Handle HTTP-level errors
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: { code: res.status, message: res.statusText, status: 'UNKNOWN' } })) as GeminiResponse
-
-    const status = body.error?.status ?? ''
-
-    if (res.status === 429 || status === 'RESOURCE_EXHAUSTED') {
-      if (attempt < 3) {
-        const backoff = Math.pow(2, attempt) * 1000 // 1s, 2s, 4s
-        await abortableSleep(backoff, signal)
-        return _callGeminiWithRetry<T>(apiKey, prompt, schema, options, attempt + 1)
-      }
-      throw new GeminiError('RATE_LIMITED', 'Gemini API rate limit exceeded after 3 retries.', false)
-    }
-
-    // Non-429 errors map uniformly (shared with callGeminiContent + callGeminiWithTools).
-    throw mapGeminiHttpError(res.status, body)
-  }
-
-  const json = (await res.json()) as GeminiResponse
+  )
+  if (!ok) throw mapGeminiHttpError(status, json)
 
   // Safety block: empty candidates array
   if (!json.candidates || json.candidates.length === 0) {
@@ -221,13 +228,7 @@ async function _callGeminiWithRetry<T>(
   }
 
   const candidate = json.candidates[0]
-
-  // Gemini 2.5 Flash includes thought parts (internal reasoning) in the response.
-  // Skip them — only join parts where thought !== true to get the actual JSON output.
-  const text = (candidate.content?.parts ?? [])
-    .filter((p) => !p.thought)
-    .map((p) => p.text ?? '')
-    .join('')
+  const text = joinThoughtFilteredText(candidate.content?.parts)
 
   // MAX_TOKENS means the model stopped mid-output — JSON will be truncated and unparseable.
   if (candidate.finishReason === 'MAX_TOKENS') {
@@ -237,14 +238,12 @@ async function _callGeminiWithRetry<T>(
       false,
     )
   }
-
   if (!text) {
     throw new GeminiError('SAFETY_BLOCK', 'Gemini returned an empty response.', false)
   }
 
   // Strip markdown code fences if present (some models add them despite responseMimeType)
   const cleaned = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim()
-
   try {
     return JSON.parse(cleaned) as T
   } catch (err) {
@@ -348,7 +347,7 @@ function coerceDiscoveryOutput(parsed: DiscoveryOutput): DiscoveryOutput {
  *                              When present and non-empty, injected as USER REFINEMENT to direct ranking.
  */
 export async function analyzeCompetitors(
-  geminiKey: string,
+  geminiKey: string | string[],
   inputProfiles: NormalizedProfile[],
   candidateProfiles: NormalizedProfile[],
   signal?: AbortSignal,
@@ -377,7 +376,7 @@ export async function analyzeCompetitors(
  * @param businessCount Number of business profiles in candidateProfiles (optional).
  */
 export async function analyzeDiscovery(
-  geminiKey: string,
+  geminiKey: string | string[],
   city: string,
   niche: string,
   candidateProfiles: NormalizedProfile[],
@@ -411,7 +410,7 @@ export async function analyzeDiscovery(
  * so the analysis pipeline never halts due to this optional step.
  */
 export async function generateClarificationQuestion(
-  geminiKey: string,
+  geminiKey: string | string[],
   referenceProfile: NormalizedProfile,
   candidates: NormalizedProfile[],
   nicheContext: string,
@@ -473,37 +472,28 @@ export async function generateClarificationQuestion(
  * @returns           Gemini's prose response (markdown bold/lists allowed).
  */
 export async function callGeminiContent(
-  geminiKey: string,
+  apiKeys: string | string[],
   userMessage: string,
   context?: ContentContext,
   signal?: AbortSignal,
 ): Promise<string> {
   const fullPrompt = buildContentPrompt(userMessage, context)
 
-  const url = `${GEMINI_BASE}/models/${MODEL}:generateContent`
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: geminiHeaders(geminiKey),
-    body: JSON.stringify({
+  // Routes through geminiGenerate, so the copilot turn now gets the SAME key rotation + 429
+  // failover as everything else (it previously had no retry at all — instant fail under load).
+  const { ok, status, json } = await geminiGenerate(
+    apiKeys,
+    {
       contents: [{ parts: [{ text: fullPrompt }] }],
       generationConfig: {
         temperature: 0.7,       // natural, conversational copywriting tone
         maxOutputTokens: 1024,  // content generation (hook lists, scripts) runs longer
       },
-    }),
+    },
     signal,
-  })
+  )
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as GeminiResponse
-    if (isRateLimited(res.status, body)) {
-      throw new GeminiError('RATE_LIMITED', 'Gemini rate limit hit — wait a moment and try again.', false)
-    }
-    throw mapGeminiHttpError(res.status, body)
-  }
-
-  const json = (await res.json()) as GeminiResponse
+  if (!ok) throw mapGeminiHttpError(status, json)
 
   if (!json.candidates || json.candidates.length === 0) {
     throw new GeminiError('SAFETY_BLOCK', 'Gemini blocked the follow-up response.', false)
@@ -549,23 +539,12 @@ export type GeminiToolResult =
  * backoff (max 3); other HTTP errors map via the shared mapGeminiHttpError.
  */
 export async function callGeminiWithTools(
-  apiKey: string,
+  apiKeys: string | string[],
   contents: GeminiTurn[],
   tools: GeminiFunctionDeclaration[],
   options?: { temperature?: number; thinkingBudget?: number; signal?: AbortSignal; systemInstruction?: string },
 ): Promise<GeminiToolResult> {
-  return _callGeminiWithToolsRetry(apiKey, contents, tools, options, 0)
-}
-
-async function _callGeminiWithToolsRetry(
-  apiKey: string,
-  contents: GeminiTurn[],
-  tools: GeminiFunctionDeclaration[],
-  options: Parameters<typeof callGeminiWithTools>[3],
-  attempt: number,
-): Promise<GeminiToolResult> {
   const { temperature = 0.3, thinkingBudget, signal, systemInstruction } = options ?? {}
-  const url = `${GEMINI_BASE}/models/${MODEL}:generateContent`
 
   const generationConfig: Record<string, unknown> = { temperature }
   if (thinkingBudget !== undefined) generationConfig.thinkingConfig = { thinkingBudget }
@@ -577,28 +556,15 @@ async function _callGeminiWithToolsRetry(
   }
   if (systemInstruction) reqBody.systemInstruction = { parts: [{ text: systemInstruction }] }
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: geminiHeaders(apiKey),
-    body: JSON.stringify(reqBody),
-    signal,
-  })
+  // geminiGenerate handles key rotation + 429 retry/failover; non-429 errors + parsing stay here.
+  const { ok, status, json } = await geminiGenerate(apiKeys, reqBody, signal)
 
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({ error: { code: res.status, message: res.statusText, status: 'UNKNOWN' } }))) as GeminiResponse
-    if (isRateLimited(res.status, body)) {
-      if (attempt < 3) {
-        await abortableSleep(Math.pow(2, attempt) * 1000, signal) // 1s, 2s, 4s
-        return _callGeminiWithToolsRetry(apiKey, contents, tools, options, attempt + 1)
-      }
-      throw new GeminiError('RATE_LIMITED', 'Gemini API rate limit exceeded after 3 retries.', false)
-    }
+  if (!ok) {
     // Diagnostic (console only — raw body is NEVER shown to the user, per C2/H11).
-    console.error('[gemini:tools] HTTP error', res.status, body.error?.status, body.error?.message)
-    throw mapGeminiHttpError(res.status, body)
+    console.error('[gemini:tools] HTTP error', status, json.error?.status, json.error?.message)
+    throw mapGeminiHttpError(status, json)
   }
 
-  const json = (await res.json()) as GeminiResponse
   if (!json.candidates || json.candidates.length === 0) {
     console.error('[gemini:tools] blocked / no candidates', json)
     throw new GeminiError('SAFETY_BLOCK', 'Gemini blocked the response (content policy).', false)

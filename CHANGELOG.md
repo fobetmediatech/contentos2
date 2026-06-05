@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [3.2.0.0] — 2026-06-04
+
+**Gemini key rotation.** Gemini calls now rotate across a pool of keys, so a team sharing the app no longer rate-limits a single Gemini key. Mirrors the Apify key pool — add several Gemini keys and concurrent load fans out across them.
+
+### Added
+
+- **Gemini key pool** — set `VITE_GEMINI_KEYS` to a comma-separated list of any number of Gemini keys (your existing `VITE_GEMINI_KEY` joins the pool). Each call picks a round-robin key so concurrent multi-user load spreads across them instead of hammering one key's per-minute RPM/TPM.
+
+### Fixed
+
+- **Multi-user rate limits.** With one shared key, several teammates running analyses at once tripped Gemini's `429` — surfacing as "rate limit hit", "something went wrong", and half-finished answers (a multi-step flow dying mid-way). Every Gemini path (competitor/discovery ranking, reel hook analysis, the agent loop, the chat copilot, hashtag generation) now routes through one helper that rotates keys and, on a `429`, cools the key for 60s and fails over to a fresh one — with jittered backoff honoring `Retry-After` when the whole pool is busy. The copilot/content call, which previously didn't retry `429` at all, now does.
+
 ## [3.1.2.0] — 2026-06-04
 
 **Deep report no longer wipes the screen.** Clicking "Generate deep report" used to `reset()` the whole reel store — which erased the hook analysis, the button, and the conversation binding, leaving a blank screen while the deep run worked invisibly in the background ("click it and everything vanishes"). The deep report now enriches the existing results in place.

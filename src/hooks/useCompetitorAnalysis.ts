@@ -38,7 +38,7 @@ const MIN_COMPETITOR_RESULTS = 8
 export function useCompetitorAnalysis() {
   const store = useAnalysisStore()
   const { startAnalysis, setStep, setResults, setError, reset, setClarification, setStepProgressDetail, setDidExpand, answerClarification: storeAnswerClarification } = store
-  const { geminiKey, apifyKeys, pickKey } = useKeysStore()
+  const { geminiKeys, apifyKeys, pickKey } = useKeysStore()
 
   // ── Phase 1: Discovery + clarification question generation ────────────────
 
@@ -47,7 +47,7 @@ export function useCompetitorAnalysis() {
       // Guard: at least one key must be available. The scrape clients pick a fresh key
       // PER RUN from the full array (load-spreading), so we pass apifyKeys, not one key.
       if (!pickKey()) throw new Error('No Apify keys available. All keys are in cooldown.')
-      if (!geminiKey?.trim()) throw new Error('Gemini API key is not configured.')
+      if (!geminiKeys.length) throw new Error('Gemini API key is not configured.')
 
       // linkAbort: internal 150s timeout + an optional external (agent-loop) signal.
       const abort = linkAbort(TIMEOUT_MS, externalSignal)
@@ -94,7 +94,7 @@ export function useCompetitorAnalysis() {
         const referenceProfile = inputProfiles[0]
         const clarificationQuestion = referenceProfile
           ? await generateClarificationQuestion(
-              geminiKey,
+              geminiKeys,
               referenceProfile,
               candidates,
               params.nicheContext,
@@ -126,7 +126,7 @@ export function useCompetitorAnalysis() {
 
   const analyzeMutation = useMutation({
     mutationFn: async ({ answer, nicheContext, externalSignal }: { answer: string; nicheContext: string; externalSignal?: AbortSignal }) => {
-      if (!geminiKey?.trim()) throw new Error('Gemini API key is not configured.')
+      if (!geminiKeys.length) throw new Error('Gemini API key is not configured.')
 
       // Read pendingDiscovery synchronously from store at call time — avoids stale closure.
       const discovery = useAnalysisStore.getState().pendingDiscovery
@@ -149,7 +149,7 @@ export function useCompetitorAnalysis() {
 
         // Step 5: AI rationale — nicheContext + clarification answer + preference signal (tiebreaker)
         let output = await analyzeCompetitors(
-          geminiKey,
+          geminiKeys,
           inputProfiles,
           candidateProfiles,
           abort.signal,
@@ -164,7 +164,7 @@ export function useCompetitorAnalysis() {
         if (output.competitors.length === 0 && hasFilterSignal) {
           console.warn('[analysis] zero competitors with filter signals — retrying without them')
           output = await analyzeCompetitors(
-            geminiKey,
+            geminiKeys,
             inputProfiles,
             candidateProfiles,
             abort.signal,

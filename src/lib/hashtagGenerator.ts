@@ -13,10 +13,7 @@
  *   - Allow only word chars, spaces, commas, hyphens
  */
 
-import { GeminiError, geminiHeaders } from '../ai/gemini'
-
-const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta'
-const MODEL = import.meta.env.VITE_GEMINI_MODEL ?? 'gemini-2.5-flash'
+import { GeminiError, geminiGenerate } from '../ai/gemini'
 
 // Number of hashtags to request per depth level
 const HASHTAG_COUNT: Record<'standard' | 'deep', number> = {
@@ -84,7 +81,7 @@ export function ruleFallback(city: string, niche: string, count: number): string
 // ----- Gemini micro-call -----
 
 async function callGeminiForHashtags(
-  geminiKey: string,
+  apiKeys: string | string[],
   city: string,
   niche: string,
   count: number,
@@ -117,42 +114,34 @@ Good examples for fitness in Mumbai: "MumbaiFitness", "MumbaiFitnessVlogger", "M
 
 Return ONLY a JSON array of strings. No # prefix. No explanation. No markdown.`
 
-  const url = `${GEMINI_BASE}/models/${MODEL}:generateContent`
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: geminiHeaders(geminiKey),
-    body: JSON.stringify({
+  // Routes through geminiGenerate → key rotation + 429 retry/failover across the pool.
+  const { ok, status, json } = await geminiGenerate(
+    apiKeys,
+    {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
         temperature: 0.4,
         maxOutputTokens: 256,
         responseMimeType: 'application/json',
-        responseSchema: {
-          type: 'array',
-          items: { type: 'string' },
-        },
+        responseSchema: { type: 'array', items: { type: 'string' } },
       },
-    }),
+    },
     signal,
-  })
+  )
 
-  if (!res.ok) {
+  if (!ok) {
     // H10: detect an auth failure and throw a typed GeminiError so generateHashtags
-    // re-throws it (instead of silently falling back to template hashtags, which
-    // leaves the user with worse results and no clue their key is bad).
-    const body = await res.json().catch(() => null)
-    const status: string = body?.error?.status ?? ''
+    // re-throws it (instead of silently falling back to template hashtags). 429 rotation
+    // was already handled by geminiGenerate — this is a non-rate-limit failure.
+    const s: string = json.error?.status ?? ''
     const isAuth =
-      res.status === 401 ||
-      status === 'UNAUTHENTICATED' ||
-      status === 'PERMISSION_DENIED' ||
-      (body?.error?.message ?? '').toLowerCase().includes('api key')
+      status === 401 ||
+      s === 'UNAUTHENTICATED' ||
+      s === 'PERMISSION_DENIED' ||
+      (json.error?.message ?? '').toLowerCase().includes('api key')
     if (isAuth) throw new GeminiError('AUTH_ERROR', 'Invalid Gemini API key. Check VITE_GEMINI_KEY in .env.', false)
-    throw new Error(`Gemini hashtag call failed: ${res.status}`)
+    throw new Error(`Gemini hashtag call failed: ${status}`)
   }
-
-  const json = await res.json()
   const candidate = json.candidates?.[0]
   const text = (candidate?.content?.parts ?? [])
     .filter((p: { thought?: boolean }) => !p.thought)
@@ -202,7 +191,7 @@ export interface HashtagResult {
  *                        Sanitized inside this function before prompt injection.
  */
 export async function generateHashtags(
-  geminiKey: string,
+  apiKeys: string | string[],
   city: string,
   niche: string,
   depth: 'standard' | 'deep' = 'standard',
@@ -219,9 +208,9 @@ export async function generateHashtags(
   }
 
   // Try Gemini — fall back to rules on any error
-  if (geminiKey?.trim()) {
+  if ((Array.isArray(apiKeys) ? apiKeys : [apiKeys]).some((k) => k.trim())) {
     try {
-      const hashtags = await callGeminiForHashtags(geminiKey, safeCity, safeNiche, count, signal, excludeHashtags)
+      const hashtags = await callGeminiForHashtags(apiKeys, safeCity, safeNiche, count, signal, excludeHashtags)
       console.log(`[hashtagGenerator] Gemini returned ${hashtags.length} hashtags:`, hashtags)
       return { hashtags, fromAI: true }
     } catch (err) {

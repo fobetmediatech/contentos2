@@ -11,9 +11,20 @@
 import { create } from 'zustand'
 import { isReady, pickAvailableKey, getKeyExpiry } from '../lib/keyRotator'
 
-// VITE_ env vars are inlined at build time. This Gemini key powers all browser-side Gemini
+// VITE_ env vars are inlined at build time. These Gemini keys power all browser-side Gemini
 // calls; the serverless deep-reel function uses its own GEMINI_API_KEY (server-side env).
-const ENV_GEMINI_KEY: string = import.meta.env.VITE_GEMINI_KEY ?? ''
+// Pool = VITE_GEMINI_KEY (single, back-compat) + VITE_GEMINI_KEYS (comma-separated, any count),
+// deduped — mirrors the Apify pool. Rotation across the pool spreads concurrent multi-user load
+// so no single key's per-minute RPM/TPM is the bottleneck (geminiKeyRotator round-robins them).
+const ENV_GEMINI_KEYS: string[] = [
+  ...new Set(
+    [import.meta.env.VITE_GEMINI_KEY, ...String(import.meta.env.VITE_GEMINI_KEYS ?? '').split(',')]
+      .map((k) => (typeof k === 'string' ? k.trim() : ''))
+      .filter((k) => k.length > 0),
+  ),
+]
+// First key — back-compat for the few readers that still want a single string (isReady, fallbacks).
+const ENV_GEMINI_KEY: string = ENV_GEMINI_KEYS[0] ?? ''
 // Numbered slots (back-compat) PLUS an optional comma-separated VITE_APIFY_KEYS for any number
 // of keys — there's no fixed cap; keyRotator round-robins whatever it's given. Deduped.
 const ENV_APIFY_KEYS: string[] = [
@@ -37,7 +48,8 @@ const ENV_APIFY_KEYS: string[] = [
 ]
 
 interface KeysState {
-  geminiKey: string
+  geminiKey: string    // first key — back-compat for single-key readers (isReady, fallbacks)
+  geminiKeys: string[] // full pool — geminiKeyRotator round-robins any count
   apifyKeys: string[]  // no fixed cap — keyRotator round-robins any count
 
   // Derived selectors
@@ -47,6 +59,7 @@ interface KeysState {
 
   // Setters — internal/test seeding only (prod keys come from .env; there is no UI).
   setGeminiKey: (key: string) => void
+  setGeminiKeys: (keys: string[]) => void
   setApifyKeys: (keys: string[]) => void
   addApifyKey: (key: string) => void
   removeApifyKey: (index: number) => void
@@ -54,13 +67,15 @@ interface KeysState {
 
 export const useKeysStore = create<KeysState>()((set, get) => ({
   geminiKey: ENV_GEMINI_KEY,
+  geminiKeys: ENV_GEMINI_KEYS,
   apifyKeys: ENV_APIFY_KEYS,
 
   isReady: () => isReady(get().geminiKey, get().apifyKeys),
   pickKey: () => pickAvailableKey(get().apifyKeys),
   getKeyExpiry: (key: string) => getKeyExpiry(key),
 
-  setGeminiKey: (key) => set({ geminiKey: key }),
+  setGeminiKey: (key) => set({ geminiKey: key, geminiKeys: key.trim() ? [key.trim()] : [] }),
+  setGeminiKeys: (keys) => set({ geminiKeys: keys, geminiKey: keys[0] ?? '' }),
   setApifyKeys: (keys) => set({ apifyKeys: keys }),
   addApifyKey: (key) => {
     const current = get().apifyKeys

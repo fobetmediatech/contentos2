@@ -81,7 +81,7 @@ export function useReelAnalysis() {
     reset,
   } = useReelAnalysisStore()
 
-  const { apifyKeys, geminiKey } = useKeysStore()
+  const { apifyKeys, geminiKeys } = useKeysStore()
 
   // One controller per run, aborted on unmount.
   const abortRef = useRef<AbortController | null>(null)
@@ -96,7 +96,7 @@ export function useReelAnalysis() {
       const analysisEntries = await Promise.all(
         reels.map((reel) =>
           geminiLimiter(async () => {
-            const analysis = await analyzeReel(reel, geminiKey, signal)
+            const analysis = await analyzeReel(reel, geminiKeys, signal)
             return [reel.shortCode, analysis] as const
           }),
         ),
@@ -162,7 +162,7 @@ export function useReelAnalysis() {
 
     setSynthesisStatus('running')
     try {
-      const output = await synthesizeNiche(doneSummaries, geminiKey, benchmarks, controller.signal)
+      const output = await synthesizeNiche(doneSummaries, geminiKeys, benchmarks, controller.signal)
       if (controller.signal.aborted) return
       setSynthesis(output)
     } catch {
@@ -299,7 +299,7 @@ export function useReelAnalysis() {
     setDeepReportStatus('running')
     try {
       const table = buildDeepReportTable(playbooks)
-      const synthesis = await synthesizeDeepReport(playbooks, geminiKey, controller.signal)
+      const synthesis = await synthesizeDeepReport(playbooks, geminiKeys, controller.signal)
       if (controller.signal.aborted) return
       setDeepReport({ ...table, ...synthesis })
     } catch {

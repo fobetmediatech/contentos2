@@ -40,7 +40,7 @@ const SEED_LIMIT = 10          // competitor seeds scraped from hashtags when no
 export function useAgentConversation() {
   // The transcript lives in conversationsStore now; addMessage writes to the active conversation.
   const addMessage = useConversationsStore((s) => s.addMessage)
-  const { geminiKey, apifyKeys, pickKey } = useKeysStore()
+  const { geminiKeys, apifyKeys, pickKey } = useKeysStore()
   const { analyze } = useCompetitorAnalysis()
   const { discover } = useLocationDiscovery()
   const { startAnalysis: startReelAnalysis } = useReelAnalysis()
@@ -117,7 +117,7 @@ export function useAgentConversation() {
 
     addMessage({ role: 'user', content: safeText, type: 'text' })
 
-    if (!geminiKey?.trim()) {
+    if (!geminiKeys.length) {
       bot(GEMINI_KEY_MISSING_MSG, 'error')
       return
     }
@@ -130,7 +130,7 @@ export function useAgentConversation() {
       const history = buildHistory() // live state — includes the user message just added above
       const callModel = (h: GeminiTurn[], repairNote?: string) =>
         callGeminiWithTools(
-          geminiKey,
+          geminiKeys,
           repairNote
             ? [...h, { role: 'user', parts: [{ text: `Your previous tool call was invalid: ${repairNote}. Call a valid tool now.` }] }]
             : h,
@@ -180,7 +180,7 @@ export function useAgentConversation() {
 
       case 'answer': {
         clarifyTurnsRef.current = 0
-        const reply = await callGeminiContent(geminiKey, action.message, undefined, signal)
+        const reply = await callGeminiContent(geminiKeys, action.message, undefined, signal)
         if (signal.aborted) return
         bot(reply)
         return
@@ -234,7 +234,7 @@ export function useAgentConversation() {
       bot('No Apify keys available. Add VITE_APIFY_KEYS in .env.', 'error')
       return
     }
-    const { hashtags } = await generateHashtags(geminiKey, '', niche, 'standard', signal)
+    const { hashtags } = await generateHashtags(geminiKeys, '', niche, 'standard', signal)
     const seeds = await scrapeHashtagUsernames(hashtags, apifyKeys, signal)
     if (signal.aborted) return
     if (seeds.length === 0) {
