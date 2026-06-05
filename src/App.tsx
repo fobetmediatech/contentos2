@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { SignedIn, SignedOut, RedirectToSignIn } from '@clerk/clerk-react'
+import { Show, RedirectToSignIn } from '@clerk/react'
 import { AppLayout } from './components/AppLayout'
 import { ChatPage } from './pages/ChatPage'
 import { ReportPage } from './pages/ReportPage'
@@ -25,12 +25,13 @@ const queryClient = new QueryClient({
 function ProtectedRoute() {
   return (
     <>
-      <SignedIn>
+      {/* Clerk v6: <Show when="signed-in"> replaces <SignedIn> */}
+      <Show when="signed-in">
         <Outlet />
-      </SignedIn>
-      <SignedOut>
+      </Show>
+      <Show when="signed-out">
         <RedirectToSignIn />
-      </SignedOut>
+      </Show>
     </>
   )
 }

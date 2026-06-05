@@ -1,4 +1,4 @@
-import { SignIn } from '@clerk/clerk-react'
+import { SignIn } from '@clerk/react'
 
 /**
  * Sign-in page for the auth gate. Centered on a chai dark background so the

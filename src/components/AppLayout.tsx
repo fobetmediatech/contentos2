@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { Brain, FileText, MessageSquare } from 'lucide-react'
-import { UserButton } from '@clerk/clerk-react'
+import { UserButton } from '@clerk/react'
 import { useCorpusStore } from '../store/corpusStore'
 
 interface AppLayoutProps {
