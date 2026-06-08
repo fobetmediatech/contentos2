@@ -1,7 +1,7 @@
 {
   "name": "instagram-competitor-finder",
   "private": true,
-  "version": "3.3.0.0",
+  "version": "3.4.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@clerk/react": "^6.7.3",
+    "@supabase/supabase-js": "^2.107.0",
     "@tanstack/react-query": "^5.80.6",
     "idb": "^8.0.3",
     "lucide-react": "^0.511.0",

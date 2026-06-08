@@ -1,13 +1,13 @@
 /**
  * Corpus store — the React-facing view over the async corpus repository.
  *
- * The corpus itself lives in IndexedDB (async). Components, though, need synchronous reads:
+ * The corpus itself lives in Supabase (async). Components, though, need synchronous reads:
  * a "seen before (N×)" badge on a card, a remembered-count in the nav. So this store
  * hydrates once from storage into a plain map and then mirrors every write into it, giving
- * components instant, subscribable access without each one awaiting IndexedDB.
+ * components instant, subscribable access without each one awaiting a remote call.
  *
  * `makeCorpusStore(repo)` is a factory so tests can inject an in-memory repository; the app
- * binds the default `useCorpusStore` to the runtime (IndexedDB) corpus.
+ * binds the default `useCorpusStore` to the runtime (Supabase) corpus.
  */
 
 import { create } from 'zustand'
@@ -65,5 +65,5 @@ export function makeCorpusStore(repo: CorpusRepository) {
   }))
 }
 
-/** The app-wide corpus store, bound to the runtime (IndexedDB) corpus. */
+/** The app-wide corpus store, bound to the runtime (Supabase) corpus. */
 export const useCorpusStore = makeCorpusStore(corpus)

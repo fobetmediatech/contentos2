@@ -20,3 +20,4 @@ spike/
 .claude/skills/gstack/
 .gstack/
 .vercel
+.env*

@@ -7,7 +7,7 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { safePersistStorage } from './persistStorage'
+import { supabaseStorage } from './supabaseStorage'
 import { isCleanReelRun } from './reelPersist'
 import type { DeepReelAnalysis, DeepNicheReport } from '../ai/prompts/deepReelAnalysis'
 
@@ -189,7 +189,8 @@ export const useReelAnalysisStore = create<ReelAnalysisState>()(persist((set) =>
   // reset to empty on refresh). Only the result data + terminal status are persisted; the
   // merge guard drops an interrupted mid-run so the UI never restores onto stuck spinners.
   name: 'contentos-reels',
-  storage: safePersistStorage,
+  storage: supabaseStorage,
+  skipHydration: true,
   partialize: (s) => ({
     activeHandles: s.activeHandles,
     reelConversationId: s.reelConversationId,

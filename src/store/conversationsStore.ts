@@ -11,7 +11,7 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { safePersistStorage } from './persistStorage'
+import { supabaseStorage } from './supabaseStorage'
 import type { ChatMessage } from './analysisStore'
 
 export interface Conversation {
@@ -55,11 +55,9 @@ function makeInitial(): { conversations: Record<string, Conversation>; activeId:
 }
 
 // ----- Legacy single-chat migration -----
-// Before multi-conversation history, the transcript lived in analysisStore.conversationMessages,
-// persisted under `contentos-chat`. That key is orphaned post-refactor. We adopt it ONCE into a
-// real conversation so a returning user's old chat doesn't silently vanish, then drop the key.
-
-const LEGACY_CHAT_KEY = 'contentos-chat'
+// Before multi-conversation history, the transcript lived in analysisStore.conversationMessages.
+// The pure helpers below are kept (exported + tested) even though the one-time localStorage
+// migration hook was removed with the cloud-first storage swap.
 
 /** Wrap a legacy transcript into a Conversation. Timestamps derive from the messages themselves
  *  (deterministic — no Date.now()), so a migrated chat sorts where it actually happened. */
@@ -175,29 +173,7 @@ export const useConversationsStore = create<ConversationsState>()(persist((set, 
   reset: () => set(makeInitial()),
 }), {
   name: 'contentos-conversations',
-  storage: safePersistStorage,
+  storage: supabaseStorage,
+  skipHydration: true,
   partialize: (s) => ({ conversations: s.conversations, activeId: s.activeId }),
-  // One-time adoption of the pre-refactor single-chat transcript. Runs after this store
-  // rehydrates: if a `contentos-chat` blob exists and we have no real history yet, migrate it
-  // into a conversation. The legacy key is always cleared afterwards so it never re-runs.
-  onRehydrateStorage: () => (state) => {
-    if (!state || typeof localStorage === 'undefined') return
-    let legacyRaw: string | null
-    try {
-      legacyRaw = localStorage.getItem(LEGACY_CHAT_KEY)
-    } catch {
-      return // localStorage unavailable (private mode, etc.) — nothing to migrate
-    }
-    const migrated = migrateLegacyChat(legacyRaw, { conversations: state.conversations })
-    if (migrated) {
-      // Replace the (empty) default with the migrated chat — safe because we only reach here
-      // when there's no real history to lose.
-      useConversationsStore.setState({ conversations: { [migrated.id]: migrated }, activeId: migrated.id })
-    }
-    try {
-      localStorage.removeItem(LEGACY_CHAT_KEY)
-    } catch {
-      /* best-effort cleanup */
-    }
-  },
 }))

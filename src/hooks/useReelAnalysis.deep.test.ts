@@ -27,6 +27,16 @@ const mocks = vi.hoisted(() => {
 vi.mock('../lib/reelScraper', () => ({ scrapeTopReels: mocks.scrapeTopReels, NoReelsError: mocks.NoReelsErrorMock }))
 vi.mock('../lib/reelVideoClient', () => ({ scrapeReelVideos: mocks.scrapeReelVideos }))
 vi.mock('../lib/deepReelCache', () => ({ getCachedDeep: mocks.getCachedDeep, setCachedDeep: mocks.setCachedDeep }))
+// Prevent the reel store's supabase-backed persist middleware from hitting a real DB in tests.
+vi.mock('../lib/supabaseClient', () => ({
+  supabase: {
+    from: () => ({
+      select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: null, error: null }) }) }),
+      upsert: () => Promise.resolve({ error: null }),
+      delete: () => ({ eq: () => Promise.resolve({ error: null }) }),
+    }),
+  },
+}))
 // startDeepReport calls analyzeReelDeep + the report builders from reelAnalyzer; stub
 // them all so the real module (and its Gemini client import) never loads in the test.
 // The report step runs after creators finish — stubbed to a no-op so the per-creator

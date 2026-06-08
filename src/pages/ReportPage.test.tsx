@@ -4,7 +4,19 @@
  * + Print button), reading from the real store.
  */
 
-import { describe, it, expect, afterEach, beforeEach } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
+
+// Prevent the reelAnalysisStore's supabase-backed persist middleware from hitting the
+// real Supabase client during tests (no auth → RLS violation).
+vi.mock('../lib/supabaseClient', () => ({
+  supabase: {
+    from: () => ({
+      select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: null, error: null }) }) }),
+      upsert: () => Promise.resolve({ error: null }),
+      delete: () => ({ eq: () => Promise.resolve({ error: null }) }),
+    }),
+  },
+}))
 import { render, screen, cleanup } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { ReportPage } from './ReportPage'
