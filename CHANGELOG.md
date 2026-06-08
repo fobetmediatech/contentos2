@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [3.4.0.0] — 2026-06-08
+
+**Supabase data sync.** All browser-local state now persists in Supabase Postgres, scoped to the logged-in Clerk user. The creator/content corpus is a shared team brain (any teammate's search enriches it); conversations and reel analyses are private per user. Cloud-first: IndexedDB and localStorage are dropped entirely.
+
+### Added
+
+- **Supabase corpus** (`corpus_creators` + append-only `corpus_sightings` + `corpus_content`) — shared team brain, race-free via normalized sightings table. Bookkeeping (`timesSeen`, `firstSeenAt`, `lastSeenAt`) derived via a Postgres view.
+- **Private user state** (`user_state` KV table) — conversations + reel analyses persisted per user via an async Zustand `PersistStorage` adapter over `jsonb`.
+- **Clerk↔Supabase native auth bridge** — `session.getToken()` (no deprecated JWT template) injected via `accessToken` callback; RLS enforces data isolation without a server proxy.
+- **`AuthedBootstrap` in App.tsx** — wires the Clerk token getter and rehydrates stores on sign-in; resets private data on sign-out (no cross-user leakage on shared machines).
+
+### Changed
+
+- `corpusIdb.ts` — IndexedDB impl replaced with a Supabase-backed `CorpusRepository`; filename + export name preserved so no consumers changed.
+- `conversationsStore` + `reelAnalysisStore` — storage adapter swapped to Supabase; `skipHydration: true` defers load until the Clerk token is available.
+- Legacy `contentos-chat` localStorage migration hook removed (cloud-first; start-fresh).
+
 ## [3.3.0.0] — 2026-06-05
 
 **Clerk auth gate.** The app now requires a Clerk login before anything is accessible. Team members sign in via magic link or Google (configured in the Clerk dashboard); the sign-in card is themed to the chai dark design system. All protected routes redirect to `/sign-in` when unauthenticated.

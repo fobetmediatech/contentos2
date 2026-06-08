@@ -71,7 +71,7 @@ describe.skipIf(!KEY)('intent parser golden eval (needs GEMINI_EVAL_KEY)', () =>
 
       // Human-readable report (eval output, not a chat message).
       const fmt = (r: Judged) => `  [${r.kind.toUpperCase()}] ${r.c.id}: "${r.c.message}" → got ${r.got}, expected ${JSON.stringify(r.c.expect)}`
-      // eslint-disable-next-line no-console
+      void fmt // unused but kept for future output format
       console.log(
         `\n=== INTENT GOLDEN EVAL ===\n` +
         `accuracy: ${(accuracy * 100).toFixed(1)}% (${pass}/${results.length})\n` +
