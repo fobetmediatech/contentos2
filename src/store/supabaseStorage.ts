@@ -20,8 +20,8 @@ export function makeSupabaseStorage<T>(): PersistStorage<T> {
         .select('value')
         .eq('key', key)
         .maybeSingle()
-      if (error || !data) return null
-      return (data as { value: StorageValue<T> }).value
+      if (error) throw error
+      return data ? (data as { value: StorageValue<T> }).value : null
     },
     setItem: async (key, value) => {
       const { error } = await supabase

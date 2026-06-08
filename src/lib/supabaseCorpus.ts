@@ -77,6 +77,7 @@ async function fetchSightings(usernames: string[]): Promise<Record<string, Sight
     .select('*')
     .in('creator_username', usernames)
     .order('at', { ascending: false })
+    .limit(usernames.length * SIGHTINGS_CAP)  // bound: at most cap rows per creator
   if (error) throw error
   for (const row of (data ?? []) as SightingRow[]) {
     const list = (grouped[row.creator_username] ??= [])

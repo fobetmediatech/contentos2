@@ -31,20 +31,18 @@ function AuthedBootstrap() {
   const { getToken, isSignedIn } = useAuth()
 
   useEffect(() => {
-    setClerkTokenGetter(() => getToken())
-  }, [getToken])
-
-  useEffect(() => {
     if (isSignedIn) {
+      setClerkTokenGetter(() => getToken())
       void useConversationsStore.persist.rehydrate()
       void useReelAnalysisStore.persist.rehydrate()
       void useCorpusStore.getState().hydrate().catch(() => {})
     } else {
+      setClerkTokenGetter(async () => null)
       useConversationsStore.getState().reset()
       useReelAnalysisStore.getState().reset()
       useCorpusStore.setState({ creators: {}, count: 0, hydrated: false })
     }
-  }, [isSignedIn])
+  }, [getToken, isSignedIn])
 
   return null
 }
