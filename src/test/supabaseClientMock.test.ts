@@ -15,6 +15,6 @@ describe('makeSupabaseMock', () => {
   it('records upsert payloads', async () => {
     const mock = makeSupabaseMock({})
     await mock.client.from('user_state').upsert({ key: 'k', value: { state: 1 } })
-    expect(mock.calls.upsert[0]).toEqual([{ key: 'k', value: { state: 1 } }])
+    expect(mock.calls.upsert[0]).toEqual({ key: 'k', value: { state: 1 } })
   })
 })

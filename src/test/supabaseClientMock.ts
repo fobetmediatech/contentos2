@@ -67,9 +67,9 @@ export function makeSupabaseMock(cfg: MockConfig) {
       calls.from.push(table)
       return {
         select: (..._a: unknown[]) => { calls.select.push(_a); return chain('select') },
-        insert: (payload: unknown) => { calls.insert.push([payload]); return chain('insert') },
-        upsert: (payload: unknown, _opts?: unknown) => { calls.upsert.push([payload]); return chain('upsert') },
-        update: (payload: unknown) => { calls.update.push([payload]); return chain('update') },
+        insert: (payload: unknown) => { calls.insert.push(payload); return chain('insert') },
+        upsert: (payload: unknown, _opts?: unknown) => { calls.upsert.push(payload); return chain('upsert') },
+        update: (payload: unknown) => { calls.update.push(payload); return chain('update') },
         delete: () => { calls.delete.push(1); return chain('delete') },
       }
     }),
