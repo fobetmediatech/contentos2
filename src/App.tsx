@@ -1,6 +1,11 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { Show, RedirectToSignIn } from '@clerk/react'
+import { Show, RedirectToSignIn, useAuth } from '@clerk/react'
+import { setClerkTokenGetter } from './lib/supabaseClient'
+import { useConversationsStore } from './store/conversationsStore'
+import { useReelAnalysisStore } from './store/reelAnalysisStore'
+import { useCorpusStore } from './store/corpusStore'
 import { AppLayout } from './components/AppLayout'
 import { ChatPage } from './pages/ChatPage'
 import { ReportPage } from './pages/ReportPage'
@@ -17,6 +22,34 @@ const queryClient = new QueryClient({
 })
 
 /**
+ * Runs inside the signed-in gate. Wires the Clerk token into the Supabase client, then
+ * rehydrates the cloud-backed stores + corpus (deferred via skipHydration until a token
+ * exists). On sign-out it resets the private stores + the corpus mirror so the next user
+ * on a shared machine starts clean.
+ */
+function AuthedBootstrap() {
+  const { getToken, isSignedIn } = useAuth()
+
+  useEffect(() => {
+    setClerkTokenGetter(() => getToken())
+  }, [getToken])
+
+  useEffect(() => {
+    if (isSignedIn) {
+      void useConversationsStore.persist.rehydrate()
+      void useReelAnalysisStore.persist.rehydrate()
+      void useCorpusStore.getState().hydrate().catch(() => {})
+    } else {
+      useConversationsStore.getState().reset()
+      useReelAnalysisStore.getState().reset()
+      useCorpusStore.setState({ creators: {}, count: 0, hydrated: false })
+    }
+  }, [isSignedIn])
+
+  return null
+}
+
+/**
  * Layout route that gates all child routes behind Clerk auth.
  * <SignedIn>  — renders the matched child route (via <Outlet>) when authenticated.
  * <SignedOut> — redirects to /sign-in when not authenticated.
@@ -27,6 +60,7 @@ function ProtectedRoute() {
     <>
       {/* Clerk v6: <Show when="signed-in"> replaces <SignedIn> */}
       <Show when="signed-in">
+        <AuthedBootstrap />
         <Outlet />
       </Show>
       <Show when="signed-out">
