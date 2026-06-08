@@ -11,6 +11,41 @@ import { vi } from 'vitest'
 
 type Result = { data: unknown; error: unknown }
 
+/** A chainable builder that can be awaited to get { data, error }. */
+interface Chain extends PromiseLike<{ data: unknown; error: unknown }> {
+  select: (...args: unknown[]) => Chain
+  in: (col: string, vals: unknown) => Chain
+  eq: (col: string, val: unknown) => Chain
+  order: (...args: unknown[]) => Chain
+  limit: (n: number) => Chain
+  maybeSingle: () => Chain
+}
+
+/** The shaped mock object returned by makeSupabaseMock. */
+export interface SupabaseMock {
+  client: {
+    from: (table: string) => {
+      select: (...args: unknown[]) => Chain
+      insert: (payload: unknown) => Chain
+      upsert: (payload: unknown, opts?: unknown) => Chain
+      update: (payload: unknown) => Chain
+      delete: () => Chain
+    }
+  }
+  calls: {
+    from: string[]
+    select: unknown[]
+    in: Array<[string, unknown]>
+    eq: Array<[string, unknown]>
+    order: unknown[]
+    limit: number[]
+    insert: unknown[]
+    upsert: unknown[]
+    update: unknown[]
+    delete: number[]
+  }
+}
+
 export interface MockConfig {
   /** FIFO queues of results, one entry consumed per matching terminal call. */
   select?: unknown[]   // each entry = the `data` a select chain resolves to
@@ -22,7 +57,7 @@ export interface MockConfig {
   error?: unknown      // if set, every terminal call resolves { data: null, error }
 }
 
-export function makeSupabaseMock(cfg: MockConfig) {
+export function makeSupabaseMock(cfg: MockConfig): SupabaseMock {
   const calls = {
     from: [] as string[],
     select: [] as unknown[],
@@ -72,7 +107,13 @@ export function makeSupabaseMock(cfg: MockConfig) {
         update: (payload: unknown) => { calls.update.push(payload); return chain('update') },
         delete: () => { calls.delete.push(1); return chain('delete') },
       }
-    }),
+    }) as unknown as (table: string) => {
+      select: (...args: unknown[]) => Chain
+      insert: (payload: unknown) => Chain
+      upsert: (payload: unknown, opts?: unknown) => Chain
+      update: (payload: unknown) => Chain
+      delete: () => Chain
+    },
   }
-  return { client, calls }
+  return { client, calls } as SupabaseMock
 }
