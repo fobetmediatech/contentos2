@@ -151,7 +151,6 @@ export async function pollRun(
   const abortApifyRun = () => {
     // Fire-and-forget: abort the Apify actor run so it stops consuming credits.
     // Use optional chaining on .catch so test mocks that return undefined don't crash.
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
     (fetch(BASE_URL, {
       method: 'POST',
       headers,

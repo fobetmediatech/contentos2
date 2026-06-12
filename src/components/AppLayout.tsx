@@ -12,14 +12,14 @@ import { useCorpusStore } from '../store/corpusStore'
  * (fullBleed = h-[100dvh] chat mode; default = padded content pages) all derive
  * from this array.
  */
-export interface NavSection {
+interface NavSection {
   path: string
   label: string
   icon: LucideIcon
   fullBleed?: boolean
 }
 
-export const NAV_SECTIONS: NavSection[] = [
+const NAV_SECTIONS: NavSection[] = [
   { path: '/', label: 'Chat', icon: MessageSquare, fullBleed: true },
   { path: '/memory', label: 'Memory', icon: Brain },
   { path: '/report', label: 'Report', icon: FileText },
