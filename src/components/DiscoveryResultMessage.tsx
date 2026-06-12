@@ -5,12 +5,14 @@
  * (discovery doesn't produce one); adds the expand + location-relaxed notes.
  */
 
-import { Bot, CheckCircle, Video, X } from 'lucide-react'
+import { useState } from 'react'
+import { Bot, Check, CheckCircle, Clipboard, Download, Video, X } from 'lucide-react'
 import type { DiscoveryResultPayload } from '../store/analysisStore'
 import { DiscoveryCard } from './DiscoveryCard'
 import { DISCOVERY_CATEGORIES } from '../shared/utils/categories'
 import { MIN_LOCATION_RESULTS } from '../hooks/useLocationDiscovery'
 import { deriveDiscoveryView } from './discoveryResultView'
+import { formatDiscoveryForClipboard, generateDiscoveryCSV, downloadCSV, copyToClipboard } from '../shared/utils/export'
 
 interface Props {
   payload: DiscoveryResultPayload
@@ -33,6 +35,18 @@ export function DiscoveryResultMessage({
 }: Props) {
   const { results, city, didExpand, locationRelaxed } = payload
   const { profileMap, cohortAvgER, top, trending } = deriveDiscoveryView(payload)
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async () => {
+    await copyToClipboard(formatDiscoveryForClipboard({ results, profiles: payload.profiles, city, niche: '' }))
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleDownloadCSV = () => {
+    const csv = generateDiscoveryCSV({ results, profiles: payload.profiles, city, niche: '', sourceHashtags: [] })
+    downloadCSV(csv, `discovery-${city || 'results'}.csv`)
+  }
 
   return (
     <>
@@ -63,12 +77,28 @@ export function DiscoveryResultMessage({
               </p>
             )}
           </div>
-          <button
-            onClick={onStartOver}
-            className="self-start px-4 py-2 text-sm text-secondary border border-[rgba(245,237,214,0.10)] rounded-xl hover:bg-surface-raised transition-colors"
-          >
-            Start over
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={onStartOver}
+              className="px-4 py-2 text-sm text-secondary border border-[rgba(245,237,214,0.10)] rounded-xl hover:bg-surface-raised transition-colors"
+            >
+              Start over
+            </button>
+            <button
+              onClick={handleCopy}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm text-secondary border border-[rgba(245,237,214,0.10)] rounded-xl hover:bg-surface-raised transition-colors"
+            >
+              {copied ? <Check size={13} className="text-success" /> : <Clipboard size={13} />}
+              {copied ? 'Copied!' : 'Copy for slides'}
+            </button>
+            <button
+              onClick={handleDownloadCSV}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm text-secondary border border-[rgba(245,237,214,0.10)] rounded-xl hover:bg-surface-raised transition-colors"
+            >
+              <Download size={13} />
+              Download CSV
+            </button>
+          </div>
         </div>
       </div>
 

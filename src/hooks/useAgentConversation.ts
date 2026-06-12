@@ -142,6 +142,14 @@ export function useAgentConversation() {
     const safeText = text.replace(/[\n\r]/g, ' ').trim().slice(0, 500)
     if (!safeText) return
 
+    // 5.1: mid-clarification typed answer — route to answerClarification so the user's
+    // free-text refines the ranking prompt instead of silently killing the run.
+    if (useAnalysisStore.getState().status === 'clarifying') {
+      addMessage({ role: 'user', content: safeText, type: 'text' })
+      useAnalysisStore.getState().answerClarification(safeText)
+      return
+    }
+
     // Latest-wins: always abort the previous run's controller (cancels an in-flight planning
     // call AND any scrape it dispatched via T7's shared signal). But only treat it as a STEER
     // — the cleanup + "Switched" note — when there was genuinely live work to interrupt. A

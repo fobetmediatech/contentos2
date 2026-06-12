@@ -11,7 +11,7 @@
  * T15: Lucide Bot/User icon circles instead of emoji
  */
 
-import { Bot, Check, Loader2, User } from 'lucide-react'
+import { Bot, Check, Loader2, RefreshCw, Square, User } from 'lucide-react'
 import type { ChatMessage as ChatMessageType } from '../store/analysisStore'
 import { STEP_LABELS } from '../store/analysisStore'
 import { ChatOptions } from './ChatOptions'
@@ -21,9 +21,11 @@ interface ChatMessageProps {
   onOptionSelect?: (option: string) => void
   /** If true, option buttons are disabled (analysis already fired) */
   optionsDisabled?: boolean
+  /** Called when the user taps Retry on an error bubble. */
+  onRetry?: () => void
 }
 
-export function ChatMessage({ message, onOptionSelect, optionsDisabled }: ChatMessageProps) {
+export function ChatMessage({ message, onOptionSelect, optionsDisabled, onRetry }: ChatMessageProps) {
   const isUser = message.role === 'user'
   const isError = message.type === 'error'
 
@@ -68,6 +70,15 @@ export function ChatMessage({ message, onOptionSelect, optionsDisabled }: ChatMe
             label={optionsDisabled ? undefined : 'Quick picks:'}
           />
         )}
+        {isError && onRetry && (
+          <button
+            onClick={onRetry}
+            className="self-start flex items-center gap-1.5 px-3 py-1.5 text-xs text-[#E05C5C] border border-[rgba(224,92,92,0.25)] rounded-lg hover:bg-[rgba(224,92,92,0.08)] transition-colors"
+          >
+            <RefreshCw size={11} />
+            Retry
+          </button>
+        )}
       </div>
     </div>
   )
@@ -101,6 +112,8 @@ interface ProgressBubbleProps {
   currentStep: number
   /** Custom step labels. When omitted, uses competitor analysis STEP_LABELS. */
   steps?: string[]
+  /** Called when the user taps Stop — aborts the current run. */
+  onStop?: () => void
 }
 
 /**
@@ -108,7 +121,7 @@ interface ProgressBubbleProps {
  * Replaces the standalone centered progress block so pipeline state stays
  * in the same visual lane as the rest of the conversation.
  */
-export function ProgressBubble({ label, currentStep, steps }: ProgressBubbleProps) {
+export function ProgressBubble({ label, currentStep, steps, onStop }: ProgressBubbleProps) {
   const allLabels: Record<number, string> = steps
     ? Object.fromEntries(steps.map((l, i) => [i + 1, l]))
     : (STEP_LABELS as Record<number, string>)
@@ -162,6 +175,15 @@ export function ProgressBubble({ label, currentStep, steps }: ProgressBubbleProp
               </div>
             )
           })}
+          {onStop && (
+            <button
+              onClick={onStop}
+              className="self-start flex items-center gap-1.5 mt-1 px-3 py-1.5 text-xs text-muted border border-[rgba(245,237,214,0.10)] rounded-lg hover:text-secondary hover:border-[rgba(245,237,214,0.2)] transition-colors"
+            >
+              <Square size={10} />
+              Stop
+            </button>
+          )}
         </div>
       </div>
     </div>

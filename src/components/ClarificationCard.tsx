@@ -63,6 +63,10 @@ export function ClarificationCard({ question, candidateCount, onAnswer, disabled
           {PROCEED_LABEL}
         </button>
       </div>
+
+      <p className="text-xs text-[#7A6A54] mt-3">
+        Or type your own answer below and press Enter.
+      </p>
     </div>
   )
 }

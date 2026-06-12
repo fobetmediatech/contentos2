@@ -8,11 +8,13 @@
  * ChatPage state, shared across results).
  */
 
-import { Bot, CheckCircle, Video, X } from 'lucide-react'
+import { useState } from 'react'
+import { Bot, CheckCircle, Check, Clipboard, Download, Video, X } from 'lucide-react'
 import type { CompetitorResultPayload } from '../store/analysisStore'
 import { CompetitorCard } from './CompetitorCard'
 import { COMPETITOR_CATEGORIES } from '../shared/utils/categories'
 import { deriveCompetitorView } from './competitorResultView'
+import { formatForClipboard, generateCSV, downloadCSV, copyToClipboard } from '../shared/utils/export'
 
 interface Props {
   payload: CompetitorResultPayload
@@ -36,6 +38,18 @@ export function CompetitorResultMessage({
 }: Props) {
   const { competitors, summary, niche, didExpand } = payload
   const { profileMap, cohortAvgER, top, trending } = deriveCompetitorView(payload)
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async () => {
+    await copyToClipboard(formatForClipboard({ competitors, profiles: payload.profiles, sourceHandles: [] }))
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleDownloadCSV = () => {
+    const csv = generateCSV({ competitors, profiles: payload.profiles, sourceHandles: [] })
+    downloadCSV(csv, `competitors-${niche || 'results'}.csv`)
+  }
 
   return (
     <>
@@ -61,12 +75,28 @@ export function CompetitorResultMessage({
               </p>
             )}
           </div>
-          <button
-            onClick={onStartOver}
-            className="self-start px-4 py-2 text-sm text-secondary border border-[rgba(245,237,214,0.10)] rounded-xl hover:bg-surface-raised transition-colors"
-          >
-            Start over
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={onStartOver}
+              className="px-4 py-2 text-sm text-secondary border border-[rgba(245,237,214,0.10)] rounded-xl hover:bg-surface-raised transition-colors"
+            >
+              Start over
+            </button>
+            <button
+              onClick={handleCopy}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm text-secondary border border-[rgba(245,237,214,0.10)] rounded-xl hover:bg-surface-raised transition-colors"
+            >
+              {copied ? <Check size={13} className="text-success" /> : <Clipboard size={13} />}
+              {copied ? 'Copied!' : 'Copy for slides'}
+            </button>
+            <button
+              onClick={handleDownloadCSV}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm text-secondary border border-[rgba(245,237,214,0.10)] rounded-xl hover:bg-surface-raised transition-colors"
+            >
+              <Download size={13} />
+              Download CSV
+            </button>
+          </div>
         </div>
       </div>
 

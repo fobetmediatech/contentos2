@@ -8,7 +8,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
-import { AlertTriangle, Bot, Send, Video } from 'lucide-react'
+import { AlertTriangle, Bot, ChevronDown, Send, Video } from 'lucide-react'
 import { useAnalysisStore } from '../store/analysisStore'
 import { useConversationsStore, sortConversations } from '../store/conversationsStore'
 import { useDiscoveryStore } from '../store/discoveryStore'
@@ -109,7 +109,9 @@ export function ChatPage() {
   const setReelConversationId = useReelAnalysisStore((s) => s.setReelConversationId)
 
   const [inputText, setInputText] = useState('')
+  const [isNearBottom, setIsNearBottom] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const analysisErrorHandledRef = useRef(false)
   const competitorResultArmedRef = useRef(false) // armed while a competitor run is live; fires once on done
@@ -263,10 +265,24 @@ export function ChatPage() {
     }
   }, [synthesisStatus, creatorStates])
 
-  // Scroll to bottom whenever messages or pipeline state changes
+  // Scroll to bottom when content changes, but only when the user is near the bottom.
+  // When they've scrolled up to read history, auto-scroll would yank them away.
   useEffect(() => {
+    if (isNearBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [conversationMessages, status, discoveryStatus, currentStep, activePipeline.step, activeHandles, creatorStates, synthesisStatus, isNearBottom])
+
+  const handleScrollContainer = () => {
+    const el = scrollContainerRef.current
+    if (!el) return
+    setIsNearBottom(el.scrollTop + el.clientHeight >= el.scrollHeight - 120)
+  }
+
+  const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [conversationMessages, status, discoveryStatus, currentStep, activePipeline.step, activeHandles, creatorStates, synthesisStatus])
+    setIsNearBottom(true)
+  }
 
   const resetTextareaHeight = () => {
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
@@ -384,6 +400,12 @@ export function ChatPage() {
   const isDiscoveryDone = activePipeline.activePipelineId === 'discovery' && activePipeline.isDone
   const showInlineContent = isAnalysisRunning || isAnalysisClarifying || isAnalysisDone ||
     isDiscoveryRunning || isDiscoveryDone
+  const isReelRunning = activeHandles.length > 0 && synthesisStatus !== 'done' && synthesisStatus !== 'failed'
+  const showRunPlaceholder = agentConv.isThinking || isAnalysisRunning || isDiscoveryRunning || isReelRunning
+  const lastUserMessage = useMemo(
+    () => [...conversationMessages].reverse().find((m) => m.role === 'user')?.content,
+    [conversationMessages],
+  )
 
   // (Competitor + discovery card derivations now live in their result-message components,
   // computed from the snapshotted payload.)
@@ -410,7 +432,16 @@ export function ChatPage() {
       )}
 
       {/* ── Message area ──────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto">
+      {!isNearBottom && (
+        <button
+          onClick={scrollToBottom}
+          className="fixed bottom-24 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[#2C2118] border border-[#E07B3A]/40 rounded-full text-[#E07B3A] hover:bg-[#3D2E1E] transition-colors shadow-lg"
+        >
+          <ChevronDown size={12} />
+          Jump to latest
+        </button>
+      )}
+      <div ref={scrollContainerRef} onScroll={handleScrollContainer} className="flex-1 overflow-y-auto">
         {/* Conversation history switcher — appears once there's more than one chat or any
             content, so a fresh single-chat welcome screen stays uncluttered. */}
         {(conversationList.length > 1 || hasMessages) && (
@@ -549,6 +580,7 @@ export function ChatPage() {
                     // A clarification pill is just the user's next message (TD1).
                     onOptionSelect={agentConv.sendMessage}
                     optionsDisabled={agentConv.isThinking}
+                    onRetry={message.type === 'error' && lastUserMessage ? () => agentConv.sendMessage(lastUserMessage) : undefined}
                   />
                 ),
               )}
@@ -563,11 +595,12 @@ export function ChatPage() {
                     currentStep={isAnalysisClarifying ? 5 : currentStep}
                     label={
                       isAnalysisClarifying
-                        ? 'Help me rank the right accounts for your client.'
+                        ? 'Waiting for your answer below.'
                         : stepProgressDetail
                         ? `${stepProgressDetail}…`
                         : 'Analyzing competitors — this takes up to 2 minutes…'
                     }
+                    onStop={isAnalysisRunning ? agentConv.abort : undefined}
                   />
                   {isAnalysisClarifying && pendingDiscovery && (
                     <div className="flex items-start gap-2">
@@ -593,6 +626,7 @@ export function ChatPage() {
                   currentStep={activePipeline.step}
                   steps={activePipeline.stepLabels}
                   label={activePipeline.progressLabel ?? undefined}
+                  onStop={agentConv.abort}
                 />
               )}
 
@@ -619,9 +653,7 @@ export function ChatPage() {
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={handleKeyDown}
               onInput={handleTextareaInput}
-              // Input is always live — the agent handles every state — so the placeholder is
-              // static (it must NOT track pipeline status, which lingers stale).
-              placeholder="Describe a niche, location, or paste handles…"
+              placeholder={showRunPlaceholder ? 'Type to redirect me — this cancels the current run.' : 'Describe a niche, location, or paste handles…'}
               maxLength={500}
               rows={1}
               disabled={!ready}
