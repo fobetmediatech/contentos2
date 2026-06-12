@@ -336,8 +336,9 @@ export async function analyzeCompetitors(
   nicheContext?: string,
   clarificationAnswer?: string,
   preferenceExemplars?: PreferenceExemplars,
+  corpusSignals?: Record<string, string>,
 ): Promise<AnalysisOutput> {
-  const prompt = buildCompetitorPrompt(inputProfiles, candidateProfiles, nicheContext, clarificationAnswer, preferenceExemplars)
+  const prompt = buildCompetitorPrompt(inputProfiles, candidateProfiles, nicheContext, clarificationAnswer, preferenceExemplars, corpusSignals)
   const parsed = await callGeminiWithSchema<AnalysisOutput>(
     geminiKey,
     prompt,
@@ -366,8 +367,9 @@ export async function analyzeDiscovery(
   creatorCount?: number,
   businessCount?: number,
   preferenceExemplars?: PreferenceExemplars,
+  corpusSignals?: Record<string, string>,
 ): Promise<DiscoveryOutput> {
-  const prompt = buildDiscoveryPrompt(city, niche, candidateProfiles, creatorCount, businessCount, preferenceExemplars)
+  const prompt = buildDiscoveryPrompt(city, niche, candidateProfiles, creatorCount, businessCount, preferenceExemplars, corpusSignals)
   const parsed = await callGeminiWithSchema<DiscoveryOutput>(
     geminiKey,
     prompt,

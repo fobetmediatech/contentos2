@@ -30,6 +30,7 @@ import { buildPipelineErrorMessage, sparseSeedMessage, ALL_DISMISSED_MESSAGE } f
 import { linkAbort } from '../lib/abortControl'
 import { useCorpusStore } from '../store/corpusStore'
 import { dropDismissedCandidates, selectPreferenceExemplars } from '../lib/corpus'
+import { buildCorpusSignals } from '../ai/prompts'
 
 const TIMEOUT_MS = 150_000
 const MIN_COMPETITOR_RESULTS = 8
@@ -136,13 +137,11 @@ export function useCompetitorAnalysis() {
         const { inputProfiles, candidateProfiles } = discovery
         const knownHandles = new Set(candidateProfiles.map((p) => p.username.toLowerCase()))
 
+        const corpusCreators = useCorpusStore.getState().creators
         // 3b (Phase 3): bias ranking toward the strategist's saved traits, away from dismissed.
-        // Empty when the corpus has no verdicts → buildPreferenceBlock emits nothing (a no-op),
-        // so this only kicks in once there's real feedback. nicheContext drives same-niche weighting.
-        const preferenceExemplars = selectPreferenceExemplars(
-          Object.values(useCorpusStore.getState().creators),
-          nicheContext,
-        )
+        const preferenceExemplars = selectPreferenceExemplars(Object.values(corpusCreators), nicheContext)
+        // 4.4: annotate candidate lines with corpus recognition signal ([KNOWN: seen Nx in 'niche']).
+        const corpusSignals = buildCorpusSignals(candidateProfiles.map((p) => p.username), corpusCreators)
 
         // Step 5: AI rationale — nicheContext + clarification answer + preference signal (tiebreaker)
         let output = await analyzeCompetitors(
@@ -153,6 +152,7 @@ export function useCompetitorAnalysis() {
           nicheContext || undefined,
           answer || undefined,
           preferenceExemplars,
+          Object.keys(corpusSignals).length > 0 ? corpusSignals : undefined,
         )
 
         // Zero-result guard: if filter signals were set and Gemini returned nothing,

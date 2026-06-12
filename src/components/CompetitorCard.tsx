@@ -40,12 +40,16 @@ export const CompetitorCard = memo(function CompetitorCard({ competitor, profile
 
   return (
     <div
+      role={onSelect ? 'checkbox' : undefined}
+      aria-checked={onSelect ? isSelected : undefined}
+      tabIndex={onSelect ? 0 : undefined}
       className={`bg-[#2C2218] rounded-xl p-4 relative transition-colors ${
         isSelected
           ? 'border-0 ring-2 ring-[#E07B3A] ring-offset-1 ring-offset-[#1A1410]'
           : 'border border-[rgba(245,237,214,0.08)] hover:border-[rgba(245,237,214,0.15)]'
-      } ${onSelect ? 'cursor-pointer' : ''} ${dismissed ? 'opacity-60 hover:opacity-100' : ''}`}
+      } ${onSelect ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E07B3A]' : ''} ${dismissed ? 'opacity-60 hover:opacity-100' : ''}`}
       onClick={onSelect ? () => onSelect(competitor.username) : undefined}
+      onKeyDown={onSelect ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(competitor.username) } } : undefined}
     >
       {/* Checkbox overlay — top left */}
       {onSelect && (
@@ -112,7 +116,7 @@ export const CompetitorCard = memo(function CompetitorCard({ competitor, profile
             <p className="text-xs text-[#C4A882] mt-0.5 truncate">{profile.fullName}</p>
           )}
           {profile && (
-            <p className="text-xs text-[#7A6A54] mt-0.5">
+            <p className="text-xs text-secondary mt-0.5">
               {formatFollowers(profile.followersCount)} followers
             </p>
           )}
@@ -129,7 +133,7 @@ export const CompetitorCard = memo(function CompetitorCard({ competitor, profile
           >
             {er.toFixed(2)}%
           </span>
-          <span className="text-xs text-[#7A6A54]">
+          <span className="text-xs text-secondary">
             ER · {erAboveAvg ? 'above avg' : 'below avg'}
           </span>
         </div>

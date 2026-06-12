@@ -13,7 +13,34 @@
 
 import { COMPETITOR_CATEGORIES, DISCOVERY_CATEGORIES } from '../shared/utils/categories'
 import type { NormalizedProfile } from '../lib/transformers'
-import type { PreferenceExemplar, PreferenceExemplars } from '../lib/corpus'
+import type { PreferenceExemplar, PreferenceExemplars, CreatorRecord } from '../lib/corpus'
+
+/**
+ * Build a per-username map of corpus signal annotations (Phase 4.4).
+ * Returns `[KNOWN: seen Nx in 'niche', previously ranked Top]` lines used
+ * to annotate candidate entries in both ranking prompts. Synchronous — reads
+ * from the in-memory corpusStore mirror (already hydrated before any pipeline run).
+ */
+export function buildCorpusSignals(
+  usernames: string[],
+  creators: Record<string, CreatorRecord>,
+): Record<string, string> {
+  const signals: Record<string, string> = {}
+  for (const username of usernames) {
+    const rec = creators[username]
+    if (!rec || rec.timesSeen === 0) continue
+    const niches = [...new Set(
+      rec.sightings
+        .map((s) => s.niche)
+        .filter((n): n is string => !!n)
+        .map((n) => sanitizeForPrompt(n, 30)),
+    )].slice(0, 2)
+    const nicheStr = niches.length > 0 ? ` in '${niches.join('/')}'` : ''
+    const prevTop = rec.sightings.some((s) => s.category === 'top') ? ', prev. ranked Top' : ''
+    signals[username] = `[KNOWN: seen ${rec.timesSeen}×${nicheStr}${prevTop}]`
+  }
+  return signals
+}
 
 // ----- Phase 3 slice 3: preference (self-training) prompt block -----
 
@@ -96,6 +123,7 @@ export function buildCompetitorPrompt(
   nicheContext?: string,
   clarificationAnswer?: string,
   preferenceExemplars?: PreferenceExemplars,
+  corpusSignals?: Record<string, string>,
 ): string {
   const topCategory = COMPETITOR_CATEGORIES.top
   const trendingCategory = COMPETITOR_CATEGORIES.trending
@@ -128,7 +156,8 @@ export function buildCompetitorPrompt(
           : p.discoverySource === 'relatedProfiles'
             ? ' [AUDIENCE-ADJACENT: relatedProfiles]'
             : '' // undefined = input profile (should not appear here, but safe fallback)
-      return `@${p.username} | followers: ${p.followersCount.toLocaleString()} | ER: ${er}% | posts: ${p.postsCount} | verified: ${p.verified} | bio: "${p.biography.replace(/[\n\r]/g, ' ').replace(/"/g, '\\"').slice(0, 120)}"${establishedLabel}${sourceLabel}`
+      const corpusLabel = corpusSignals?.[p.username] ? ` ${corpusSignals[p.username]}` : ''
+      return `@${p.username} | followers: ${p.followersCount.toLocaleString()} | ER: ${er}% | posts: ${p.postsCount} | verified: ${p.verified} | bio: "${p.biography.replace(/[\n\r]/g, ' ').replace(/"/g, '\\"').slice(0, 120)}"${establishedLabel}${sourceLabel}${corpusLabel}`
     })
     .join('\n')
 
@@ -288,6 +317,7 @@ export function buildDiscoveryPrompt(
   creatorCount?: number,
   businessCount?: number,
   preferenceExemplars?: PreferenceExemplars,
+  corpusSignals?: Record<string, string>,
 ): string {
   const topCategory = DISCOVERY_CATEGORIES.top
   const trendingCategory = DISCOVERY_CATEGORIES.trending
@@ -299,7 +329,8 @@ export function buildDiscoveryPrompt(
       const establishedLabel = p.followersCount > 500_000
         ? ' [ESTABLISHED: 500K+ followers — assign to Top category]'
         : ''
-      return `@${p.username} | type: ${accountType} | followers: ${p.followersCount.toLocaleString()} | ER: ${er}% | posts: ${p.postsCount} | verified: ${p.verified} | bio: "${p.biography.replace(/[\n\r]/g, ' ').replace(/"/g, '\\"').slice(0, 150)}"${establishedLabel}`
+      const corpusLabel = corpusSignals?.[p.username] ? ` ${corpusSignals[p.username]}` : ''
+      return `@${p.username} | type: ${accountType} | followers: ${p.followersCount.toLocaleString()} | ER: ${er}% | posts: ${p.postsCount} | verified: ${p.verified} | bio: "${p.biography.replace(/[\n\r]/g, ' ').replace(/"/g, '\\"').slice(0, 150)}"${establishedLabel}${corpusLabel}`
     })
     .join('\n')
 

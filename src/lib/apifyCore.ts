@@ -13,8 +13,13 @@ import pLimit from 'p-limit'
 import { getClerkSessionToken } from './clerkToken'
 
 export const BASE_URL = '/api/apify'
-export const POLL_INTERVAL_MS = 2000   // 2 seconds between polls
+// 6.7: exponential poll backoff — start at 2s, multiply by 1.5 each poll, cap at 8s.
+export const POLL_INTERVAL_INIT_MS = 2000
+export const POLL_INTERVAL_MAX_MS  = 8000
+export const POLL_INTERVAL_FACTOR  = 1.5
 export const MAX_POLL_MS = 110_000     // 110s hard limit (leaves 10s buffer for 150s total timeout)
+// Back-compat export so existing test imports that reference POLL_INTERVAL_MS don't break.
+export const POLL_INTERVAL_MS = POLL_INTERVAL_INIT_MS
 
 /**
  * Shared Apify run limiter for the REEL pipelines (reelScraper + reelVideoClient).
@@ -159,6 +164,7 @@ export async function pollRun(
   if (signal?.aborted) throw new ApifyError('ABORTED', 'Request aborted', 0)
 
   let transientFailures = 0
+  let pollInterval = POLL_INTERVAL_INIT_MS
 
   while (Date.now() < deadline) {
     if (signal?.aborted) {
@@ -207,8 +213,9 @@ export async function pollRun(
     if (status === 'TIMED-OUT') throw new ApifyError('RUN_TIMEOUT', 'Actor run timed out on Apify side', 0)
     if (status === 'ABORTED') throw new ApifyError('RUN_ABORTED', 'Actor run was aborted', 0)
 
-    // Still READY or RUNNING — wait and poll again
-    await sleep(POLL_INTERVAL_MS)
+    // Still READY or RUNNING — back-off wait then poll again.
+    await sleep(pollInterval)
+    pollInterval = Math.min(Math.round(pollInterval * POLL_INTERVAL_FACTOR), POLL_INTERVAL_MAX_MS)
   }
 
   abortApifyRun()

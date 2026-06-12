@@ -94,44 +94,55 @@ export function createSupabaseCorpus(): CorpusRepository {
   // survives destructuring (const { remember } = corpus) without unbinding.
   const repo: CorpusRepository = {
     async remember(inputs: CreatorInput[]) {
-      for (const { profile, sighting } of inputs) {
-        const hasData = profile.followersCount > 0
-        const row = {
-          username: profile.username,
-          full_name: profile.fullName,
-          profile_pic_url: profile.profilePicUrl,
-          verified: profile.verified,
-          is_business_account: profile.isBusinessAccount,
-          followers_count: profile.followersCount,
-          follows_count: profile.followsCount,
-          posts_count: profile.postsCount,
-          avg_likes: profile.avgLikes,
-          avg_comments: profile.avgComments,
-          engagement_rate: profile.engagementRate,
-          top_hashtags: profile.topHashtags,
-          last_post_date: profile.lastPostDate ?? null,
-        }
-        // hasData → update metrics on conflict; no-data → ensure row exists, never clobber.
-        const { error: cErr } = hasData
-          ? await supabase.from('corpus_creators').upsert(row)
-          : await supabase.from('corpus_creators').upsert(row, { ignoreDuplicates: true })
-        if (cErr) throw cErr
-        const { error: sErr } = await supabase.from('corpus_sightings').insert({
-          creator_username: profile.username,
-          at: new Date(sighting.at).toISOString(),
-          pipeline: sighting.pipeline,
-          niche: sighting.niche ?? null,
-          city: sighting.city ?? null,
-          category: sighting.category ?? null,
-          rank: sighting.rank ?? null,
-          rationale: sighting.rationale ?? null,
-          specialties: sighting.specialties ?? null,
-          content_focus: sighting.contentFocus ?? null,
-          partnership_ready: sighting.partnershipReady ?? null,
-          location_confidence: sighting.locationConfidence ?? null,
-        })
-        if (sErr) throw sErr
+      if (inputs.length === 0) return []
+
+      // 6.4: batch all writes — 2N+2 sequential round trips → ~4 batched ops.
+      const buildRow = (p: CreatorInput['profile']) => ({
+        username: p.username,
+        full_name: p.fullName,
+        profile_pic_url: p.profilePicUrl,
+        verified: p.verified,
+        is_business_account: p.isBusinessAccount,
+        followers_count: p.followersCount,
+        follows_count: p.followsCount,
+        posts_count: p.postsCount,
+        avg_likes: p.avgLikes,
+        avg_comments: p.avgComments,
+        engagement_rate: p.engagementRate,
+        top_hashtags: p.topHashtags,
+        last_post_date: p.lastPostDate ?? null,
+      })
+
+      const withData = inputs.filter(({ profile: p }) => p.followersCount > 0).map(({ profile: p }) => buildRow(p))
+      const withoutData = inputs.filter(({ profile: p }) => p.followersCount === 0).map(({ profile: p }) => buildRow(p))
+
+      // hasData rows → update metrics on conflict; no-data rows → ensure row exists, never clobber.
+      if (withData.length > 0) {
+        const { error } = await supabase.from('corpus_creators').upsert(withData)
+        if (error) throw error
       }
+      if (withoutData.length > 0) {
+        const { error } = await supabase.from('corpus_creators').upsert(withoutData, { ignoreDuplicates: true })
+        if (error) throw error
+      }
+
+      const sightingRows = inputs.map(({ profile: p, sighting: s }) => ({
+        creator_username: p.username,
+        at: new Date(s.at).toISOString(),
+        pipeline: s.pipeline,
+        niche: s.niche ?? null,
+        city: s.city ?? null,
+        category: s.category ?? null,
+        rank: s.rank ?? null,
+        rationale: s.rationale ?? null,
+        specialties: s.specialties ?? null,
+        content_focus: s.contentFocus ?? null,
+        partnership_ready: s.partnershipReady ?? null,
+        location_confidence: s.locationConfidence ?? null,
+      }))
+      const { error: sErr } = await supabase.from('corpus_sightings').insert(sightingRows)
+      if (sErr) throw sErr
+
       return repo.getMany(inputs.map((i) => i.profile.username))
     },
 

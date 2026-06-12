@@ -8,7 +8,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
-import { AlertTriangle, Bot, ChevronDown, Send, Video } from 'lucide-react'
+import { Bot, ChevronDown, Send, Video } from 'lucide-react'
 import { useAnalysisStore } from '../store/analysisStore'
 import { useConversationsStore, sortConversations } from '../store/conversationsStore'
 import { useDiscoveryStore } from '../store/discoveryStore'
@@ -96,7 +96,7 @@ export function ChatPage() {
   const resetDiscovery = useDiscoveryStore((s) => s.reset)
   const activePipeline = useActivePipeline()
 
-  const { isReady } = useKeysStore()
+  const { isReady: _isReady } = useKeysStore()
   // Phase 1 graduated: the turn-based agent loop is THE conversation engine (the old
   // useConversation wizard is retired). Input stays live; a new message steers (latest-wins).
   const agentConv = useAgentConversation()
@@ -125,11 +125,12 @@ export function ChatPage() {
   const [selectedHandles, setSelectedHandles] = useState<string[]>([])
   const [selectionWarning, setSelectionWarning] = useState<string | null>(null)
 
-  const ready = isReady()
+  // Phase 1: keys are server-side — isReady() always returns true; the !ready banner is removed.
+  // Kept as a local const to avoid touching canSend / disabled props throughout.
+  const ready = _isReady()
   // Reel run state (derived from the reel store). A run is "running" until synthesis
   // reaches a terminal state; "done" once synthesis succeeds or fails.
   const isReelDone = activeHandles.length > 0 && (synthesisStatus === 'done' || synthesisStatus === 'failed')
-  // Input stays live during runs (TD3) — sending while something runs steers it (latest-wins).
   const canSend = ready && inputText.trim().length > 0
 
   // On mount: the active conversation is restored by conversationsStore. analysisStore isn't
@@ -411,18 +412,6 @@ export function ChatPage() {
 
   return (
     <div className="h-full flex flex-col bg-chai">
-      {/* Keys-missing warning banner */}
-      {!ready && (
-        <div className="flex-shrink-0 flex items-start gap-2.5 px-4 py-2.5 bg-[rgba(217,119,6,0.08)] border-b border-[rgba(217,119,6,0.2)]">
-          <AlertTriangle size={14} className="text-warning flex-shrink-0 mt-0.5" />
-          <p className="text-xs text-secondary">
-            Add your Gemini and Apify keys to{' '}
-            <code className="px-1 py-0.5 rounded bg-surface-raised font-mono text-[#F4A97B]">.env</code>{' '}
-            (or the Vercel project env) to get started.
-          </p>
-        </div>
-      )}
-
       {/* Selection warning toast */}
       {selectionWarning && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 bg-[#2C2118] border border-[#E07B3A]/40 rounded-xl text-sm text-[#E07B3A] shadow-lg pointer-events-none">

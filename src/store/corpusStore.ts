@@ -30,6 +30,12 @@ export interface CorpusState {
   setFeedback: (username: string, feedback: Feedback | null, at: number) => Promise<CreatorRecord | undefined>
 }
 
+// 6.5: cap the in-memory recognition mirror to the most-recently-seen creators.
+// The full corpus (possibly thousands of rows) is never needed client-side at once —
+// only the "seen before" badge lookup (synchronous) requires a bounded in-memory set.
+// The MemoryPage calls repo.list() directly with its own pagination.
+const HYDRATION_CAP = 200
+
 function keyBy(records: CreatorRecord[]): Record<string, CreatorRecord> {
   const map: Record<string, CreatorRecord> = {}
   for (const r of records) map[r.username] = r
@@ -42,8 +48,12 @@ export function makeCorpusStore(repo: CorpusRepository) {
     count: 0,
     hydrated: false,
     hydrate: async () => {
-      const all = await repo.list()
-      set({ creators: keyBy(all), count: all.length, hydrated: true })
+      if (get().hydrated) return
+      const [slice, total] = await Promise.all([
+        repo.list({ limit: HYDRATION_CAP }),
+        repo.count(),
+      ])
+      set({ creators: keyBy(slice), count: total, hydrated: true })
     },
     remember: async (inputs) => {
       const merged = await repo.remember(inputs)

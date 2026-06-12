@@ -16,11 +16,17 @@ body {
   font-family: 'Outfit', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  min-width: 1024px;
 }
 
 #root {
   min-height: 100vh;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* ── Print / Save as PDF — the niche report (Phase 2 refinement) ──
@@ -29,7 +35,6 @@ body {
    and force dark-on-white for legibility. */
 @media print {
   body {
-    min-width: 0;
     background: #fff;
   }
   body * {

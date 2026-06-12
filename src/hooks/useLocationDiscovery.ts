@@ -27,6 +27,7 @@ import type { DiscoveryResult } from '../ai/prompts'
 import { linkAbort } from '../lib/abortControl'
 import { useCorpusStore } from '../store/corpusStore'
 import { dropDismissedCandidates, selectPreferenceExemplars } from '../lib/corpus'
+import { buildCorpusSignals } from '../ai/prompts'
 import { buildPipelineErrorMessage, ALL_DISMISSED_MESSAGE } from '../lib/errorMessages'
 
 const TIMEOUT_MS = 150_000
@@ -153,12 +154,11 @@ export function useLocationDiscovery() {
 
         // Step 5: AI analysis — pass pool composition so Gemini has grounded context
         setStep(5)
-        // 3b (Phase 3): bias discovery ranking toward saved traits, away from dismissed.
-        // No-op on a cold corpus; safeNiche drives same-niche weighting.
-        const preferenceExemplars = selectPreferenceExemplars(
-          Object.values(useCorpusStore.getState().creators),
-          safeNiche,
-        )
+        const corpusCreators = useCorpusStore.getState().creators
+        // 3b: bias discovery ranking toward saved traits, away from dismissed.
+        const preferenceExemplars = selectPreferenceExemplars(Object.values(corpusCreators), safeNiche)
+        // 4.4: annotate candidate lines with corpus recognition signal.
+        const corpusSignals = buildCorpusSignals(finalFiltered.map((p) => p.username), corpusCreators)
         let output = await analyzeDiscovery(
           geminiKeys,
           safeCity,
@@ -168,6 +168,7 @@ export function useLocationDiscovery() {
           creatorCount,
           businessCount,
           preferenceExemplars,
+          Object.keys(corpusSignals).length > 0 ? corpusSignals : undefined,
         )
 
         // Zero-result guard: if Gemini returned nothing, retry without city/niche context
