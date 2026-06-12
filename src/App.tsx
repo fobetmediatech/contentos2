@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Show, RedirectToSignIn, useAuth } from '@clerk/react'
 import { setClerkTokenGetter } from './lib/supabaseClient'
+import { envErrors } from './lib/env'
 import { useConversationsStore } from './store/conversationsStore'
 import { useReelAnalysisStore } from './store/reelAnalysisStore'
 import { useCorpusStore } from './store/corpusStore'
@@ -71,6 +72,12 @@ function ProtectedRoute() {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
+      {envErrors.length > 0 && (
+        <div className="fixed inset-x-0 top-0 z-50 bg-red-900/95 text-red-100 text-xs px-4 py-2 font-mono">
+          <strong>Configuration incomplete — add to .env.local:</strong>
+          {envErrors.map((e) => <span key={e} className="block ml-2">• {e}</span>)}
+        </div>
+      )}
       <BrowserRouter>
         <Routes>
           {/* Public: Clerk sign-in page — accessible without auth */}

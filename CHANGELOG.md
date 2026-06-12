@@ -4,6 +4,71 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [3.6.0.0] — 2026-06-12
+
+**Production hardening + intelligence + UX + performance.** Seven-phase audit-driven improvement plan (phases 0–7). All 17-agent audit findings addressed: repo guardrails, security proxy, correctness bugs, partial architecture refactor, AI grounding, UX polish, and performance.
+
+### Added (Phase 0 — Repo guardrails)
+- **Hermetic tests** — vitest `setupFiles` globally stubs Supabase so `bun run test` exits 0 with zero unhandled-rejection noise (was ~100+ real-network rejections to placeholder host)
+- **CI** — `.github/workflows/ci.yml`: bun install → tsc (app + api) → eslint → vitest on every push/PR
+- **TypeScript strict mode** — `tsconfig.app.json` + `tsconfig.node.json` now have `"strict": true` (zero-cost at the time — verified)
+- **`typecheck:api`** script — `api/tsconfig.json` now typechecked by CI; chained into `bun run build`
+- **Accurate CLAUDE.md** — fixed 5 stale claims (no backend, localStorage keys, IndexedDB corpus, Settings page, wrong test count); updated to reflect Supabase + Vercel + Clerk reality
+
+### Added (Phase 1 — Security proxy)
+- **`api/gemini.ts`** — Clerk-gated serverless proxy for all Gemini calls; model + endpoint allowlist; key pool server-side
+- **`api/apify.ts`** — Clerk-gated proxy for all Apify calls; actor-ID allowlist; key pool + cooldown server-side
+- **`api/_lib/auth.ts`** — `requireClerkUser()` shared by all serverless functions (extracted from `analyze-reel-video.ts`); `authorizedParties` pinned
+- **`api/config.ts`** — `/api/config` returns boolean readiness flags (never key material); client polls on init
+- **`src/lib/env.ts`** — centralized zod validation of the three browser-side env vars (Clerk + Supabase); `envErrors` feeds a visible banner in App.tsx
+- Client transport in `src/ai/gemini.ts` + `src/lib/apifyCore.ts` now routes through `/api/gemini` + `/api/apify` with Clerk Bearer tokens — zero key material in the bundle
+
+### Fixed (Phase 2 — Correctness bugs)
+- **Conversation binding** — competitor/discovery results and error bubbles now append to the conversation that *started* the run (replicates the `reelConversationId` pattern across all three pipelines)
+- **ClarificationCard dead-end** — switching conversations mid-run now aborts the in-flight run; `answerClarification` checks params before mutating status (eliminated permanent fake spinner)
+- **Reel AbortController** — single controller instance in `reelAnalysisStore` (was: two private refs in two instances that couldn't cancel each other's runs)
+- **Back-to-back reel runs** — run marker and conversation ID set imperatively at run start, not from a batched render effect
+- **Supabase hydration gate** — `setItem` is a no-op until first successful `getItem`; failed rehydrate can no longer overwrite cloud history with blank state
+- **`setItem` rejections** — caught and retried with exponential backoff; "changes not synced" indicator surfaced on persistent failure
+- **Persisted store versions** — `version: 1` + identity `migrate` added to all Zustand persisted stores (shape changes will now migrate, not silently break restores)
+- **Apify orphaned runs** — best-effort `POST /actor-runs/{id}/abort` on timeout/steer/signal abort
+- **Round-2 scrape cap** — bounded to 40 handles (deep) / 25 (standard) with cross-profile adjacency priority (was unbounded → main cost driver + 150s timeouts)
+- **Transient poll failures** — one 429/5xx/network blip no longer kills a whole 2-minute scrape; retries with small backoff within deadline
+- **`GeminiError.retryable`** — the flag was dead; 500/503 and `MALFORMED_FUNCTION_CALL` now retry up to 2× in `geminiGenerate`
+
+### Changed (Phase 3 — Architecture partial)
+- **Shared mutation scaffolding** — guards, `linkAbort`, dismissed-filter, hallucination filter, and error mapping extracted into `lib/runRankedPipeline.ts`; competitor + discovery hooks each dropped ~250 duplicate lines
+- **Domain types** — `ChatMessage`, `ResultPayload`, profile, and reel types moved out of stores into `src/domain/`; stores now import domain types (inverted the coupling)
+- **View derivation unified** — `deriveCompetitorView` / `deriveDiscoveryView` share a `deriveRankedView<T>` generic; tests unchanged
+- **Agent tool record** — `agentTools.ts` restructured: single record (declaration + zod schema + `toAction`) per tool; `AGENT_TOOLS`, validation, and dispatch derived from it
+- **Dead code deleted** — `intentParser.ts` (276 lines, dead at runtime); registry `confirmMessage/confirmOptions`; `analysisStore.parsedIntent`; orphaned `/results` page routes
+
+### Added (Phase 4 — Intelligence)
+- **Grounded content copilot** — `answer_content` now assembles `ContentContext` from the latest result message (research summary + top accounts) and `reelAnalysisStore.synthesis` (hook patterns + tips) before calling Gemini; was passing `undefined`
+- **Agent memory** — `buildGeminiHistory` preserves `type:'result'` messages from same-role collapse via `prevTurnWasResult` flag; research results survive subsequent steering turns
+- **`callGeminiContent` fix** — `thinkingBudget: 0` (eliminates thinking overhead for the chat path); `finishReason === 'MAX_TOKENS'` guard surfaces a clear error instead of silent truncation
+
+### Added (Phase 5 — UX)
+- **Clarification routing** — typing a reply mid-clarification now routes to `answerClarification()` instead of silently killing the run; "or type your own answer" hint added to `ClarificationCard`
+- **Export buttons** — Copy for Slides + Download CSV wired to both `CompetitorResultMessage` and `DiscoveryResultMessage` (exporters were built but had zero UI affordance)
+- **Retry pill** — error ChatMessage bubbles now have a Retry button that re-sends the last user message
+- **Stop button** — progress bubble now has a Stop button that fires `currentRun.abort()`
+- **Smart scroll** — auto-scroll only fires when the user is near the bottom; "Jump to latest" chip appears otherwise
+- **Dynamic placeholder** — input placeholder swaps to "Type to redirect me…" during active runs
+- **Per-field Zustand selectors** — `ChatPage` replaced 12 wholesale store subscriptions with per-field selectors (eliminates progress-tick-triggered full-page re-renders)
+
+### Changed (Phase 6 — Performance)
+- **Supabase write debounce** — `supabaseStorage.setItem` is now a 3s trailing debounce per key with flush on `visibilitychange`; was upsetting full state on every `set()` (~100+ writes per deep reel run)
+- **Bundle splitting** — `vite.config.ts` `manualChunks` splits React / Supabase / Clerk / Zustand / Zod into separate vendor chunks (591 kB monolith → 34 kB app + 5 stable vendor chunks with CDN cache headers)
+- **React.memo** — `CompetitorCard` and `DiscoveryCard` wrapped in `memo`; re-render skipped when props unchanged
+- **Lazy images** — all 5 Instagram CDN `<img>` tags now have `referrerPolicy="no-referrer"` + `loading="lazy"` (CDN images were likely never loading in production without the referrer policy)
+
+### Changed (Phase 7 — Conventions)
+- **`src/lib/env.ts`** — zod validation of all browser-side env vars; `envErrors` array feeds a visible banner in App.tsx when deployment is misconfigured
+- **`NAV_SECTIONS` array** in `AppLayout.tsx` — nav is now data-driven; adding a new section = one array entry
+- **VERSION + package.json** synced to 3.6.0.0 (were out of sync: 3.4.0.0 vs 3.5.0.0)
+- TODOS.md archived to `.planning/archive/` (superseded by the 2026-06-12 master plan)
+
 ## [3.4.0.0] — 2026-06-08
 
 **Supabase data sync.** All browser-local state now persists in Supabase Postgres, scoped to the logged-in Clerk user. The creator/content corpus is a shared team brain (any teammate's search enriches it); conversations and reel analyses are private per user. Cloud-first: IndexedDB and localStorage are dropped entirely.

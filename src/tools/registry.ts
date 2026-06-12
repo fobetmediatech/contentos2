@@ -4,12 +4,8 @@
  * Pure data, no hook calls, no side effects.
  * Each entry is the single source of truth for its pipeline's step labels and display name.
  *
- * Extension guide:
- *   1. Add a new PipelineToolDescriptor entry here with id, name, and steps.
- *   2. Add a tool record (declaration + Zod schema + toAction) in agentTools.ts.
- *   3. Add a dispatch branch in useAgentConversation.ts → dispatchTool().
- *   4. Add a result store (see analysisStore.ts / discoveryStore.ts pattern).
- *   5. Add a result message component and wire it into ChatPage's render block.
+ * Full extension guide: see "Adding a new pipeline" in CLAUDE.md.
+ * Short version: tool entry in agentTools.ts → dispatch branch → store → hook → ResultMessage → entry here.
  */
 
 import { STEP_LABELS } from '../store/analysisStore'

@@ -71,18 +71,18 @@ NEVER use `mcp__claude-in-chrome__*` tools.
 2. **Location Discovery** — city + niche → hashtag generation → profile scrape → location filter → AI-ranked creator cards
 3. **Reel Hook Analysis** — scrape top reels → Gemini hook analysis per creator → cross-creator pattern synthesis
 
-Entry point: `ChatPage` — conversational interface that routes to all three pipelines via Gemini function-calling (NOT intentParser.ts — that file is dead code).
+Entry point: `ChatPage` — conversational interface that routes to all three pipelines via Gemini function-calling.
 
-**Backend:** One Vercel serverless function (`api/analyze-reel-video.ts`) for deep multimodal reel analysis (Gemini Files API, Clerk JWT-gated). Supabase (Postgres + RLS) backs conversation sync (`user_state` table) and the shared team corpus (`corpus_creators`, `corpus_sightings`, `corpus_content`).
+**Backend:** Four Vercel serverless functions under `api/` — `gemini.ts` (Gemini proxy), `apify.ts` (Apify proxy), `config.ts` (readiness flags), and `analyze-reel-video.ts` (deep multimodal, Gemini Files API). All gated by Clerk JWT via `api/_lib/auth.ts`. Supabase (Postgres + RLS) backs conversation sync (`user_state` table) and the shared team corpus (`corpus_creators`, `corpus_sightings`, `corpus_content`).
 
-**Keys:** Gemini and Apify keys are build-time env vars (`VITE_` prefix — baked into the public JS bundle). Clerk gates the React UI only, not the static assets. Phase 1 of the improvement plan (`docs/superpowers/plans/`) migrates all third-party calls to server-side proxies.
+**Keys:** Gemini and Apify keys live **server-side only** (`process.env`, set in Vercel dashboard — never `VITE_` prefixed). The browser needs only three env vars: `VITE_CLERK_PUBLISHABLE_KEY`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`. `src/lib/env.ts` validates these at startup and surfaces a banner if any are missing.
 
 ## Commands
 
 ```bash
 bun run dev          # Start Vite dev server
 bun run build        # Typecheck (app + api) + Vite build
-bun run test         # Run 608+ unit tests (vitest) — exits 0 on a fresh clone
+bun run test         # Run 600+ unit tests (vitest) — exits 0 on a fresh clone
 bun run test:watch   # Watch mode
 bun run lint         # ESLint
 bun run typecheck:api        # Typecheck api/ directory only
@@ -106,12 +106,12 @@ src/
     useLocationDiscovery.ts   # TanStack Query mutation for discovery pipeline
     useReelAnalysis.ts        # Reel scrape + hook analysis + synthesis; self-contained deep-report run
   ai/
-    intentParser.ts           # DEAD CODE — types only; live routing is Gemini function-calling in useAgentConversation.ts
-    gemini.ts                 # Gemini REST API caller (no SDK) — all browser-side Gemini calls go here
+    gemini.ts                 # Gemini REST API caller (no SDK) — proxies through /api/gemini with Clerk Bearer token
     prompts.ts                # Prompt builders for all Gemini calls
     prompts/                  # Per-feature prompt modules (e.g. deepReelAnalysis)
   lib/
-    apifyCore.ts              # Shared Apify primitives (startRun, pollRun, fetchDataset)
+    env.ts                    # Zod validation of the 3 browser-side env vars; envErrors feeds App.tsx banner
+    apifyCore.ts              # Shared Apify primitives (startRun, pollRun, fetchDataset) — proxies through /api/apify
     apifyClient.ts            # Competitor pipeline scraper (3-round with hashtag expansion)
     discoveryClient.ts        # Discovery pipeline (hashtag → scrape → location filter)
     hashtagGenerator.ts       # Gemini micro-call for location-aware hashtags
@@ -143,7 +143,7 @@ src/
     reelAnalysisStore.ts      # Zustand — reel run state (persisted; reelConversationId tags the owning chat)
     conversationsStore.ts     # Zustand — multi-conversation chat history (persisted) + legacy migration
     corpusStore.ts            # Zustand — corpus hydration + remembered count
-    keysStore.ts              # Zustand — API keys from build-time env (NOT persisted — redeploy to rotate)
+    keysStore.ts              # Zustand — key store shim (empty after Phase 1; keys live server-side)
     persistStorage.ts         # Import-safe persist storage wrapper (never throws)
     reelPersist.ts            # Reel persist guard — drop interrupted mid-runs on restore
     supabaseStorage.ts        # Zustand PersistStorage backed by Supabase user_state table
@@ -151,8 +151,12 @@ src/
 
 ```
 api/
+  gemini.ts                   # Vercel serverless: Clerk JWT gate → Gemini REST proxy (model + endpoint allowlist)
+  apify.ts                    # Vercel serverless: Clerk JWT gate → Apify REST proxy (actor-ID allowlist)
+  config.ts                   # GET /api/config — returns { geminiReady, apifyReady } flags (never key material)
   analyze-reel-video.ts       # Vercel serverless: Clerk JWT gate → Gemini Files API video analysis
   _lib/
+    auth.ts                   # requireClerkUser() — shared Clerk JWT verification for all api/ functions
     geminiFiles.ts            # Gemini Files API helper (upload + generate)
     deepReelPrompt.ts         # Prompt builder for the deep multimodal path
   tsconfig.json               # Separate tsconfig for Vercel functions (nodenext, strict: true)
@@ -190,6 +194,48 @@ Key rules from DESIGN.md:
 - All neutrals must have warm undertones — no pure Tailwind slate grays
 - AI-generated content only uses the violet tint (#A78BFA)
 - In QA mode, flag any code that uses Inter, slate colors, or indigo as the accent
+
+## Extension conventions
+
+These patterns are the official extension guide (Phase 7). Deviating requires explicit justification.
+
+### Adding a new pipeline
+
+1. Add a tool entry in `src/tools/agentTools.ts` — one record with `declaration`, `zod schema`, and `toAction`.
+2. Add a dispatch branch in `useAgentConversation.ts` → `dispatchTool()`.
+3. Create a store with `version: 1` and an identity `migrate` (see `analysisStore.ts` / `discoveryStore.ts`).
+4. Create a `useXxxPipeline.ts` hook using `lib/runRankedPipeline.ts` scaffolding.
+5. Create a `XxxResultMessage.tsx` result component and wire it into `ChatPage`'s render block.
+6. Add an entry to `PIPELINE_REGISTRY` in `src/tools/registry.ts`.
+7. **In the same PR:** add at least one eval case in the agent golden-set (`agentLoop.eval.test.ts`).
+
+Persisted payload `kind` discriminants are **frozen** — changing them silently breaks stored conversations.
+
+### Adding a new nav section
+
+Add one entry to `NAV_SECTIONS` in `src/components/AppLayout.tsx`:
+```ts
+{ path: '/new-section', label: 'Label', icon: SomeIcon }
+```
+Then add the route in `src/App.tsx` under the `<Route element={<AppLayout />}>` block. Nav, active states, and routing all derive automatically.
+
+### Adding a new server capability
+
+Create `api/<name>.ts` using the pattern in any existing `api/*.ts`:
+- Import `requireClerkUser` from `api/_lib/auth.ts` (Clerk JWT gate — required on every function).
+- Read keys from `process.env` only — never `VITE_` env vars.
+- Add to Vercel dashboard env vars; update `.env.example` with a comment-only placeholder.
+
+### Persisted store schema changes
+
+Every persisted Zustand store must have `version: N` and a `migrate(state, version)` function. Increment `version` with every shape change and handle old versions in `migrate`. This prevents silent data loss on restores.
+
+### Releasing
+
+1. Bump `VERSION` and `package.json` `version` to the same value (CI checks they match).
+2. Add a CHANGELOG entry under the new version heading.
+3. Git tag: `git tag v<version>` + push tags.
+4. Run `/document-release` after shipping to keep CLAUDE.md's file map current.
 
 ## Skill routing
 

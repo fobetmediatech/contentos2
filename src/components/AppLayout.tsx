@@ -1,32 +1,46 @@
 import { useEffect } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { Brain, FileText, MessageSquare } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { UserButton } from '@clerk/react'
 import { useCorpusStore } from '../store/corpusStore'
 
+/**
+ * NAV_SECTIONS — single source of truth for app navigation (Phase 7 item 7.2).
+ *
+ * Adding a new section = one entry here. The nav, active states, and layout
+ * (fullBleed = h-[100dvh] chat mode; default = padded content pages) all derive
+ * from this array.
+ */
+export interface NavSection {
+  path: string
+  label: string
+  icon: LucideIcon
+  fullBleed?: boolean
+}
+
+export const NAV_SECTIONS: NavSection[] = [
+  { path: '/', label: 'Chat', icon: MessageSquare, fullBleed: true },
+  { path: '/memory', label: 'Memory', icon: Brain },
+  { path: '/report', label: 'Report', icon: FileText },
+]
+
 interface AppLayoutProps {
-  /**
-   * T11: When true, removes page padding so ChatPage can use h-[100dvh].
-   * Without this, AppLayout's py-8 px-6 causes the sticky input to overflow.
-   */
   noPadding?: boolean
 }
 
 export function AppLayout({ noPadding = false }: AppLayoutProps) {
   const location = useLocation()
-  const isChat = location.pathname === '/'
-  const isMemory = location.pathname === '/memory'
-  const isReport = location.pathname === '/report'
   const corpusCount = useCorpusStore((s) => s.count)
 
-  // Shared nav-link styling (active = filled + primary text; idle = secondary, hover-lifts).
   const navClass = (active: boolean) =>
     `flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md transition-colors ${
       active ? 'bg-surface-raised text-primary font-medium' : 'text-secondary hover:text-primary hover:bg-surface-raised'
     }`
 
-  // Hydrate the creator memory once for the whole app — the shell is always mounted, so the
-  // remembered-count and "seen before" badges populate on whichever route the user lands on.
+  const isActive = (s: NavSection) =>
+    s.path === '/' ? location.pathname === '/' : location.pathname.startsWith(s.path)
+
   useEffect(() => {
     void useCorpusStore.getState().hydrate().catch(() => {})
   }, [])
@@ -44,33 +58,32 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
             Content OS
           </Link>
 
-          {/* Nav links — Chat | Memory | Report */}
+          {/* Nav links — derived from NAV_SECTIONS */}
           <nav className="flex items-center gap-1">
-            <Link to="/" className={navClass(isChat)}>
-              <MessageSquare size={14} />
-              Chat
-            </Link>
-
-            {/* Memory — the corpus browse view. Always visible; the count rides along as a
-                badge once anything is remembered (it used to be the only, gated, entry point). */}
-            <Link to="/memory" title="Creators remembered across your searches" className={navClass(isMemory)}>
-              <Brain size={14} className="text-[#E07B3A]" />
-              Memory
-              {corpusCount > 0 && (
-                <span className="ml-0.5 text-[11px] font-medium tabular-nums px-1.5 py-0.5 rounded-full bg-[rgba(224,123,58,0.15)] text-[#F4A97B]">
-                  {corpusCount}
-                </span>
-              )}
-            </Link>
-
-            {/* Report — the deep niche report from reel analysis (empty state until one is run). */}
-            <Link to="/report" className={navClass(isReport)}>
-              <FileText size={14} />
-              Report
-            </Link>
+            {NAV_SECTIONS.map((s) => {
+              const Icon = s.icon
+              const active = isActive(s)
+              return (
+                <Link
+                  key={s.path}
+                  to={s.path}
+                  title={s.path === '/memory' && corpusCount > 0 ? `${corpusCount} creators remembered` : undefined}
+                  className={navClass(active)}
+                >
+                  <Icon size={14} className={s.path === '/memory' ? 'text-[#E07B3A]' : undefined} />
+                  {s.label}
+                  {/* Memory-specific corpus count badge */}
+                  {s.path === '/memory' && corpusCount > 0 && (
+                    <span className="ml-0.5 text-[11px] font-medium tabular-nums px-1.5 py-0.5 rounded-full bg-[rgba(224,123,58,0.15)] text-[#F4A97B]">
+                      {corpusCount}
+                    </span>
+                  )}
+                </Link>
+              )
+            })}
           </nav>
 
-          {/* User avatar — Clerk's UserButton shows initials/photo; click opens profile + sign-out popup */}
+          {/* User avatar — Clerk's UserButton shows initials/photo */}
           <UserButton
             appearance={{
               variables: {
@@ -83,7 +96,7 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
         </div>
       </header>
 
-      {/* Page content — noPadding mode fills remaining height for chat */}
+      {/* Page content */}
       {noPadding ? (
         <div className="flex-1 overflow-hidden">
           <Outlet />
