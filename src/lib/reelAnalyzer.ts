@@ -12,8 +12,9 @@
 
 import { callGeminiWithSchema } from '../ai/gemini'
 import { getClerkSessionToken } from './clerkToken'
-import { buildReelAnalysisPrompt, REEL_ANALYSIS_SCHEMA, buildSynthesisPrompt, SYNTHESIS_SCHEMA } from '../ai/prompts/reelAnalysis'
+import { buildReelAnalysisPrompt, REEL_ANALYSIS_SCHEMA, buildReelAnalysisBatchPrompt, REEL_ANALYSIS_BATCH_SCHEMA, buildSynthesisPrompt, SYNTHESIS_SCHEMA } from '../ai/prompts/reelAnalysis'
 import { buildDeepReportPrompt, DEEP_REPORT_SCHEMA } from '../ai/prompts/deepReelAnalysis'
+import { getCachedQuick, setCachedQuick } from './quickReelCache'
 import type {
   DeepReelAnalysis,
   DeepCreatorPlaybook,
@@ -127,6 +128,81 @@ export async function analyzeReel(
     replicationTemplate: raw.replicationTemplate,
     lowConfidenceNote: raw.lowConfidenceNote,
   }
+}
+
+// ---------------------------------------------------------------------------
+// analyzeReelsBatch
+// ---------------------------------------------------------------------------
+
+/**
+ * Analyse all reels for a creator in a single Gemini call, with per-reel caching.
+ *
+ * - Cache hits are returned immediately (no Gemini call for already-analysed reels).
+ * - All cache misses are batched into ONE callGeminiWithSchema call (array responseSchema).
+ * - Results are written back to cache before returning.
+ * - commentsLikesRatio is computed client-side after the Gemini response (not in schema).
+ *
+ * Returns a Record<shortCode, ReelAnalysis> covering all input reels.
+ */
+export async function analyzeReelsBatch(
+  reels: ReelData[],
+  geminiKey: string | string[],
+  signal?: AbortSignal,
+): Promise<Record<string, ReelAnalysis>> {
+  if (reels.length === 0) return {}
+
+  // Check cache for each reel.
+  const cached: Record<string, ReelAnalysis> = {}
+  const uncached: ReelData[] = []
+  await Promise.all(
+    reels.map(async (reel) => {
+      const hit = await getCachedQuick(reel.shortCode)
+      if (hit) {
+        cached[reel.shortCode] = hit
+      } else {
+        uncached.push(reel)
+      }
+    }),
+  )
+
+  if (uncached.length === 0) return cached
+
+  // Batch all cache-miss reels into a single Gemini call.
+  const prompt = buildReelAnalysisBatchPrompt(uncached)
+  const rawArray = await callGeminiWithSchema<
+    Array<{
+      hookArchetype: string
+      secondaryArchetype?: string
+      openingLine?: string
+      retentionMechanism: string
+      psychologyTrigger: string
+      replicationTemplate: string
+      lowConfidenceNote?: string
+    }>
+  >(geminiKey, prompt, REEL_ANALYSIS_BATCH_SCHEMA, { temperature: 0.3, thinkingBudget: 0, signal })
+
+  // Map array response back to reels by index, compute client-side ratio, write cache.
+  const fresh: Record<string, ReelAnalysis> = {}
+  await Promise.all(
+    uncached.map(async (reel, i) => {
+      const raw = rawArray[i]
+      if (!raw) return // safety: Gemini returned fewer items than expected
+      const analysis: ReelAnalysis = {
+        hookArchetype: raw.hookArchetype,
+        secondaryArchetype: raw.secondaryArchetype,
+        openingLine: raw.openingLine,
+        commentsLikesRatio: reel.commentsCount / Math.max(1, reel.likesCount),
+        retentionMechanism: raw.retentionMechanism,
+        psychologyTrigger: raw.psychologyTrigger,
+        replicationTemplate: raw.replicationTemplate,
+        lowConfidenceNote: raw.lowConfidenceNote,
+      }
+      fresh[reel.shortCode] = analysis
+      await setCachedQuick(reel.shortCode, analysis)
+    }),
+  )
+
+  return { ...cached, ...fresh }
 }
 
 // ---------------------------------------------------------------------------

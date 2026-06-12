@@ -15,6 +15,9 @@
 
 import { HOOK_ARCHETYPES } from './reelAnalysis'
 
+/** Bump when the deep-reel prompt/schema changes so deepReelCache keys lazily invalidate. */
+export const DEEP_REEL_PROMPT_VERSION = 1
+
 // ---------------------------------------------------------------------------
 // Type
 // ---------------------------------------------------------------------------

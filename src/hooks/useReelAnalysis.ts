@@ -6,7 +6,7 @@ import { scrapeTopReels, NoReelsError } from '../lib/reelScraper'
 import { scrapeReelVideos } from '../lib/reelVideoClient'
 import { getCachedDeep, setCachedDeep } from '../lib/deepReelCache'
 import {
-  analyzeReel,
+  analyzeReelsBatch,
   analyzeReelDeep,
   synthesizeNiche,
   buildPerCreatorSummary,
@@ -22,8 +22,6 @@ import type { DeepReelStatus } from '../store/reelAnalysisStore'
 // instance's abort couldn't cancel the other's in-flight run).
 const sharedAbortRef: { current: AbortController | null } = { current: null }
 
-// Cap Gemini concurrency across all creators in a run.
-const geminiLimiter = pLimit(5)
 // Deep (multimodal) fn-call concurrency. Conservative: the Vercel function uses a
 // SINGLE Gemini key (no server-side rotation), so this caps concurrent Gemini uploads.
 const deepLimiter = pLimit(3)
@@ -99,16 +97,9 @@ export function useReelAnalysis() {
       if (signal.aborted) return
       setCreatorState(handle, { reels, status: 'analyzing' })
 
-      const analysisEntries = await Promise.all(
-        reels.map((reel) =>
-          geminiLimiter(async () => {
-            const analysis = await analyzeReel(reel, geminiKeys, signal)
-            return [reel.shortCode, analysis] as const
-          }),
-        ),
-      )
+      const analyses = await analyzeReelsBatch(reels, geminiKeys, signal)
       if (signal.aborted) return
-      setCreatorState(handle, { analyses: Object.fromEntries(analysisEntries), status: 'done' })
+      setCreatorState(handle, { analyses, status: 'done' })
     } catch (err) {
       if (signal.aborted) return
       // SECURITY (H11): never surface the raw error message — map by type only.

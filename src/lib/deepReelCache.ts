@@ -13,6 +13,7 @@
  */
 
 import { openDB, type IDBPDatabase } from 'idb'
+import { DEEP_REEL_PROMPT_VERSION } from '../ai/prompts/deepReelAnalysis'
 import type { StoredDeepReelAnalysis } from '../store/reelAnalysisStore'
 
 const DB_NAME = 'reel-intel'
@@ -33,13 +34,17 @@ function getDb(): Promise<IDBPDatabase> | null {
   return dbPromise
 }
 
+function cacheKey(shortCode: string): string {
+  return `${shortCode}@v${DEEP_REEL_PROMPT_VERSION}`
+}
+
 /** Cached deep analysis for a reel, or undefined on miss / no IndexedDB / error. */
 export async function getCachedDeep(shortCode: string): Promise<StoredDeepReelAnalysis | undefined> {
   const p = getDb()
   if (!p) return undefined
   try {
     const db = await p
-    return (await db.get(STORE, shortCode)) as StoredDeepReelAnalysis | undefined
+    return (await db.get(STORE, cacheKey(shortCode))) as StoredDeepReelAnalysis | undefined
   } catch {
     return undefined
   }
@@ -51,7 +56,7 @@ export async function setCachedDeep(shortCode: string, analysis: StoredDeepReelA
   if (!p) return
   try {
     const db = await p
-    await db.put(STORE, analysis, shortCode)
+    await db.put(STORE, analysis, cacheKey(shortCode))
   } catch {
     /* cache writes are best-effort */
   }

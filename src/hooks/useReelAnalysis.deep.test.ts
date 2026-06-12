@@ -42,7 +42,7 @@ vi.mock('../lib/supabaseClient', () => ({
 // The report step runs after creators finish — stubbed to a no-op so the per-creator
 // status assertions are what's under test (report rendering is covered elsewhere).
 vi.mock('../lib/reelAnalyzer', () => ({
-  analyzeReel: vi.fn(),
+  analyzeReelsBatch: vi.fn().mockResolvedValue({}),
   analyzeReelDeep: mocks.analyzeReelDeep,
   synthesizeNiche: vi.fn(),
   buildPerCreatorSummary: vi.fn(),

@@ -6,6 +6,12 @@
  *  2. Synthesize cross-creator niche insights (SYNTHESIS_SCHEMA)
  */
 
+/**
+ * Bump when the prompt or schema changes materially. Cache keys are scoped to this
+ * version so stale entries are lazily invalidated on the next run.
+ */
+export const REEL_ANALYSIS_PROMPT_VERSION = 1
+
 // ---------------------------------------------------------------------------
 // Hook archetype taxonomy
 // ---------------------------------------------------------------------------
@@ -193,4 +199,76 @@ ${summariesJson}
 \`\`\`
 
 Return only valid JSON matching the synthesis schema. Do not add commentary outside the JSON.`
+}
+
+// ---------------------------------------------------------------------------
+// Batch schema + prompt (quick-path cache: one Gemini call for N uncached reels)
+// ---------------------------------------------------------------------------
+
+/** Array wrapper around REEL_ANALYSIS_SCHEMA — one element per reel, same order as input. */
+export const REEL_ANALYSIS_BATCH_SCHEMA = {
+  type: 'array',
+  items: REEL_ANALYSIS_SCHEMA,
+}
+
+/**
+ * Build a single prompt that analyses N reels in one call.
+ * The response is an array of REEL_ANALYSIS_SCHEMA objects in the same order as `reels`.
+ * commentsLikesRatio is NOT in the schema — callers compute it client-side after.
+ */
+export function buildReelAnalysisBatchPrompt(
+  reels: Array<{
+    shortCode: string
+    caption: string
+    videoViewCount: number
+    likesCount: number
+    commentsCount: number
+    hashtags: string[]
+    videoDuration: number
+    musicInfo?: unknown
+  }>,
+): string {
+  const reelsJson = JSON.stringify(
+    reels.map((r, i) => ({
+      index: i,
+      shortCode: r.shortCode,
+      caption: r.caption,
+      videoViewCount: r.videoViewCount,
+      likesCount: r.likesCount,
+      commentsCount: r.commentsCount,
+      hashtags: r.hashtags,
+      videoDurationSeconds: r.videoDuration,
+      musicInfo: r.musicInfo ?? null,
+    })),
+    null,
+    2,
+  )
+
+  return `You are an expert Instagram content strategist specialising in viral hook mechanics.
+
+## Hook Archetype Taxonomy
+
+${HOOK_TAXONOMY_TABLE}
+
+## Task
+
+Analyse the ${reels.length} reel(s) below and return an array of ${reels.length} classification object(s).
+
+**Rules:**
+- Return an array with EXACTLY ${reels.length} element(s), one per reel, in the SAME ORDER as the input array.
+- \`hookArchetype\` MUST be one of the exact enum values in the taxonomy above.
+- \`secondaryArchetype\` is optional — only populate if a second archetype is clearly present.
+- \`openingLine\`: the verbatim hook — the first line of the caption (or the implied on-screen opening line) that stops the scroll. Quote it directly when present; otherwise reconstruct the most likely opening line. Keep it under ~120 characters.
+- \`retentionMechanism\`: one sentence on what keeps viewers watching past the hook.
+- \`psychologyTrigger\`: the core psychological driver (e.g. FOMO, identity, curiosity, social proof).
+- \`replicationTemplate\`: a fill-in-the-blank hook sentence a creator could adapt.
+- \`lowConfidenceNote\`: set when classifying "Visual shock" or "Demo-first" — flag the caption-only limitation briefly. Leave empty or omit for other archetypes.
+
+## Reel Data (JSON array, index-ordered)
+
+\`\`\`json
+${reelsJson}
+\`\`\`
+
+Return only a valid JSON array matching the schema. Do not add commentary outside the JSON array.`
 }
