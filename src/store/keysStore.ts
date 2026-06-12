@@ -18,7 +18,10 @@ import { isReady, pickAvailableKey, getKeyExpiry } from '../lib/keyRotator'
 // so no single key's per-minute RPM/TPM is the bottleneck (geminiKeyRotator round-robins them).
 const ENV_GEMINI_KEYS: string[] = [
   ...new Set(
-    [import.meta.env.VITE_GEMINI_KEY, ...String(import.meta.env.VITE_GEMINI_KEYS ?? '').split(',')]
+    [
+      ...String(import.meta.env.VITE_GEMINI_KEY ?? '').split(','),
+      ...String(import.meta.env.VITE_GEMINI_KEYS ?? '').split(','),
+    ]
       .map((k) => (typeof k === 'string' ? k.trim() : ''))
       .filter((k) => k.length > 0),
   ),

@@ -150,3 +150,31 @@ describe('normalizeProfile — non-string hashtag guard (diff patch)', () => {
     expect(profile.topHashtags).toEqual([])
   })
 })
+
+describe('normalizeProfile — lastPostDate ignores pinned-post ordering', () => {
+  it('returns the newest timestamp even when latestPosts[0] is an old pinned post', () => {
+    const raw = makeRaw({
+      latestPosts: [
+        { timestamp: '2025-01-01T00:00:00.000Z', isPinned: true } as never,
+        { timestamp: '2026-06-01T00:00:00.000Z' } as never,
+        { timestamp: '2026-05-15T00:00:00.000Z' } as never,
+      ],
+    })
+    expect(normalizeProfile(raw).lastPostDate).toBe('2026-06-01T00:00:00.000Z')
+  })
+
+  it('returns undefined when no post has a parseable timestamp', () => {
+    const raw = makeRaw({
+      latestPosts: [
+        { timestamp: 'not-a-date' } as never,
+        {} as never,
+      ],
+    })
+    expect(normalizeProfile(raw).lastPostDate).toBeUndefined()
+  })
+
+  it('returns undefined when latestPosts is missing', () => {
+    const raw = makeRaw({ latestPosts: undefined })
+    expect(normalizeProfile(raw).lastPostDate).toBeUndefined()
+  })
+})

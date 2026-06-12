@@ -14,6 +14,7 @@
  */
 
 import { GeminiError, geminiGenerate } from '../ai/gemini'
+import { devLog, devWarn } from './devLog'
 
 // Number of hashtags to request per depth level
 const HASHTAG_COUNT: Record<'standard' | 'deep', number> = {
@@ -38,6 +39,9 @@ export function sanitize(input: string, maxLen: number): string {
 /**
  * Generate hashtags from a simple template when Gemini is unavailable.
  * Works for any city + niche combination without an API call.
+ * With an empty city (niche-only competitor seeding), emits only niche-derived
+ * tags — the city-template food fillers would otherwise degenerate into bare
+ * "Foodie"/"StreetFood" junk unrelated to the niche.
  */
 export function ruleFallback(city: string, niche: string, count: number): string[] {
   const c = city.replace(/\s+/g, '')   // "New Delhi" → "NewDelhi"
@@ -50,19 +54,30 @@ export function ruleFallback(city: string, niche: string, count: number): string
   //   2. Creator self-ID tags (what creators use to label themselves): IndoreFoodVlogger, IndoreFoodBlogger
   // Self-ID tags surface creator handles directly — vloggers tag every post with them,
   // so scraping them yields creator ownerUsername values, not business accounts.
-  const candidates = [
-    `${c}${n}`,                   // IndoreFood
-    `${c}${n}Vlogger`,            // IndoreFoodVlogger (creator self-ID)
-    `${c}${n}Blogger`,            // IndoreFoodBlogger (creator self-ID)
-    `${cityLower}${nicheLower}`,  // indorefood
-    `${c}Foodie`,                 // IndoreFoodie
-    `${c}StreetFood`,             // IndoreStreetFood
-    `${c}Eats`,                   // IndoreEats
-    `${nicheLower}${cityLower}`,  // foodindore
-    `${c}FoodLovers`,             // IndoreFoodLovers
-    `${c}Diaries`,                // IndoreDiaries
-    `${c}Bites`,                  // IndoreBites
-  ]
+  const candidates = c
+    ? [
+        `${c}${n}`,                   // IndoreFood
+        `${c}${n}Vlogger`,            // IndoreFoodVlogger (creator self-ID)
+        `${c}${n}Blogger`,            // IndoreFoodBlogger (creator self-ID)
+        `${cityLower}${nicheLower}`,  // indorefood
+        `${c}Foodie`,                 // IndoreFoodie
+        `${c}StreetFood`,             // IndoreStreetFood
+        `${c}Eats`,                   // IndoreEats
+        `${nicheLower}${cityLower}`,  // foodindore
+        `${c}FoodLovers`,             // IndoreFoodLovers
+        `${c}Diaries`,                // IndoreDiaries
+        `${c}Bites`,                  // IndoreBites
+      ]
+    : [
+        n,                            // StreetFood
+        `${n}Vlogger`,                // StreetFoodVlogger (creator self-ID)
+        `${n}Blogger`,                // StreetFoodBlogger (creator self-ID)
+        `${n}Creator`,                // StreetFoodCreator
+        `${n}Gram`,                   // StreetFoodGram
+        `${n}Daily`,                  // StreetFoodDaily
+        `${n}Community`,              // StreetFoodCommunity
+        `${n}Life`,                   // StreetFoodLife
+      ]
 
   // Deduplicate case-insensitively, take first `count`
   const seen = new Set<string>()
@@ -100,7 +115,13 @@ async function callGeminiForHashtags(
       }. Generate ${count} DIFFERENT hashtags targeting a different angle (e.g. nearby area, alternate spelling, related sub-niche).\n`
     : ''
 
-  const prompt = `Generate ${count} Instagram hashtags for finding ${niche} content creators based in ${city}. Mix two types:
+  const nicheSlug = niche.replace(/\s+/g, '')
+
+  // Niche-only variant (competitor seeding passes city='') — the city-anchored
+  // prompt would interpolate misleading bare "Food"/"Foodie" examples, so this
+  // branch is required, not cosmetic.
+  const prompt = city
+    ? `Generate ${count} Instagram hashtags for finding ${niche} content creators based in ${city}. Mix two types:
 
 1. CONTENT hashtags — tags creators add to their own posts: ${citySlug}Food, ${citySlug}Foodie, ${citySlug}Eats, ${citySlug}StreetFood
 2. CREATOR SELF-ID hashtags — tags creators use to label themselves as a vlogger/blogger in this city: ${citySlug}FoodVlogger, ${citySlug}FoodBlogger, ${citySlug}Foodie
@@ -111,6 +132,21 @@ DO NOT generate collab-seeking hashtags used by businesses (e.g. "FoodVloggerWan
 ${exclusionClause}
 Good examples for food in Indore: "IndoreFood", "IndoreFoodVlogger", "IndoreFoodBlogger", "IndoreFoodie", "IndoreEats", "IndoreStreetFood"
 Good examples for fitness in Mumbai: "MumbaiFitness", "MumbaiFitnessVlogger", "MumbaiFitnessBlogger", "MumbaiGym", "FitMumbai"
+
+Return ONLY a JSON array of strings. No # prefix. No explanation. No markdown.`
+    : `Generate ${count} Instagram hashtags for finding ${niche} content creators (no specific location). Mix two types:
+
+1. CONTENT hashtags — popular tags creators add to their own ${niche} posts
+2. CREATOR SELF-ID hashtags — tags creators use to label themselves: ${nicheSlug}Vlogger, ${nicheSlug}Blogger, ${nicheSlug}Creator
+
+Include at least 2 creator self-ID hashtags — these directly surface creator account handles because vloggers and bloggers tag every post with them to build their audience.
+
+Prefer hashtags that real, active creators in this niche use heavily TODAY — avoid obscure concatenations with few posts.
+
+DO NOT generate collab-seeking hashtags used by businesses (e.g. "VloggerWanted", "InfluencerNeeded", "PRCollab") — those are posted by brands, not creators.
+${exclusionClause}
+Good examples for "street food": "StreetFood", "StreetFoodVlogger", "FoodBlogger", "StreetFoodDiaries"
+Good examples for "fitness": "Fitness", "FitnessVlogger", "FitnessBlogger", "GymLife", "FitFam"
 
 Return ONLY a JSON array of strings. No # prefix. No explanation. No markdown.`
 
@@ -124,6 +160,7 @@ Return ONLY a JSON array of strings. No # prefix. No explanation. No markdown.`
         maxOutputTokens: 256,
         responseMimeType: 'application/json',
         responseSchema: { type: 'array', items: { type: 'string' } },
+        thinkingConfig: { thinkingBudget: 0 },
       },
     },
     signal,
@@ -203,7 +240,10 @@ export async function generateHashtags(
   const safeNiche = sanitize(niche, 100)
   const count = HASHTAG_COUNT[depth]
 
-  if (!safeCity || !safeNiche) {
+  // Niche is required; city is optional — the niche-only competitor seed path
+  // intentionally passes city='' and must still get AI hashtags (the rule
+  // template alone produces junk concatenations for multi-word/abstract niches).
+  if (!safeNiche) {
     return { hashtags: ruleFallback(city.trim(), niche.trim(), count), fromAI: false }
   }
 
@@ -211,17 +251,17 @@ export async function generateHashtags(
   if ((Array.isArray(apiKeys) ? apiKeys : [apiKeys]).some((k) => k.trim())) {
     try {
       const hashtags = await callGeminiForHashtags(apiKeys, safeCity, safeNiche, count, signal, excludeHashtags)
-      console.log(`[hashtagGenerator] Gemini returned ${hashtags.length} hashtags:`, hashtags)
+      devLog(`[hashtagGenerator] Gemini returned ${hashtags.length} hashtags:`, hashtags)
       return { hashtags, fromAI: true }
     } catch (err) {
       // H10: a bad/expired Gemini key is a real problem the user must fix — don't mask
       // it as "worse hashtags". Re-throw auth errors; fall back only on transient/parse.
       if (err instanceof GeminiError && err.code === 'AUTH_ERROR') throw err
-      console.warn('[hashtagGenerator] Gemini call failed, using rule fallback:', err)
+      devWarn('[hashtagGenerator] Gemini call failed, using rule fallback:', err)
     }
   }
 
   const hashtags = ruleFallback(safeCity, safeNiche, count)
-  console.log(`[hashtagGenerator] Rule fallback returned ${hashtags.length} hashtags:`, hashtags)
+  devLog(`[hashtagGenerator] Rule fallback returned ${hashtags.length} hashtags:`, hashtags)
   return { hashtags, fromAI: false }
 }

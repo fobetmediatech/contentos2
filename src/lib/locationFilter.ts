@@ -20,6 +20,7 @@
  */
 
 import type { NormalizedProfile } from './transformers'
+import { devLog, devWarn } from './devLog'
 
 // Minimum survivors before the filter is relaxed
 const MIN_RESULTS = 15
@@ -73,13 +74,36 @@ function getAllOtherCityTerms(city: string): string[] {
   return result
 }
 
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+// Short aliases ('la', 'ny', 'hyd', …) are substrings of common bio words —
+// 'la' ⊂ 'collab'/'available', 'ny' ⊂ 'any'/'company' — so they must only match
+// as standalone tokens. The character-class form is used instead of \b because
+// \b treats emoji/punctuation-adjacent and underscore cases inconsistently.
+// Longer terms keep plain substring matching so hashtag concatenations like
+// '#mumbaifoodie' still count as a city signal.
+const SHORT_TERM_LEN = 4
+const shortTermRegexCache = new Map<string, RegExp>()
+
+function matchesTerm(lower: string, term: string): boolean {
+  if (term.length >= SHORT_TERM_LEN) return lower.includes(term)
+  let re = shortTermRegexCache.get(term)
+  if (!re) {
+    re = new RegExp(`(?:^|[^a-z0-9])${escapeRegExp(term)}(?:[^a-z0-9]|$)`, 'i')
+    shortTermRegexCache.set(term, re)
+  }
+  return re.test(lower)
+}
+
 /**
  * Check if a text field contains any of the city terms.
  */
 function textContainsCitySignal(text: string, cityTerms: string[]): boolean {
   if (!text) return false
   const lower = text.toLowerCase()
-  return cityTerms.some((term) => lower.includes(term))
+  return cityTerms.some((term) => matchesTerm(lower, term))
 }
 
 // ----- Public API -----
@@ -128,12 +152,12 @@ export function filterByLocation(
 
   // Relaxation: if too few candidates survive, return all (with a note flag)
   if (passedCount < MIN_RESULTS) {
-    console.warn(
+    devWarn(
       `[locationFilter] Only ${passedCount} profiles matched city "${city}" (aliases: ${cityTerms.slice(1).join(', ')}) — relaxing filter, returning all ${profiles.length} candidates`,
     )
     return { filtered: profiles, relaxed: true, passedCount }
   }
 
-  console.log(`[locationFilter] ${passedCount}/${profiles.length} profiles matched city "${city}"`)
+  devLog(`[locationFilter] ${passedCount}/${profiles.length} profiles matched city "${city}"`)
   return { filtered: passed, relaxed: false, passedCount }
 }

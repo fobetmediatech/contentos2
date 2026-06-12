@@ -3,8 +3,13 @@
  *
  * The ONE backend piece of the reel-intelligence feature. The browser cannot do the
  * Gemini Files API binary-video upload, so this function:
- *   gate(origin + shared secret) -> allowlist the fetch host (SSRF guard) ->
- *   fetch(downloadedVideoUrl) bytes -> Gemini multimodal (Files API) -> DeepReelAnalysis.
+ *   gate(Clerk session JWT, verified server-side) -> allowlist the fetch host (SSRF
+ *   guard) -> fetch(downloadedVideoUrl) bytes -> Gemini multimodal (Files API) ->
+ *   DeepReelAnalysis.
+ *
+ * The gate FAILS CLOSED: CLERK_SECRET_KEY unset -> 500, missing/invalid token -> 401.
+ * (The old x-reel-secret shared secret was removed — it shipped in the public JS
+ * bundle via VITE_REEL_FN_SECRET, so it gated nothing.)
  *
  * Apify stays CLIENT-side (reuses the browser keyRotator + 10 keys); this function does
  * Gemini ONLY and needs just GEMINI_API_KEY. The client passes the STABLE api.apify.com
@@ -17,6 +22,7 @@
 // Self-contained: NO runtime imports from ../src (the function is ESM; cross-boundary
 // src specifiers don't resolve at runtime). .js extensions are required by Node ESM.
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { verifyToken } from '@clerk/backend'
 import { buildDeepReelPrompt, DEEP_REEL_SCHEMA, HOOK_ARCHETYPES, type DeepReelAnalysis } from './_lib/deepReelPrompt.js'
 import { analyzeVideoWithGemini, GeminiFilesError } from './_lib/geminiFiles.js'
 
@@ -131,8 +137,9 @@ function parseBody(raw: unknown): Partial<AnalyzeReelInput> {
 }
 
 /**
- * Vercel Node handler (req, res) — gate (method + shared secret), parse, delegate to the
- * core, map errors to clean statuses. Never echoes the Gemini key or raw upstream bodies.
+ * Vercel Node handler (req, res) — gate (method + Clerk session JWT), parse, delegate to
+ * the core, map errors to clean statuses. Never echoes the Gemini key or raw upstream
+ * bodies. The auth gate fails closed: no CLERK_SECRET_KEY -> 500; bad token -> 401.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== 'POST') {
@@ -140,10 +147,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return
   }
 
-  // Gate: require the shared secret IF configured (enforced in prod where the env is set).
-  const expectedSecret = process.env.REEL_FN_SECRET
-  if (expectedSecret && req.headers['x-reel-secret'] !== expectedSecret) {
-    res.status(403).json({ error: 'Forbidden' })
+  // Gate: verify the Clerk session JWT before doing ANY expensive work. This is
+  // the endpoint's only real protection — it fronts the server-held Gemini key
+  // and a 120s multimodal analysis, and /api/* sits outside the SPA's auth gate.
+  const clerkSecretKey = process.env.CLERK_SECRET_KEY
+  if (!clerkSecretKey) {
+    res.status(500).json({ error: 'Server not configured' })
+    return
+  }
+  const authHeader = req.headers.authorization ?? ''
+  const sessionToken = authHeader.startsWith('Bearer ') ? authHeader.slice('Bearer '.length) : ''
+  if (!sessionToken) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  try {
+    await verifyToken(sessionToken, { secretKey: clerkSecretKey })
+  } catch {
+    res.status(401).json({ error: 'Unauthorized' })
     return
   }
 

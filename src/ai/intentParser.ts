@@ -14,6 +14,7 @@
  */
 
 import { z } from 'zod'
+import { devWarn } from '../lib/devLog'
 import { buildIntentPrompt } from './prompts'
 import { GeminiError, geminiHeaders } from './gemini'
 
@@ -207,7 +208,7 @@ async function callGeminiForIntent(
       const isNonRetryable = isGemini && !err.retryable && err.code !== 'UNKNOWN'
       if (isAuthOrRate || isNonRetryable || signal?.aborted) throw err
       if (attempt < INTENT_RETRIES) {
-        console.warn(`[intentParser] attempt ${attempt + 1} failed, retrying in ${INTENT_RETRY_DELAY_MS}ms:`, err)
+        devWarn(`[intentParser] attempt ${attempt + 1} failed, retrying in ${INTENT_RETRY_DELAY_MS}ms:`, err)
         // Abort-aware delay: if the component unmounts during the wait, we
         // cancel the timeout and stop the retry loop rather than firing a
         // ghost network call into a dead AbortSignal.
@@ -256,7 +257,7 @@ export async function parseIntent(
   if (result.success) return result.data
 
   // Retry once with error context (Zod or JSON shape mismatch)
-  console.warn('[intentParser] validation failed, retrying:', result.error.message, 'raw:', raw)
+  devWarn('[intentParser] validation failed, retrying:', result.error.message, 'raw:', raw)
 
   try {
     // M7: pass the ORIGINAL user message (escaped once inside buildIntentPrompt) plus a

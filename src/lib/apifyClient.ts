@@ -19,6 +19,7 @@
  */
 
 import pLimit from 'p-limit'
+import { devLog } from './devLog'
 import { ACTORS, buildProfileScraperInput, buildHashtagScraperInput } from './actors'
 import { normalizeProfiles, type ApifyProfileRaw, type NormalizedProfile } from './transformers'
 import { startRun, pollRun, fetchDataset, chunk, withKeyFailover } from './apifyCore'
@@ -187,7 +188,7 @@ export async function discoverCompetitors(
     .filter((h) => !seenHandles.has(h))
     .slice(0, 20)
 
-  console.log(`[hashtag] ${hashtagHandles.length} net-new handles from content-niche expansion (${uniqueHashtags.slice(0, 3).join(', ')})`)
+  devLog(`[hashtag] ${hashtagHandles.length} net-new handles from content-niche expansion (${uniqueHashtags.slice(0, 3).join(', ')})`)
 
   // Add hashtag handles to seen BEFORE computing Round 3 — prevents overlap between
   // the two parallel scrapes, keeping the combined pool clean.
@@ -200,7 +201,7 @@ export async function discoverCompetitors(
     .filter((h) => !seenHandles.has(h.toLowerCase()))
     .slice(0, round3Cap)
 
-  console.log(`[round3] ${round3Handles.length} net-new handles (cap: ${round3Cap}, seen: ${seenHandles.size})`)
+  devLog(`[round3] ${round3Handles.length} net-new handles (cap: ${round3Cap}, seen: ${seenHandles.size})`)
 
   // Hashtag profile scrape + Round 3 run IN PARALLEL.
   // Both only need data already available (round2Profiles and hashtagHandles),
@@ -209,25 +210,25 @@ export async function discoverCompetitors(
     // Hashtag path: profile-scrape the content-niche handles
     (async (): Promise<NormalizedProfile[]> => {
       if (hashtagHandles.length === 0) {
-        console.log('[hashtag] 0 net-new handles from hashtag path (empty topHashtags or all seen)')
+        devLog('[hashtag] 0 net-new handles from hashtag path (empty topHashtags or all seen)')
         return []
       }
       const batches = chunk(hashtagHandles, 10)
       const results = await Promise.all(batches.map((b) => limit(() => scrapeHandles(b, apifyKeys, signal))))
       const profiles = results.flat()
-      console.log(`[hashtag] scraped ${profiles.length} profiles from content-niche path`)
+      devLog(`[hashtag] scraped ${profiles.length} profiles from content-niche path`)
       return profiles
     })(),
     // Round 3: expand pool from relatedHandles of Round 2 candidates
     (async (): Promise<NormalizedProfile[]> => {
       if (round3Handles.length === 0) {
-        console.log('[round3] 0 net-new handles — relatedProfiles graph is closed for these reference accounts')
+        devLog('[round3] 0 net-new handles — relatedProfiles graph is closed for these reference accounts')
         return []
       }
       const batches = chunk(round3Handles, 10)
       const results = await Promise.all(batches.map((b) => limit(() => scrapeHandles(b, apifyKeys, signal))))
       const profiles = results.flat()
-      console.log(`[round3] scraped ${profiles.length} profiles`)
+      devLog(`[round3] scraped ${profiles.length} profiles`)
       return profiles
     })(),
   ])
@@ -241,7 +242,7 @@ export async function discoverCompetitors(
   // so placing the highest-confidence niche candidates first creates an ordering bias that
   // reinforces the SOURCE PRIORITY instruction in the prompt.
   const allCandidates = [...taggedHashtagProfiles, ...round2Profiles, ...taggedRound3Profiles]
-  console.log(`[pipeline] total candidates: ${allCandidates.length} (hashtag: ${taggedHashtagProfiles.length}, r2: ${round2Profiles.length}, r3: ${taggedRound3Profiles.length})`)
+  devLog(`[pipeline] total candidates: ${allCandidates.length} (hashtag: ${taggedHashtagProfiles.length}, r2: ${round2Profiles.length}, r3: ${taggedRound3Profiles.length})`)
 
   // Dead account gate: remove inactive accounts before handing the pool to Gemini.
   // Accounts with no posts or last post >180 days ago are not active competitors —
@@ -258,7 +259,7 @@ export async function discoverCompetitors(
   })
   const removedCount = allCandidates.length - candidateProfiles.length
   if (removedCount > 0) {
-    console.log(`[dead-account-gate] removed ${removedCount} inactive accounts (0 posts or last post >180 days ago)`)
+    devLog(`[dead-account-gate] removed ${removedCount} inactive accounts (0 posts or last post >180 days ago)`)
   }
 
   return { inputProfiles, candidateProfiles }

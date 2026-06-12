@@ -12,17 +12,15 @@
  * where VITE_* are undefined; real calls are always mocked in tests.
  */
 import { createClient } from '@supabase/supabase-js'
+import { getClerkSessionToken } from './clerkToken'
 
-let getClerkToken: (() => Promise<string | null>) | null = null
-
-/** Wire the Clerk token source. Called once from App.tsx on sign-in. */
-export function setClerkTokenGetter(fn: () => Promise<string | null>): void {
-  getClerkToken = fn
-}
+// Token wiring lives in clerkToken.ts (shared with the deep-reel function
+// caller); re-exported here so existing imports keep working.
+export { setClerkTokenGetter } from './clerkToken'
 
 const url = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co'
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-anon-key'
 
 export const supabase = createClient(url, anonKey, {
-  accessToken: async () => (getClerkToken ? await getClerkToken() : null),
+  accessToken: async () => getClerkSessionToken(),
 })

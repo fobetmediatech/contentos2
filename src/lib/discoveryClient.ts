@@ -36,6 +36,7 @@
  */
 
 import pLimit from 'p-limit'
+import { devLog, devWarn } from './devLog'
 import { ACTORS, buildHashtagScraperInput, buildProfileScraperInput } from './actors'
 import { normalizeProfiles, type ApifyProfileRaw, type NormalizedProfile } from './transformers'
 import { startRun, pollRun, fetchDataset, chunk, withKeyFailover } from './apifyCore'
@@ -218,7 +219,7 @@ async function enrichCreatorPool(
     else businessProfiles.push(p)
   }
 
-  console.log(
+  devLog(
     `[discovery] Pool split: ${creatorProfiles.length} creators, ${businessProfiles.length} businesses (threshold: ${MIN_CREATOR_THRESHOLD})`,
   )
 
@@ -239,7 +240,7 @@ async function enrichCreatorPool(
   const alreadyScraped = new Set(initialProfiles.map((p) => p.username.toLowerCase()))
   const expansionHandles = collectExpansionHandles(creatorProfiles, businessProfiles, alreadyScraped)
 
-  console.log(
+  devLog(
     `[discovery] Creator enrichment: expanding with ${expansionHandles.length} related handles`,
   )
 
@@ -255,15 +256,15 @@ async function enrichCreatorPool(
       const expansionProfiles = expansionResults.flat()
       expansionCreators = expansionProfiles.filter(isCreatorLikely)
       expansionBusinesses = expansionProfiles.filter((p) => !isCreatorLikely(p))
-      console.log(
+      devLog(
         `[discovery] Expansion yielded: ${expansionCreators.length} new creators, ${expansionBusinesses.length} new businesses`,
       )
     } catch (err) {
       // Expansion is best-effort — if it fails, proceed with original pool
-      console.warn('[discovery] Creator expansion failed, proceeding with original pool:', err)
+      devWarn('[discovery] Creator expansion failed, proceeding with original pool:', err)
     }
   } else {
-    console.log('[discovery] No expansion handles available — proceeding with original pool')
+    devLog('[discovery] No expansion handles available — proceeding with original pool')
   }
 
   // Assemble final candidate set: creators get priority
@@ -273,7 +274,7 @@ async function enrichCreatorPool(
   const finalCreators = allCreators.slice(0, MAX_CREATORS)
   const finalBusinesses = allBusinesses.slice(0, MAX_BUSINESSES)
 
-  console.log(
+  devLog(
     `[discovery] Final pool: ${finalCreators.length} creators + ${finalBusinesses.length} businesses`,
   )
 
@@ -320,7 +321,7 @@ export async function runLocationDiscovery(
 ): Promise<DiscoveryPipelineResult> {
   const postsLimit = POSTS_PER_HASHTAG[depth]
 
-  console.log(`[discovery] Scraping ${hashtags.length} hashtags in one run (${postsLimit} posts each)`)
+  devLog(`[discovery] Scraping ${hashtags.length} hashtags in one run (${postsLimit} posts each)`)
 
   // Step 1: ALL hashtags in ONE actor run → pay startup cost once, not N times.
   const hashtagInput = buildHashtagScraperInput(hashtags, postsLimit)
@@ -334,7 +335,7 @@ export async function runLocationDiscovery(
     .map((p) => p.ownerUsername?.trim().toLowerCase())
     .filter((u): u is string => Boolean(u))
   const uniqueHandles = [...new Set(allHandles)]
-  console.log(`[discovery] ${uniqueHandles.length} unique handles from ${hashtags.length} hashtags`)
+  devLog(`[discovery] ${uniqueHandles.length} unique handles from ${hashtags.length} hashtags`)
 
   if (uniqueHandles.length === 0) {
     return {
@@ -348,7 +349,7 @@ export async function runLocationDiscovery(
 
   // Cap at PROFILE_CAP to control Apify cost and run time
   const cappedHandles = uniqueHandles.slice(0, PROFILE_CAP)
-  console.log(`[discovery] Profile-scraping ${cappedHandles.length} handles (cap: ${PROFILE_CAP})`)
+  devLog(`[discovery] Profile-scraping ${cappedHandles.length} handles (cap: ${PROFILE_CAP})`)
 
   // Step 2: Scrape profiles in batches of 10, parallelized with pLimit
   const batches = chunk(cappedHandles, 10)
@@ -356,11 +357,11 @@ export async function runLocationDiscovery(
     batches.map((batch) => limit(() => scrapeProfiles(batch, apifyKeys, signal))),
   )
   const initialProfiles = batchResults.flat()
-  console.log(`[discovery] Scraped ${initialProfiles.length} profiles`)
+  devLog(`[discovery] Scraped ${initialProfiles.length} profiles`)
 
   // Quality gate: drop ghost/inactive accounts before enrichment
   const qualifiedProfiles = initialProfiles.filter(meetsQualityThreshold)
-  console.log(`[discovery] Quality gate: ${qualifiedProfiles.length}/${initialProfiles.length} profiles meet threshold`)
+  devLog(`[discovery] Quality gate: ${qualifiedProfiles.length}/${initialProfiles.length} profiles meet threshold`)
 
   // Step 2b: Creator enrichment — ensure the candidate pool has enough creators
   const { enrichedCandidates, creatorCount, businessCount } = await enrichCreatorPool(

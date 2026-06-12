@@ -11,6 +11,7 @@
  */
 
 import { callGeminiWithSchema } from '../ai/gemini'
+import { getClerkSessionToken } from './clerkToken'
 import { buildReelAnalysisPrompt, REEL_ANALYSIS_SCHEMA, buildSynthesisPrompt, SYNTHESIS_SCHEMA } from '../ai/prompts/reelAnalysis'
 import { buildDeepReportPrompt, DEEP_REPORT_SCHEMA } from '../ai/prompts/deepReelAnalysis'
 import type {
@@ -58,9 +59,12 @@ export async function analyzeReelDeep(
   downloadedVideoUrl: string,
   signal?: AbortSignal,
 ): Promise<StoredDeepReelAnalysis> {
+  // Auth: the function verifies the Clerk session JWT server-side. The old
+  // VITE_REEL_FN_SECRET shared-secret header was removed — a static secret in
+  // the public bundle gates nothing.
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  const secret = import.meta.env.VITE_REEL_FN_SECRET
-  if (secret) headers['x-reel-secret'] = secret
+  const token = await getClerkSessionToken()
+  if (token) headers['Authorization'] = `Bearer ${token}`
 
   let res: Response
   try {
@@ -109,7 +113,7 @@ export async function analyzeReel(
     psychologyTrigger: string
     replicationTemplate: string
     lowConfidenceNote?: string
-  }>(geminiKey, prompt, REEL_ANALYSIS_SCHEMA, { temperature: 0.3, signal })
+  }>(geminiKey, prompt, REEL_ANALYSIS_SCHEMA, { temperature: 0.3, thinkingBudget: 0, signal })
 
   const commentsLikesRatio = reel.commentsCount / Math.max(1, reel.likesCount)
 
@@ -147,7 +151,7 @@ export async function synthesizeNiche(
     topPatterns?: Array<{ archetype?: string; count?: number; example?: string }>
     replicateTips?: string[]
     avoidTips?: string[]
-  }>(geminiKey, prompt, SYNTHESIS_SCHEMA, { temperature: 0.4, signal })
+  }>(geminiKey, prompt, SYNTHESIS_SCHEMA, { temperature: 0.4, thinkingBudget: 0, signal })
 
   // M4: coerce/guard the LLM output so a missing or mistyped field can't crash the UI.
   const topPatterns = Array.isArray(raw.topPatterns)
@@ -368,7 +372,7 @@ export async function synthesizeDeepReport(
     geminiKey,
     buildDeepReportPrompt(playbooks),
     DEEP_REPORT_SCHEMA,
-    { temperature: 0.4, signal },
+    { temperature: 0.4, thinkingBudget: 0, signal },
   )
   const str = (v: unknown): string => (typeof v === 'string' ? v : '')
   const arr = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])

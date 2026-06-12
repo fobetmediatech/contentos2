@@ -131,3 +131,35 @@ describe('filterByLocation — city aliases', () => {
     expect(filtered).toHaveLength(1)
   })
 })
+
+describe('filterByLocation — short-alias word boundaries (substring false-positive fix)', () => {
+  it('does NOT reject a Mumbai creator whose bio contains "collab" ("la" must not match inside words)', () => {
+    const profile = makeProfile({ biography: 'DM for collab 📩' })
+    const { passedCount } = filterByLocation([profile], 'Mumbai')
+    expect(passedCount).toBe(1)
+  })
+
+  it('does NOT pass a business whose bio contains "available" when searching Los Angeles', () => {
+    const profile = makeProfile({ biography: 'available for events', isBusinessAccount: true })
+    const { passedCount } = filterByLocation([profile], 'Los Angeles')
+    expect(passedCount).toBe(0)
+  })
+
+  it('still matches "LA" as a standalone token for Los Angeles', () => {
+    const profile = makeProfile({ biography: 'LA based creator', isBusinessAccount: true })
+    const { passedCount } = filterByLocation([profile], 'Los Angeles')
+    expect(passedCount).toBe(1)
+  })
+
+  it('does NOT reject a creator whose bio contains "any" or "company" ("ny" must not match inside words)', () => {
+    const profile = makeProfile({ biography: 'Open to any company collab' })
+    const { passedCount } = filterByLocation([profile], 'Mumbai')
+    expect(passedCount).toBe(1)
+  })
+
+  it('still matches longer aliases as substrings (hashtag concatenations)', () => {
+    const profile = makeProfile({ biography: '#mumbaifoodie eats daily' })
+    const { passedCount } = filterByLocation([profile], 'Mumbai')
+    expect(passedCount).toBe(1)
+  })
+})

@@ -73,16 +73,18 @@ export function generateCSV(data: ExportData): string {
     })
     .map((c) => {
       const profile = profileMap.get(c.username)
+      // Text fields go through csvCell — formula-injection guard + quoting.
+      // fullName/username are attacker-controlled (scraped profile data).
       return [
         c.rank,
-        c.category,
-        c.username,
-        profile?.fullName ?? '',
+        csvCell(c.category),
+        csvCell(c.username),
+        csvCell(profile?.fullName ?? ''),
         profile?.followersCount ?? '',
         profile?.engagementRate?.toFixed(2) ?? '',
         profile?.verified ? 'yes' : 'no',
-        `"${c.rationale.replace(/"/g, '""')}"`,  // escape quotes in CSV
-        sourceHandles.join(';'),
+        csvCell(c.rationale),
+        csvCell(sourceHandles.join(';')),
       ].join(',')
     })
 

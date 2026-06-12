@@ -13,6 +13,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const analyzeVideoMock = vi.hoisted(() => vi.fn())
+const verifyTokenMock = vi.hoisted(() => vi.fn())
 
 vi.mock('./_lib/geminiFiles.js', () => ({
   analyzeVideoWithGemini: analyzeVideoMock,
@@ -23,6 +24,10 @@ vi.mock('./_lib/geminiFiles.js', () => ({
       this.status = status
     }
   },
+}))
+
+vi.mock('@clerk/backend', () => ({
+  verifyToken: verifyTokenMock,
 }))
 
 import handler, { analyzeReelVideo, coerceDeepAnalysis, HandlerError } from './analyze-reel-video'
@@ -56,8 +61,9 @@ function videoFetch(opts: { ok?: boolean; contentType?: string; bytes?: Uint8Arr
 beforeEach(() => {
   vi.clearAllMocks()
   analyzeVideoMock.mockResolvedValue({ data: GEMINI_DATA, usage: null })
+  verifyTokenMock.mockResolvedValue({ sub: 'user_123' })
   process.env.GEMINI_API_KEY = 'test-key'
-  delete process.env.REEL_FN_SECRET
+  process.env.CLERK_SECRET_KEY = 'sk_test_clerk'
 })
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -145,6 +151,8 @@ function mockRes(): MockRes {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mockReq = (method: string, body?: unknown, headers: Record<string, string> = {}): any => ({ method, body, headers })
 
+const AUTHED = { authorization: 'Bearer tok_valid' }
+
 describe('handler', () => {
   it('405 on non-POST', async () => {
     const res = mockRes()
@@ -152,42 +160,63 @@ describe('handler', () => {
     expect(res.statusCode).toBe(405)
   })
 
-  it('403 when the shared secret is configured but missing/wrong', async () => {
-    process.env.REEL_FN_SECRET = 'shh'
-    vi.stubGlobal('fetch', videoFetch())
+  it('401 when the Authorization header is missing (no expensive work done)', async () => {
+    const f = videoFetch()
+    vi.stubGlobal('fetch', f)
     const res = mockRes()
     await handler(mockReq('POST', { downloadedVideoUrl: APIFY_URL, shortCode: 'a' }), res as never)
-    expect(res.statusCode).toBe(403)
+    expect(res.statusCode).toBe(401)
+    expect(f).not.toHaveBeenCalled()
+    expect(verifyTokenMock).not.toHaveBeenCalled()
+  })
+
+  it('401 when the Clerk token is invalid', async () => {
+    verifyTokenMock.mockRejectedValue(new Error('invalid token'))
+    const f = videoFetch()
+    vi.stubGlobal('fetch', f)
+    const res = mockRes()
+    await handler(mockReq('POST', { downloadedVideoUrl: APIFY_URL, shortCode: 'a' }, AUTHED), res as never)
+    expect(res.statusCode).toBe(401)
+    expect(f).not.toHaveBeenCalled()
+  })
+
+  it('500 fail-closed when CLERK_SECRET_KEY is not configured', async () => {
+    delete process.env.CLERK_SECRET_KEY
+    const res = mockRes()
+    await handler(mockReq('POST', { downloadedVideoUrl: APIFY_URL, shortCode: 'a' }, AUTHED), res as never)
+    expect(res.statusCode).toBe(500)
+    expect(verifyTokenMock).not.toHaveBeenCalled()
   })
 
   it('400 on missing required fields', async () => {
     vi.stubGlobal('fetch', videoFetch())
     const res = mockRes()
-    await handler(mockReq('POST', { shortCode: 'a' }), res as never)
+    await handler(mockReq('POST', { shortCode: 'a' }, AUTHED), res as never)
     expect(res.statusCode).toBe(400)
   })
 
   it('500 when GEMINI_API_KEY is not configured', async () => {
     delete process.env.GEMINI_API_KEY
     const res = mockRes()
-    await handler(mockReq('POST', { downloadedVideoUrl: APIFY_URL, shortCode: 'a' }), res as never)
+    await handler(mockReq('POST', { downloadedVideoUrl: APIFY_URL, shortCode: 'a' }, AUTHED), res as never)
     expect(res.statusCode).toBe(500)
   })
 
-  it('200 happy path returns shortCode + analysis', async () => {
+  it('200 happy path returns shortCode + analysis (verifies the token)', async () => {
     vi.stubGlobal('fetch', videoFetch())
     const res = mockRes()
-    await handler(mockReq('POST', { downloadedVideoUrl: APIFY_URL, shortCode: 'DX1', caption: 'hi' }), res as never)
+    await handler(mockReq('POST', { downloadedVideoUrl: APIFY_URL, shortCode: 'DX1', caption: 'hi' }, AUTHED), res as never)
     expect(res.statusCode).toBe(200)
     const body = res.body as { shortCode: string; analysis: { hookArchetype: string } }
     expect(body.shortCode).toBe('DX1')
     expect(body.analysis.hookArchetype).toBe('Curiosity gap')
+    expect(verifyTokenMock).toHaveBeenCalledWith('tok_valid', { secretKey: 'sk_test_clerk' })
   })
 
   it('maps a core HandlerError to its status', async () => {
     vi.stubGlobal('fetch', videoFetch())
     const res = mockRes()
-    await handler(mockReq('POST', { downloadedVideoUrl: 'https://evil.example.com/x.mp4', shortCode: 'a' }), res as never)
+    await handler(mockReq('POST', { downloadedVideoUrl: 'https://evil.example.com/x.mp4', shortCode: 'a' }, AUTHED), res as never)
     expect(res.statusCode).toBe(400)
     expect(HandlerError).toBeDefined()
   })

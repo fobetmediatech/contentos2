@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sanitize, ruleFallback } from './hashtagGenerator'
+import { sanitize, ruleFallback, generateHashtags } from './hashtagGenerator'
 
 describe('sanitize', () => {
   it('strips newlines', () => {
@@ -66,5 +66,45 @@ describe('ruleFallback', () => {
   it('never returns more than requested even if candidates > count', () => {
     const tags = ruleFallback('Indore', 'food', 3)
     expect(tags).toHaveLength(3)
+  })
+})
+
+describe('ruleFallback — niche-only (empty city)', () => {
+  it('emits only niche-derived tags with no food-template fillers', () => {
+    const tags = ruleFallback('', 'b2b saas', 8)
+    expect(tags.length).toBeGreaterThan(0)
+    for (const tag of tags) {
+      expect(tag.toLowerCase()).toContain('b2bsaas')
+    }
+    expect(tags).not.toContain('Foodie')
+    expect(tags).not.toContain('StreetFood')
+  })
+
+  it('includes creator self-ID tags in the niche-only set', () => {
+    const tags = ruleFallback('', 'fitness', 5)
+    expect(tags).toContain('fitnessVlogger')
+    expect(tags).toContain('fitnessBlogger')
+  })
+})
+
+describe('generateHashtags — niche-only path reaches Gemini', () => {
+  it('returns fromAI=true with empty city when Gemini succeeds (regression: guard no longer short-circuits)', async () => {
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          candidates: [
+            { content: { parts: [{ text: '["FitnessVlogger","FitFam","GymLife"]' }] } },
+          ],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      )) as typeof fetch
+    try {
+      const result = await generateHashtags('test-key', '', 'fitness', 'standard')
+      expect(result.fromAI).toBe(true)
+      expect(result.hashtags).toContain('FitnessVlogger')
+    } finally {
+      globalThis.fetch = originalFetch
+    }
   })
 })

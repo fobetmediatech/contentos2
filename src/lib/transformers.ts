@@ -74,8 +74,10 @@ export interface NormalizedProfile {
   topHashtags: string[]
 
   /**
-   * Date of the most recent post (ISO string from Apify latestPosts[0].timestamp).
-   * Undefined when the profile has no posts or Apify did not return latestPosts.
+   * Date of the most recent post (max timestamp across Apify latestPosts —
+   * pinned posts sit at the head of the array out of chronological order,
+   * so [0] is not reliable). Undefined when the profile has no posts with a
+   * parseable timestamp or Apify did not return latestPosts.
    * Used by the dead account gate in apifyClient.ts to filter inactive profiles.
    */
   lastPostDate?: string
@@ -170,8 +172,20 @@ export function normalizeProfile(raw: ApifyProfileRaw): NormalizedProfile {
     .slice(0, 10)
     .map(([tag]) => tag)
 
-  // Most recent post date: latestPosts is ordered most-recent-first by Apify.
-  const lastPostDate = raw.latestPosts?.[0]?.timestamp
+  // Most recent post date: max timestamp across latestPosts. NOT latestPosts[0] —
+  // Instagram places pinned posts at the head of the array out of chronological
+  // order, so [0] can be a year-old pinned post on an active account, which would
+  // get the creator wrongly dropped by the dead-account gate in apifyClient.
+  let lastPostDate: string | undefined
+  let lastPostTime = -Infinity
+  for (const post of raw.latestPosts ?? []) {
+    if (!post.timestamp) continue
+    const t = new Date(post.timestamp).getTime()
+    if (Number.isFinite(t) && t > lastPostTime) {
+      lastPostTime = t
+      lastPostDate = post.timestamp
+    }
+  }
 
   return {
     username: raw.username ?? '',

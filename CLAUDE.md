@@ -117,6 +117,8 @@ src/
     corpusIdb.ts              # IndexedDB-backed corpus (creators + content stores)
     corpusHarvest.ts          # Map pipeline results → corpus creator/content records
     errorMessages.ts          # Fixed, user-safe error strings (code-keyed; never raw API bodies)
+    devLog.ts                 # DEV-only console helpers (C3 — research-target data never logs in prod)
+    clerkToken.ts             # Clerk session-token access for plain modules (wired once from App.tsx)
     storage.ts                # Cross-runtime storage adapter (browser / Node)
     constants.ts              # Shared string constants
   tools/
