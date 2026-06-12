@@ -18,7 +18,7 @@ vi.mock('../lib/supabaseClient', () => {
       order: () => chain(),
       limit: () => chain(),
       maybeSingle: () => chain(),
-      then: (res: (r: typeof OK) => unknown, _rej?: unknown) =>
+      then: (res: (r: typeof OK) => unknown) =>
         Promise.resolve(OK).then(res),
     }
     return c
