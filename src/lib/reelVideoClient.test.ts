@@ -84,8 +84,10 @@ describe('scrapeReelVideos', () => {
     expect(mocks.startRun).not.toHaveBeenCalled()
   })
 
-  it('throws RATE_LIMITED when no key is available', async () => {
-    mocks.pickAvailableKey.mockReturnValue(null)
+  it('throws RATE_LIMITED when the proxy reports all server keys exhausted (429)', async () => {
+    // Phase 1: empty apifyKeys is normal (server holds them); RATE_LIMITED comes from
+    // the proxy returning 429, which startRun translates to ApifyError('RATE_LIMITED').
+    mocks.startRun.mockRejectedValueOnce(new ApifyError('RATE_LIMITED', 'All server keys exhausted', 429))
     await expect(scrapeReelVideos(['https://www.instagram.com/reel/a/'], [])).rejects.toMatchObject({
       code: 'RATE_LIMITED',
     })

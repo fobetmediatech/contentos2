@@ -287,15 +287,17 @@ describe('fetchDataset', () => {
     })
   })
 
-  it('includes Authorization header in request', async () => {
+  it('sends operation=fetch with the dataset id to the proxy', async () => {
     const mockFetch = vi.fn().mockResolvedValueOnce({
       ok: true,
       status: 200,
       json: () => Promise.resolve([]),
     })
     vi.stubGlobal('fetch', mockFetch)
-    await fetchDataset('ds-1', 'my-secret-key')
-    const [, options] = mockFetch.mock.calls[0] as [string, RequestInit]
-    expect((options.headers as Record<string, string>)?.Authorization).toBe('Bearer my-secret-key')
+    await fetchDataset('ds-1', 'ignored-key')
+    const [url, options] = mockFetch.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('/api/apify')
+    const body = JSON.parse(options.body as string)
+    expect(body).toEqual({ operation: 'fetch', datasetId: 'ds-1' })
   })
 })

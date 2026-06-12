@@ -1,19 +1,17 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
 /**
- * Per-run key rotation for the discovery pipeline (audit fix — parity with apifyClient).
- * runLocationDiscovery used to lock ONE key for the whole multi-run analysis; it now picks
- * a fresh key per scrape RUN via pickRunKey. We mock the network trio and capture the key
- * each run used. fetchDataset returns [] so the hashtag scrape short-circuits after one run
- * (the per-run key pick we care about happens on that first run).
+ * After Phase 1, key selection happens server-side in api/apify.ts.
+ * These tests verify that the discovery pipeline calls startRun (the proxy endpoint)
+ * and completes with an empty client key pool.
  */
-const startRunCalls: string[] = []
+const startRunCalls: Array<{ actorId: string; apiKey: string }> = []
 vi.mock('./apifyCore', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./apifyCore')>()
   return {
-    ...actual, // keep real pickRunKey, ApifyError, chunk
-    startRun: vi.fn(async (_actor: string, _input: unknown, apiKey: string) => {
-      startRunCalls.push(apiKey)
+    ...actual,
+    startRun: vi.fn(async (actorId: string, _input: unknown, apiKey: string) => {
+      startRunCalls.push({ actorId, apiKey })
       return { runId: 'r', datasetId: 'd' }
     }),
     pollRun: vi.fn(async () => 'd'),
@@ -22,30 +20,25 @@ vi.mock('./apifyCore', async (importOriginal) => {
 })
 
 import { runLocationDiscovery } from './discoveryClient'
-import { ApifyError } from './apifyCore'
-import { markKeyCooldown } from './keyRotator'
-import storage from './storage'
 
 beforeEach(() => {
   startRunCalls.length = 0
-  storage.set('apify_key_cooldowns', '{}')
-  storage.set('apify_key_rotation_idx', '0')
 })
 
-describe('runLocationDiscovery — per-run key rotation', () => {
-  it('uses a different Apify key on successive runs instead of locking one', async () => {
-    const keys = ['k1', 'k2', 'k3']
-    await runLocationDiscovery(['nyc food'], 'New York', keys)
-    await runLocationDiscovery(['la food'], 'Los Angeles', keys)
-    expect(startRunCalls).toHaveLength(2)
-    expect(startRunCalls[0]).not.toBe(startRunCalls[1]) // rotated, not reused
-    startRunCalls.forEach((k) => expect(keys).toContain(k))
+describe('runLocationDiscovery — proxy transport', () => {
+  it('calls startRun with an empty client key pool (proxy selects keys server-side)', async () => {
+    await runLocationDiscovery(['nyc food'], 'New York', [])
+    expect(startRunCalls.length).toBeGreaterThanOrEqual(1)
   })
 
-  it('throws RATE_LIMITED (and never starts a run) when every key is on cooldown', async () => {
-    const keys = ['k1', 'k2']
-    keys.forEach(markKeyCooldown)
-    await expect(runLocationDiscovery(['nyc food'], 'New York', keys)).rejects.toBeInstanceOf(ApifyError)
-    expect(startRunCalls).toHaveLength(0)
+  it('passes the actor id to startRun (proxy validates it against the allowlist)', async () => {
+    await runLocationDiscovery(['la food'], 'Los Angeles', [])
+    expect(startRunCalls[0].actorId).toMatch(/instagram/)
+  })
+
+  it('works for successive location searches with an empty key pool', async () => {
+    await runLocationDiscovery(['nyc food'], 'New York', [])
+    await runLocationDiscovery(['la food'], 'Los Angeles', [])
+    expect(startRunCalls).toHaveLength(2)
   })
 })

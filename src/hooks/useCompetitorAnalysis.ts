@@ -44,11 +44,6 @@ export function useCompetitorAnalysis() {
 
   const discoverMutation = useMutation({
     mutationFn: async ({ params, externalSignal }: { params: AnalysisParams; externalSignal?: AbortSignal }) => {
-      // Guard: at least one key must be available. The scrape clients pick a fresh key
-      // PER RUN from the full array (load-spreading), so we pass apifyKeys, not one key.
-      if (!pickKey()) throw new Error('No Apify keys available. All keys are in cooldown.')
-      if (!geminiKeys.length) throw new Error('Gemini API key is not configured.')
-
       // linkAbort: internal 150s timeout + an optional external (agent-loop) signal.
       const abort = linkAbort(TIMEOUT_MS, externalSignal)
 

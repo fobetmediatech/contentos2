@@ -1,54 +1,24 @@
 /**
- * Keys store — env-sourced API keys (no in-app entry, no persistence).
+ * Keys store — Phase 1: Gemini and Apify keys now live on the server proxy.
  *
- * Keys come exclusively from .env at build time (VITE_GEMINI_KEY, VITE_APIFY_KEY_1..10 or a
- * comma-separated VITE_APIFY_KEYS); the deep-reel serverless function reads GEMINI_API_KEY at
- * runtime. There is no Settings UI and this store is NOT persisted — every load reflects the
- * current env, so changing a key is a redeploy, not a localStorage edit. Apify cooldowns are
- * tracked separately by keyRotator (its own localStorage), so rotation still works at runtime.
+ * After Phase 1 (api/gemini.ts + api/apify.ts), all third-party API keys are held in
+ * server-side process.env (GEMINI_API_KEY, APIFY_KEY_1..10). This store no longer
+ * reads VITE_ key env vars. The empty arrays are kept for call-site compatibility;
+ * callers pass them to geminiGenerate/startRun where they are ignored by the proxy.
+ * isReady() always returns true — if the server is misconfigured, errors surface as
+ * pipeline errors, not as a blocked UI.
  */
 
 import { create } from 'zustand'
-import { isReady, pickAvailableKey, getKeyExpiry } from '../lib/keyRotator'
+import { pickAvailableKey, getKeyExpiry } from '../lib/keyRotator'
 
-// VITE_ env vars are inlined at build time. These Gemini keys power all browser-side Gemini
-// calls; the serverless deep-reel function uses its own GEMINI_API_KEY (server-side env).
-// Pool = VITE_GEMINI_KEY (single, back-compat) + VITE_GEMINI_KEYS (comma-separated, any count),
-// deduped — mirrors the Apify pool. Rotation across the pool spreads concurrent multi-user load
-// so no single key's per-minute RPM/TPM is the bottleneck (geminiKeyRotator round-robins them).
-const ENV_GEMINI_KEYS: string[] = [
-  ...new Set(
-    [
-      ...String(import.meta.env.VITE_GEMINI_KEY ?? '').split(','),
-      ...String(import.meta.env.VITE_GEMINI_KEYS ?? '').split(','),
-    ]
-      .map((k) => (typeof k === 'string' ? k.trim() : ''))
-      .filter((k) => k.length > 0),
-  ),
-]
-// First key — back-compat for the few readers that still want a single string (isReady, fallbacks).
-const ENV_GEMINI_KEY: string = ENV_GEMINI_KEYS[0] ?? ''
-// Numbered slots (back-compat) PLUS an optional comma-separated VITE_APIFY_KEYS for any number
-// of keys — there's no fixed cap; keyRotator round-robins whatever it's given. Deduped.
-const ENV_APIFY_KEYS: string[] = [
-  ...new Set(
-    [
-      import.meta.env.VITE_APIFY_KEY_1,
-      import.meta.env.VITE_APIFY_KEY_2,
-      import.meta.env.VITE_APIFY_KEY_3,
-      import.meta.env.VITE_APIFY_KEY_4,
-      import.meta.env.VITE_APIFY_KEY_5,
-      import.meta.env.VITE_APIFY_KEY_6,
-      import.meta.env.VITE_APIFY_KEY_7,
-      import.meta.env.VITE_APIFY_KEY_8,
-      import.meta.env.VITE_APIFY_KEY_9,
-      import.meta.env.VITE_APIFY_KEY_10,
-      ...String(import.meta.env.VITE_APIFY_KEYS ?? '').split(','),
-    ]
-      .map((k) => (typeof k === 'string' ? k.trim() : ''))
-      .filter((k) => k.length > 0),
-  ),
-]
+// Phase 1: Gemini and Apify keys now live on the server proxy (api/gemini.ts, api/apify.ts).
+// These empty arrays are kept for call-site compatibility — callers still pass them to
+// geminiGenerate/startRun where they are ignored by the proxy transport.
+// isReady() returns true unconditionally; server misconfiguration surfaces as pipeline errors.
+const ENV_GEMINI_KEYS: string[] = []
+const ENV_GEMINI_KEY = ''
+const ENV_APIFY_KEYS: string[] = []
 
 interface KeysState {
   geminiKey: string    // first key — back-compat for single-key readers (isReady, fallbacks)
@@ -73,7 +43,7 @@ export const useKeysStore = create<KeysState>()((set, get) => ({
   geminiKeys: ENV_GEMINI_KEYS,
   apifyKeys: ENV_APIFY_KEYS,
 
-  isReady: () => isReady(get().geminiKey, get().apifyKeys),
+  isReady: () => true,  // server holds the keys; misconfiguration surfaces as a pipeline error
   pickKey: () => pickAvailableKey(get().apifyKeys),
   getKeyExpiry: (key: string) => getKeyExpiry(key),
 

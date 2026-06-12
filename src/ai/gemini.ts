@@ -1,22 +1,21 @@
 /**
- * Gemini REST API client — no SDK, direct fetch calls.
+ * Gemini REST API client — routes all calls through the /api/gemini server proxy.
  *
- * Handles 5 distinct error modes:
- *   429 RESOURCE_EXHAUSTED  → exponential backoff, max 3 retries
- *   400 INVALID_ARGUMENT    → bad prompt, do not retry
- *   500 INTERNAL            → transient, suggest retry
- *   503 UNAVAILABLE         → service down, suggest retry
- *   empty candidates[]      → SAFETY block, surface as content policy error
+ * After Phase 1: API keys live on the server (never exposed in the browser bundle).
+ * All calls go to POST /api/gemini with a Clerk Bearer token. The proxy handles
+ * key selection, 429 failover, and model/endpoint allowlisting.
+ *
+ * Error handling is unchanged from the caller's perspective — non-OK responses
+ * still map to GeminiError codes via mapGeminiHttpError.
  */
 
 import { buildCompetitorPrompt, buildDiscoveryPrompt, buildClarificationPrompt, buildContentPrompt, type AnalysisOutput, type DiscoveryOutput, type ClarificationQuestion, type ContentContext } from './prompts'
 import type { NormalizedProfile } from '../lib/transformers'
 import type { PreferenceExemplars } from '../lib/corpus'
-import { pickGeminiKey, markGeminiKeyCooldown, hasFreshGeminiKey } from '../lib/geminiKeyRotator'
+import { getClerkSessionToken } from '../lib/clerkToken'
 
-const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta'
-// Model precedence: env override → default. Update default here when Google deprecates.
-// History: gemini-1.5-flash (retired) → gemini-2.0-flash (retired) → gemini-2.5-flash (current)
+// Model used when building the proxy request. Still respects VITE_GEMINI_MODEL overrides
+// (harmless VITE_ — this is just a model name, not a secret).
 const MODEL = import.meta.env.VITE_GEMINI_MODEL ?? 'gemini-2.5-flash'
 
 /**
@@ -84,17 +83,11 @@ interface GeminiResponse {
   }
 }
 
-// ----- Shared low-level helpers (used by every Gemini call) -----
-
-/** True if a non-OK Gemini response is a rate-limit (429 / RESOURCE_EXHAUSTED). */
-function isRateLimited(httpStatus: number, body: GeminiResponse): boolean {
-  return httpStatus === 429 || body.error?.status === 'RESOURCE_EXHAUSTED'
-}
+// ----- Shared low-level helpers -----
 
 /**
- * Map a non-OK, NON-429 Gemini response to a GeminiError. 429 is control flow
- * (retry vs throw) and is handled by each caller BEFORE calling this. Messages are
- * preserved verbatim from the original inline handlers so existing tests still pass.
+ * Map a non-OK Gemini response to a typed GeminiError.
+ * Messages are preserved verbatim from the original handlers so existing tests still pass.
  */
 function mapGeminiHttpError(httpStatus: number, body: GeminiResponse): GeminiError {
   const status = body.error?.status ?? ''
@@ -107,6 +100,9 @@ function mapGeminiHttpError(httpStatus: number, body: GeminiResponse): GeminiErr
   }
   if (httpStatus === 503 || status === 'UNAVAILABLE') {
     return new GeminiError('UNAVAILABLE', 'Gemini service temporarily unavailable.', true)
+  }
+  if (httpStatus === 429 || status === 'RESOURCE_EXHAUSTED') {
+    return new GeminiError('RATE_LIMITED', 'Gemini rate limit reached. Try again in a moment.', true)
   }
   const isAuth =
     httpStatus === 401 ||
@@ -124,61 +120,34 @@ function joinThoughtFilteredText(parts: GeminiPart[] | undefined): string {
   return (parts ?? []).filter((p) => !p.thought).map((p) => p.text ?? '').join('')
 }
 
-// ----- Key rotation + generate (shared by every Gemini call) -----
-
-/** Exponential backoff with jitter (ms), honoring a Retry-After header (seconds) when present. */
-function geminiBackoffMs(attempt: number, retryAfter: string | null): number {
-  const ra = retryAfter ? Number(retryAfter) : NaN
-  if (Number.isFinite(ra) && ra > 0) return Math.min(ra * 1000, 8000) + Math.random() * 250
-  return Math.min(Math.pow(2, attempt) * 1000, 8000) + Math.random() * 500 // ~1s,2s,4s,8s + jitter
-}
+// ----- Proxy transport -----
 
 /**
- * POST to Gemini generateContent with KEY ROTATION + 429 failover.
+ * POST to the /api/gemini server proxy.
  *
- * Picks a round-robin key from the pool per attempt (spreads concurrent multi-user load so no
- * single key's RPM/TPM is the bottleneck). On 429 / RESOURCE_EXHAUSTED it cools that key (60s)
- * and fails over to a fresh key immediately, or backs off (jittered, honoring Retry-After) when
- * every key is cooling down. Returns the parsed response for any non-rate-limit outcome — the
- * caller maps non-OK via mapGeminiHttpError and parses candidates.
- *
- * Accepts a single key (back-compat) or a pool; a single key still gets backoff/retry, a pool
- * additionally rotates + fails over. This is the ONE place 429s + rotation are handled, so every
- * caller (schema / content / tools / intent / hashtags) inherits multi-user resilience.
+ * The apiKeys parameter is kept for call-site compatibility but ignored — the proxy
+ * selects keys server-side from process.env. Passes the Clerk session JWT so the
+ * proxy can verify the caller is authenticated.
  */
 export async function geminiGenerate(
-  apiKeys: string | string[],
+  _apiKeys: string | string[],
   requestBody: Record<string, unknown>,
   signal?: AbortSignal,
 ): Promise<{ ok: boolean; status: number; json: GeminiResponse }> {
-  const pool = (Array.isArray(apiKeys) ? apiKeys : [apiKeys]).map((k) => k.trim()).filter(Boolean)
-  if (pool.length === 0) {
-    throw new GeminiError('AUTH_ERROR', 'No Gemini API key configured — set VITE_GEMINI_KEY or VITE_GEMINI_KEYS.', false)
-  }
-  const url = `${GEMINI_BASE}/models/${MODEL}:generateContent`
-  const maxAttempts = Math.max(3, pool.length) + 1
-
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const picked = pickGeminiKey(pool)! // pool non-empty → never null
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: geminiHeaders(picked.key),
-      body: JSON.stringify(requestBody),
-      signal,
-    })
-    const json = (await res.json().catch(() => ({
-      error: { code: res.status, message: res.statusText, status: 'UNKNOWN' },
-    }))) as GeminiResponse
-
-    if (!isRateLimited(res.status, json)) return { ok: res.ok, status: res.status, json }
-
-    markGeminiKeyCooldown(picked.key) // route the next pick around this just-limited key
-    if (attempt >= maxAttempts - 1) break
-    // Fail over to a fresh key immediately; back off only when the whole pool is cooling down.
-    const wait = hasFreshGeminiKey(pool) ? 0 : geminiBackoffMs(attempt, res.headers?.get('retry-after') ?? null)
-    if (wait > 0) await abortableSleep(wait, signal)
-  }
-  throw new GeminiError('RATE_LIMITED', 'Gemini API rate limit exceeded after retries across all keys.', false)
+  const clerkToken = await getClerkSessionToken()
+  const res = await fetch('/api/gemini', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(clerkToken ? { Authorization: `Bearer ${clerkToken}` } : {}),
+    },
+    body: JSON.stringify({ model: MODEL, body: requestBody }),
+    signal,
+  })
+  const json = (await res.json().catch(() => ({
+    error: { code: res.status, message: res.statusText, status: 'UNKNOWN' },
+  }))) as GeminiResponse
+  return { ok: res.ok, status: res.status, json }
 }
 
 // ----- Generic schema-constrained Gemini call -----
@@ -593,17 +562,3 @@ export async function callGeminiWithTools(
   return { kind: 'text', text }
 }
 
-// ----- Utilities -----
-
-function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
-  // M8: a 429 backoff (up to 4s) must be interruptible — otherwise abort() during the
-  // wait still fires the retry into a dead signal. Reject on abort instead.
-  if (signal?.aborted) return Promise.reject(new GeminiError('UNKNOWN', 'Aborted during backoff', false))
-  return new Promise<void>((resolve, reject) => {
-    const t = setTimeout(resolve, ms)
-    signal?.addEventListener('abort', () => {
-      clearTimeout(t)
-      reject(new GeminiError('UNKNOWN', 'Aborted during backoff', false))
-    }, { once: true })
-  })
-}

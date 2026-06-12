@@ -141,6 +141,27 @@ function computeER(posts: ApifyPost[], followersCount: number): { avgLikes: numb
   return { avgLikes, avgComments, engagementRate }
 }
 
+// Known-safe CDN hosts for Instagram profile pictures.
+// Any other host is replaced with an empty string so cards fall back to initials.
+const ALLOWED_PIC_HOSTS = new Set([
+  'instagram.com', 'cdninstagram.com', 'fbcdn.net',
+  'scontent.cdninstagram.com', 'static.cdninstagram.com',
+  'api.apify.com',
+])
+
+function sanitizeProfilePicUrl(url: unknown): string {
+  if (typeof url !== 'string' || !url) return ''
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol !== 'https:') return ''
+    const host = parsed.hostname.toLowerCase()
+    const allowed = [...ALLOWED_PIC_HOSTS].some((h) => host === h || host.endsWith(`.${h}`))
+    return allowed ? url : ''
+  } catch {
+    return ''
+  }
+}
+
 /**
  * Normalize a single raw Apify profile into the shape the app uses.
  */
@@ -194,7 +215,7 @@ export function normalizeProfile(raw: ApifyProfileRaw): NormalizedProfile {
     followersCount: raw.followersCount ?? 0,
     followsCount: raw.followsCount ?? 0,
     postsCount: raw.postsCount ?? 0,
-    profilePicUrl: raw.profilePicUrl ?? '',
+    profilePicUrl: sanitizeProfilePicUrl(raw.profilePicUrl),
     verified: raw.verified ?? false,
     isBusinessAccount: raw.isBusinessAccount ?? false,
     avgLikes,

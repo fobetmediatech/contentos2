@@ -1,18 +1,17 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
 /**
- * Per-run key rotation (audit fix). The competitor pipeline used to lock ONE key for an
- * entire multi-round analysis; a single 429 then cooled the key the whole run depended on.
- * Each scrape RUN must now pull a fresh key from the array via pickRunKey/pickAvailableKey,
- * matching the reel pipeline. We mock the network trio and capture the key each run used.
+ * After Phase 1, key selection happens server-side in api/apify.ts.
+ * These tests verify that the competitor pipeline correctly calls startRun
+ * (the proxy endpoint) and completes successfully with an empty client key pool.
  */
-const startRunCalls: string[] = []
+const startRunCalls: Array<{ actorId: string; apiKey: string }> = []
 vi.mock('./apifyCore', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./apifyCore')>()
   return {
-    ...actual, // keep real pickRunKey, ApifyError, chunk
-    startRun: vi.fn(async (_actor: string, _input: unknown, apiKey: string) => {
-      startRunCalls.push(apiKey)
+    ...actual,
+    startRun: vi.fn(async (actorId: string, _input: unknown, apiKey: string) => {
+      startRunCalls.push({ actorId, apiKey })
       return { runId: 'r', datasetId: 'd' }
     }),
     pollRun: vi.fn(async () => 'd'),
@@ -21,30 +20,25 @@ vi.mock('./apifyCore', async (importOriginal) => {
 })
 
 import { scrapeHashtagUsernames } from './apifyClient'
-import { ApifyError } from './apifyCore'
-import { markKeyCooldown } from './keyRotator'
-import storage from './storage'
 
 beforeEach(() => {
   startRunCalls.length = 0
-  storage.set('apify_key_cooldowns', '{}')
-  storage.set('apify_key_rotation_idx', '0')
 })
 
-describe('scrapeHashtagUsernames — per-run key rotation', () => {
-  it('uses a different Apify key on successive runs instead of locking one', async () => {
-    const keys = ['k1', 'k2', 'k3']
-    await scrapeHashtagUsernames(['food'], keys)
-    await scrapeHashtagUsernames(['travel'], keys)
-    expect(startRunCalls).toHaveLength(2)
-    expect(startRunCalls[0]).not.toBe(startRunCalls[1]) // rotated, not reused
-    startRunCalls.forEach((k) => expect(keys).toContain(k))
+describe('scrapeHashtagUsernames — proxy transport', () => {
+  it('calls startRun for each hashtag batch even with an empty client key pool', async () => {
+    await scrapeHashtagUsernames(['food'], [])  // empty keys — proxy holds them
+    expect(startRunCalls.length).toBeGreaterThanOrEqual(1)
   })
 
-  it('throws RATE_LIMITED (and never starts a run) when every key is on cooldown', async () => {
-    const keys = ['k1', 'k2']
-    keys.forEach(markKeyCooldown)
-    await expect(scrapeHashtagUsernames(['food'], keys)).rejects.toBeInstanceOf(ApifyError)
-    expect(startRunCalls).toHaveLength(0)
+  it('passes the actor id to startRun (proxy validates it against the allowlist)', async () => {
+    await scrapeHashtagUsernames(['travel'], [])
+    expect(startRunCalls[0].actorId).toMatch(/instagram/)
+  })
+
+  it('works for successive runs with an empty key pool', async () => {
+    await scrapeHashtagUsernames(['food'], [])
+    await scrapeHashtagUsernames(['travel'], [])
+    expect(startRunCalls).toHaveLength(2)
   })
 })

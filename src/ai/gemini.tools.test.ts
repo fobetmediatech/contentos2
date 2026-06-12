@@ -95,7 +95,9 @@ describe('callGeminiWithTools — function-calling primitive', () => {
     vi.stubGlobal('fetch', fetchMock)
     await callGeminiWithTools('key', CONTENTS, TOOLS, { systemInstruction: 'be helpful' })
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
-    const body = JSON.parse(init.body as string)
+    const envelope = JSON.parse(init.body as string)
+    // Phase 1: callGeminiWithTools posts to /api/gemini with { model, body: { ... } }
+    const body = envelope.body ?? envelope
     expect(body.tools[0].functionDeclarations).toHaveLength(2)
     expect(body.tools[0].functionDeclarations[0].name).toBe('discover_competitors')
     expect(body.systemInstruction.parts[0].text).toBe('be helpful')

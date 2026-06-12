@@ -22,9 +22,9 @@
 // Self-contained: NO runtime imports from ../src (the function is ESM; cross-boundary
 // src specifiers don't resolve at runtime). .js extensions are required by Node ESM.
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { verifyToken } from '@clerk/backend'
 import { buildDeepReelPrompt, DEEP_REEL_SCHEMA, HOOK_ARCHETYPES, type DeepReelAnalysis } from './_lib/deepReelPrompt.js'
 import { analyzeVideoWithGemini, GeminiFilesError } from './_lib/geminiFiles.js'
+import { requireClerkUser } from './_lib/auth.js'
 
 // Node serverless (the default for @vercel/node) — we fetch binary video + drive the
 // Files API. One reel is well under the 120s budget.
@@ -68,7 +68,8 @@ export async function analyzeReelVideo(input: AnalyzeReelInput, geminiApiKey: st
   }
 
   // Fetch the video bytes server-side (no CORS, no key needed — the URL is public).
-  const res = await fetch(downloadedVideoUrl)
+  // redirect:'manual' prevents following a redirect to a non-allowlisted host (SSRF).
+  const res = await fetch(downloadedVideoUrl, { redirect: 'manual' })
   if (!res.ok) throw new HandlerError(`Video fetch failed (${res.status})`, 502)
   const contentType = (res.headers.get('content-type') || '').split(';')[0] || 'video/mp4'
   if (!/^(video\/|application\/octet-stream)/i.test(contentType)) {
@@ -147,26 +148,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return
   }
 
-  // Gate: verify the Clerk session JWT before doing ANY expensive work. This is
-  // the endpoint's only real protection — it fronts the server-held Gemini key
-  // and a 120s multimodal analysis, and /api/* sits outside the SPA's auth gate.
-  const clerkSecretKey = process.env.CLERK_SECRET_KEY
-  if (!clerkSecretKey) {
-    res.status(500).json({ error: 'Server not configured' })
-    return
-  }
-  const authHeader = req.headers.authorization ?? ''
-  const sessionToken = authHeader.startsWith('Bearer ') ? authHeader.slice('Bearer '.length) : ''
-  if (!sessionToken) {
-    res.status(401).json({ error: 'Unauthorized' })
-    return
-  }
-  try {
-    await verifyToken(sessionToken, { secretKey: clerkSecretKey })
-  } catch {
-    res.status(401).json({ error: 'Unauthorized' })
-    return
-  }
+  // Gate: verify the Clerk session JWT before doing ANY expensive work.
+  const user = await requireClerkUser(req, res)
+  if (!user) return
 
   const geminiApiKey = process.env.GEMINI_API_KEY
   if (!geminiApiKey) {

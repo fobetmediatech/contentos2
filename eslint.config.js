@@ -18,5 +18,15 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
     },
+    rules: {
+      // Scraped Instagram data is rendered as text nodes; dangerouslySetInnerHTML would expose XSS.
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'JSXAttribute[name.name="dangerouslySetInnerHTML"]',
+          message: 'dangerouslySetInnerHTML is banned — scraped data must never be injected as HTML.',
+        },
+      ],
+    },
   },
 ])

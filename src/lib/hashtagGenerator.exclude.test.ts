@@ -75,7 +75,8 @@ describe('generateHashtags — excludeHashtags with Gemini path', () => {
 
     expect(capturedBody).not.toBeNull()
     const parsed = JSON.parse(capturedBody!)
-    const promptText: string = parsed.contents[0].parts[0].text
+    // Phase 1: geminiGenerate posts { model, body: { contents, ... } } to /api/gemini
+    const promptText: string = (parsed.body ?? parsed).contents[0].parts[0].text
     // The exclusion clause should appear in the prompt
     expect(promptText).toContain('Do NOT repeat any of these hashtags')
     expect(promptText).toContain('MumbaiFood')
@@ -108,7 +109,8 @@ describe('generateHashtags — excludeHashtags with Gemini path', () => {
 
     expect(capturedBody).not.toBeNull()
     const parsed = JSON.parse(capturedBody!)
-    const promptText: string = parsed.contents[0].parts[0].text
+    // Phase 1: geminiGenerate posts { model, body: { contents, ... } } to /api/gemini
+    const promptText: string = (parsed.body ?? parsed).contents[0].parts[0].text
     // Special chars stripped: '#Mumbai!Food' → 'MumbaiFood', '@MumbaiFoodie$' → 'MumbaiFoodie'
     // The exclusion clause should contain the sanitized values without special chars.
     // Check the exclusion clause specifically (it appears after "already tried): ")
@@ -147,7 +149,8 @@ describe('generateHashtags — excludeHashtags with Gemini path', () => {
 
     expect(capturedBody).not.toBeNull()
     const parsed = JSON.parse(capturedBody!)
-    const promptText: string = parsed.contents[0].parts[0].text
+    // Phase 1: geminiGenerate posts { model, body: { contents, ... } } to /api/gemini
+    const promptText: string = (parsed.body ?? parsed).contents[0].parts[0].text
     expect(promptText).not.toContain('Do NOT repeat')
   })
 
@@ -177,7 +180,8 @@ describe('generateHashtags — excludeHashtags with Gemini path', () => {
 
     expect(capturedBody).not.toBeNull()
     const parsed = JSON.parse(capturedBody!)
-    const promptText: string = parsed.contents[0].parts[0].text
+    // Phase 1: geminiGenerate posts { model, body: { contents, ... } } to /api/gemini
+    const promptText: string = (parsed.body ?? parsed).contents[0].parts[0].text
     expect(promptText).not.toContain('Do NOT repeat')
   })
 })

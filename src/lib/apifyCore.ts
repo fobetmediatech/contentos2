@@ -1,19 +1,18 @@
 /**
- * Shared Apify REST primitives — used by both apifyClient.ts and discoveryClient.ts.
+ * Shared Apify REST primitives — routes all calls through the /api/apify server proxy.
  *
- * These three functions form the lifecycle of every Apify actor run:
- *   1. startRun  — POST /runs → returns runId + datasetId
- *   2. pollRun   — GET /actor-runs/{id} in a loop until SUCCEEDED or terminal error
- *   3. fetchDataset — GET /datasets/{id}/items → raw result array
+ * After Phase 1: API keys live on the server (never exposed in the browser bundle).
+ * The three lifecycle functions (startRun, pollRun, fetchDataset) post to /api/apify
+ * with a Clerk Bearer token. The proxy forwards to Apify with server-held credentials.
  *
- * Extracted here so discoveryClient.ts can reuse them without importing from
- * apifyClient.ts (which would couple the two pipelines together).
+ * The apiKey parameter is kept in all three function signatures for call-site
+ * compatibility but is ignored — the proxy selects a key from process.env.
  */
 
 import pLimit from 'p-limit'
-import { markKeyCooldown, pickAvailableKey } from './keyRotator'
+import { getClerkSessionToken } from './clerkToken'
 
-export const BASE_URL = 'https://api.apify.com/v2'
+export const BASE_URL = '/api/apify'
 export const POLL_INTERVAL_MS = 2000   // 2 seconds between polls
 export const MAX_POLL_MS = 110_000     // 110s hard limit (leaves 10s buffer for 150s total timeout)
 
@@ -56,23 +55,12 @@ export class ApifyError extends Error {
 }
 
 /**
- * Pick a fresh Apify key for ONE actor run, throwing RATE_LIMITED if all are on cooldown.
- *
- * Call this once per RUN (the run's start→poll→fetch must share a key, but each run may use
- * a different account). The competitor + discovery clients call it per scrape so multi-round
- * analyses and parallel batches spread across the user's keys instead of hammering one — the
- * same per-run rotation the reel pipeline already uses (see reelScraper.scrapeTopReels).
+ * After Phase 1: the proxy handles key selection server-side.
+ * Returns an empty string (ignored by the proxy transport). Kept for call-site compat.
  */
-export function pickRunKey(apifyKeys: string[]): string {
-  const apiKey = pickAvailableKey(apifyKeys)
-  if (!apiKey) {
-    throw new ApifyError(
-      'RATE_LIMITED',
-      'All Apify keys are on cooldown — please wait a few minutes and try again',
-      429,
-    )
-  }
-  return apiKey
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function pickRunKey(_apifyKeys: string[]): string {
+  return ''
 }
 
 // ----- Raw Apify response types -----
@@ -92,55 +80,34 @@ interface ApifyDatasetResponse<T> {
 // ----- Core API calls -----
 
 /**
- * Start an actor run. Returns runId + datasetId for polling.
+ * Start an actor run via the /api/apify proxy. Returns runId + datasetId for polling.
+ * The _apiKey parameter is kept for call-site compatibility but ignored — the proxy
+ * selects a key from server env.
  */
 export async function startRun(
   actorId: string,
   input: Record<string, unknown>,
-  apiKey: string,
+  _apiKey: string,
   signal?: AbortSignal,
 ): Promise<{ runId: string; datasetId: string }> {
-  const url = `${BASE_URL}/acts/${actorId}/runs`
-  // SECURITY (C3): never log the full request payload (scraped handles / target URLs)
-  // in production — these logs live on the end-user's machine and in error captures.
-  if (import.meta.env.DEV) console.debug('[apify] POST', url)
-
-  const res = await fetch(url, {
+  if (import.meta.env.DEV) console.debug('[apify] proxy start', actorId)
+  const clerkToken = await getClerkSessionToken()
+  const res = await fetch(BASE_URL, {
     method: 'POST',
-    credentials: 'omit',   // required for Brave/strict browsers — no cookies sent cross-origin
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
+      ...(clerkToken ? { Authorization: `Bearer ${clerkToken}` } : {}),
     },
-    body: JSON.stringify(input),
+    body: JSON.stringify({ operation: 'start', actorId, input }),
     signal,
   })
 
   if (!res.ok) {
     const body = await res.text()
-    // SECURITY (C2): the raw Apify body can echo the request (actor IDs, the
-    // handles/URLs we sent) and other internals. Keep it in the DEV console only —
-    // never in the thrown message, which is surfaced to the chat UI.
     if (import.meta.env.DEV) console.error('[apify] startRun failed', res.status, body)
-    if (res.status === 429) {
-      markKeyCooldown(apiKey)
-      throw new ApifyError('RATE_LIMITED', `Apify key rate limited. Marked for cooldown.`, res.status)
-    }
-    // 402 Payment Required = this key's Apify account is out of prepaid credit (free-tier $5 used
-    // up, or a usage limit reached). Cool the key so the rotator routes around it, and surface
-    // QUOTA_EXCEEDED so withKeyFailover rolls the run over to a key that still has budget. Without
-    // this, a single tapped-out account failed the whole scrape even with 30 funded keys waiting.
-    if (res.status === 402) {
-      markKeyCooldown(apiKey)
-      throw new ApifyError('QUOTA_EXCEEDED', `Apify account out of credit`, res.status)
-    }
-    // 403 with a usage/limit/feature-disabled body = this key's Apify account hit its monthly
-    // hard limit. Cool the key down (like a rate-limit) so the rotator routes around it — a key
-    // from another account has its own budget. Other 403s (genuine permission errors) fall through.
-    if (res.status === 403 && /limit|usage|feature-disabled/i.test(body)) {
-      markKeyCooldown(apiKey)
-      throw new ApifyError('QUOTA_EXCEEDED', `Apify monthly usage limit exceeded`, res.status)
-    }
+    if (res.status === 429) throw new ApifyError('RATE_LIMITED', 'Apify rate limited — all server keys exhausted.', res.status)
+    if (res.status === 402) throw new ApifyError('QUOTA_EXCEEDED', 'Apify account out of credit', res.status)
+    if (res.status === 403 && /limit|usage|feature-disabled/i.test(body)) throw new ApifyError('QUOTA_EXCEEDED', 'Apify monthly usage limit exceeded', res.status)
     throw new ApifyError('RUN_START_FAILED', `Failed to start actor run (${res.status})`, res.status)
   }
 
@@ -149,24 +116,30 @@ export async function startRun(
 }
 
 /**
- * Poll an actor run until it succeeds or fails. Returns the resolved datasetId.
+ * Poll an actor run via the /api/apify proxy until it succeeds or fails.
+ * Returns the resolved datasetId.
+ * The _apiKey parameter is kept for call-site compatibility but ignored.
  */
 export async function pollRun(
   runId: string,
-  apiKey: string,
+  _apiKey: string,
   signal?: AbortSignal,
   maxPollMs?: number,
 ): Promise<string> {
   const deadline = Date.now() + (maxPollMs ?? MAX_POLL_MS)
+  const clerkToken = await getClerkSessionToken()
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (clerkToken) headers['Authorization'] = `Bearer ${clerkToken}`
 
   while (Date.now() < deadline) {
     if (signal?.aborted) throw new ApifyError('ABORTED', 'Request aborted', 0)
 
     let res: Response
     try {
-      res = await fetch(`${BASE_URL}/actor-runs/${runId}`, {
-        credentials: 'omit',
-        headers: { Authorization: `Bearer ${apiKey}` },
+      res = await fetch(BASE_URL, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ operation: 'poll', runId }),
         signal,
       })
     } catch (err) {
@@ -198,12 +171,18 @@ export async function pollRun(
 }
 
 /**
- * Fetch all items from an Apify dataset.
+ * Fetch all items from an Apify dataset via the /api/apify proxy.
+ * The _apiKey parameter is kept for call-site compatibility but ignored.
  */
-export async function fetchDataset<T>(datasetId: string, apiKey: string, signal?: AbortSignal): Promise<T[]> {
-  const res = await fetch(`${BASE_URL}/datasets/${datasetId}/items?clean=true`, {
-    credentials: 'omit',
-    headers: { Authorization: `Bearer ${apiKey}` },
+export async function fetchDataset<T>(datasetId: string, _apiKey: string, signal?: AbortSignal): Promise<T[]> {
+  const clerkToken = await getClerkSessionToken()
+  const res = await fetch(BASE_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(clerkToken ? { Authorization: `Bearer ${clerkToken}` } : {}),
+    },
+    body: JSON.stringify({ operation: 'fetch', datasetId }),
     signal,
   })
   if (!res.ok) throw new ApifyError('DATASET_FETCH_FAILED', `Dataset fetch failed: ${res.status}`, res.status)

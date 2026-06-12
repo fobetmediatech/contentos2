@@ -40,10 +40,6 @@ export function useLocationDiscovery() {
 
   const mutation = useMutation({
     mutationFn: async ({ params, externalSignal }: { params: DiscoveryParams; externalSignal?: AbortSignal }) => {
-      // Guard only — the client picks a fresh key PER RUN from the full array (load-spreading).
-      if (!pickKey()) throw new Error('No Apify keys available. All keys are in cooldown.')
-      if (!geminiKeys.length) throw new Error('Gemini API key is not configured.')
-
       // linkAbort: internal 150s timeout + an optional external (agent-loop) signal.
       // wasSuperseded() tells an intentional steer (silent) from a timeout (real error).
       const abort = linkAbort(TIMEOUT_MS, externalSignal)
