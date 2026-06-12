@@ -13,6 +13,7 @@
  *   unknown   → grey muted, 70% opacity
  */
 
+import { memo } from 'react'
 import { BadgeCheck, MapPin, Video, Mail, CheckSquare, History, Square } from 'lucide-react'
 import type { DiscoveryResult } from '../ai/prompts'
 import type { NormalizedProfile } from '../lib/transformers'
@@ -60,7 +61,7 @@ function LocationBadge({ confidence }: { confidence: DiscoveryResult['locationCo
   )
 }
 
-export function DiscoveryCard({ result, profile, cohortAvgER, isSelected, onSelect }: DiscoveryCardProps) {
+export const DiscoveryCard = memo(function DiscoveryCard({ result, profile, cohortAvgER, isSelected, onSelect }: DiscoveryCardProps) {
   const category = DISCOVERY_CATEGORIES[result.category]
   const er = profile?.engagementRate ?? null
   const erAboveAvg = er !== null && er >= cohortAvgER
@@ -112,6 +113,8 @@ export function DiscoveryCard({ result, profile, cohortAvgER, isSelected, onSele
             src={profile.profilePicUrl}
             alt={`@${result.username}`}
             className="w-12 h-12 rounded-full object-cover flex-shrink-0 bg-[#3D3025]"
+            referrerPolicy="no-referrer"
+            loading="lazy"
             onError={(e) => {
               const target = e.currentTarget
               target.style.display = 'none'
@@ -215,4 +218,4 @@ export function DiscoveryCard({ result, profile, cohortAvgER, isSelected, onSele
       </div>
     </div>
   )
-}
+})

@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { BadgeCheck, CheckSquare, History, Square } from 'lucide-react'
 import type { CompetitorAnalysisResult } from '../ai/prompts'
 import type { NormalizedProfile } from '../lib/transformers'
@@ -20,7 +21,7 @@ function formatFollowers(n: number): string {
   return String(n)
 }
 
-export function CompetitorCard({ competitor, profile, cohortAvgER, isSelected, onSelect }: CompetitorCardProps) {
+export const CompetitorCard = memo(function CompetitorCard({ competitor, profile, cohortAvgER, isSelected, onSelect }: CompetitorCardProps) {
   const category = COMPETITOR_CATEGORIES[competitor.category]
   const er = profile?.engagementRate ?? null
   const erAboveAvg = er !== null && er >= cohortAvgER
@@ -72,6 +73,8 @@ export function CompetitorCard({ competitor, profile, cohortAvgER, isSelected, o
             src={profile.profilePicUrl}
             alt={`@${competitor.username}`}
             className="w-12 h-12 rounded-full object-cover flex-shrink-0 bg-[#3D3025]"
+            referrerPolicy="no-referrer"
+            loading="lazy"
             onError={(e) => {
               const target = e.currentTarget
               target.style.display = 'none'
@@ -144,4 +147,4 @@ export function CompetitorCard({ competitor, profile, cohortAvgER, isSelected, o
       </div>
     </div>
   )
-}
+})

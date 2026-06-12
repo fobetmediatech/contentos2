@@ -51,21 +51,20 @@ function trimProfile(p: NormalizedProfile): NormalizedProfile {
 const EMPTY_MESSAGES: ChatMessageData[] = []
 
 export function ChatPage() {
-  const analysisStore = useAnalysisStore()
-  const {
-    status,
-    currentStep,
-    pendingDiscovery,
-    competitors,
-    candidateProfiles,
-    summary,
-    niche,
-    stepProgressDetail,
-    didExpand: analysisDidExpand,
-    error: analysisError,
-    startChat,
-    setStatus,
-  } = analysisStore
+  // Per-field selectors so a deep-reel progress tick (unrelated field) doesn't re-render
+  // the entire competitor card grid. Each selector returns a scalar or stable reference.
+  const status = useAnalysisStore((s) => s.status)
+  const currentStep = useAnalysisStore((s) => s.currentStep)
+  const pendingDiscovery = useAnalysisStore((s) => s.pendingDiscovery)
+  const competitors = useAnalysisStore((s) => s.competitors)
+  const candidateProfiles = useAnalysisStore((s) => s.candidateProfiles)
+  const summary = useAnalysisStore((s) => s.summary)
+  const niche = useAnalysisStore((s) => s.niche)
+  const stepProgressDetail = useAnalysisStore((s) => s.stepProgressDetail)
+  const analysisDidExpand = useAnalysisStore((s) => s.didExpand)
+  const analysisError = useAnalysisStore((s) => s.error)
+  const startChat = useAnalysisStore((s) => s.startChat)
+  const setStatus = useAnalysisStore((s) => s.setStatus)
 
   // The chat transcript lives in conversationsStore now (multi-conversation history). Select
   // only STABLE values (the raw record + active id + action fns) — never a freshly-computed

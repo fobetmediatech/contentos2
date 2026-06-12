@@ -271,6 +271,8 @@ function ReelCard({ reel, analysis }: { reel: ReelData; analysis?: ReelAnalysis 
           src={reel.displayUrl}
           alt="Reel thumbnail"
           className="w-full aspect-square object-cover bg-[#1A1410]"
+          referrerPolicy="no-referrer"
+          loading="lazy"
           onError={e => { e.currentTarget.style.display = 'none' }}
         />
       )}
@@ -334,6 +336,8 @@ function DeepReelCard({ reel, status, analysis }: { reel: ReelData; status: Deep
           src={reel.displayUrl}
           alt="Reel thumbnail"
           className="w-24 shrink-0 aspect-square object-cover bg-[#1A1410]"
+          referrerPolicy="no-referrer"
+          loading="lazy"
           onError={(e) => { e.currentTarget.style.display = 'none' }}
         />
       )}

@@ -154,6 +154,8 @@ function MemoryCreatorCard({ record }: { record: CreatorRecord }) {
               src={record.profilePicUrl}
               alt=""
               className="absolute inset-0 w-full h-full object-cover"
+              referrerPolicy="no-referrer"
+              loading="lazy"
               onError={(e) => {
                 e.currentTarget.style.display = 'none'
               }}
