@@ -5,10 +5,12 @@
  * Gemini response bodies can echo request internals, handles, or key fragments.
  * Callers map an error CODE to one of these fixed strings instead.
  *
- * Dependency-free on purpose: the pipeline hooks (useCompetitorAnalysis,
- * useLocationDiscovery) AND the Phase-1b agent-loop tool-failure handling import
- * from here, so this module must not pull in React, a store, or any heavy dep.
+ * No React, no store, no heavy deps — this is imported by pipeline hooks AND
+ * the agent-loop tool-failure handler.
  */
+
+import { ApifyError } from './apifyCore'
+import { GeminiError } from '../ai/gemini'
 
 export const APIFY_FRIENDLY: Record<string, string> = {
   QUOTA_EXCEEDED: 'Apify monthly usage limit reached — add a key from another account to VITE_APIFY_KEYS in .env, upgrade your plan, or wait for the monthly reset.',
@@ -67,3 +69,36 @@ export function sparseSeedMessage(handles: string[], refFound: boolean): string 
  */
 export const ALL_DISMISSED_MESSAGE =
   "Every account found here is one you've dismissed before. Clear some dismissals in Memory, or try a different reference account."
+
+const NETWORK_BLOCKED_MESSAGE =
+  "Network blocked — could not reach Apify API. If you're using Brave browser, click the Brave shield icon in the address bar and turn off \"Block trackers & ads\" for localhost, then try again."
+
+/**
+ * Shared pipeline error → user-safe message mapper used by both competitor and discovery hooks.
+ *
+ * `timeoutMsg`    — passed so each pipeline can name itself in the timeout copy.
+ * `pickKey`       — determines whether a follow-up key is available after a rate-limit.
+ *
+ * SECURITY (C2/H11): ApifyError and GeminiError codes map to FIXED strings only —
+ * raw Apify/Gemini response bodies NEVER reach the user.
+ */
+export function buildPipelineErrorMessage(
+  err: unknown,
+  signal: AbortSignal,
+  pickKey: () => string | null,
+  timeoutMsg: string = 'Analysis timed out after 150 seconds. Try with fewer handles or check your Apify key.',
+): string {
+  if (signal.aborted) return timeoutMsg
+  if (err instanceof ApifyError) {
+    if (err.code === 'RATE_LIMITED') {
+      return `Apify key rate limited and placed in 15-minute cooldown. ${
+        pickKey() ? 'Retrying with next key — please try again.' : 'All keys are in cooldown.'
+      }`
+    }
+    return friendlyApify(err.code)
+  }
+  if (err instanceof GeminiError) return friendlyGemini(err.code)
+  if (err instanceof TypeError && err.message.includes('fetch')) return NETWORK_BLOCKED_MESSAGE
+  if (err instanceof Error) return err.message
+  return 'An unexpected error occurred.'
+}

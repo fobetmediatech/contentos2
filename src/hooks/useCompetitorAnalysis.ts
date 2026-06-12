@@ -26,9 +26,7 @@ import { useConversationsStore } from '../store/conversationsStore'
 import { useKeysStore } from '../store/keysStore'
 import { discoverCompetitors } from '../lib/apifyClient'
 import { analyzeCompetitors, generateClarificationQuestion } from '../ai/gemini'
-import { ApifyError } from '../lib/apifyClient'
-import { GeminiError } from '../ai/gemini'
-import { friendlyApify, friendlyGemini, sparseSeedMessage, ALL_DISMISSED_MESSAGE } from '../lib/errorMessages'
+import { buildPipelineErrorMessage, sparseSeedMessage, ALL_DISMISSED_MESSAGE } from '../lib/errorMessages'
 import { linkAbort } from '../lib/abortControl'
 import { useCorpusStore } from '../store/corpusStore'
 import { dropDismissedCandidates, selectPreferenceExemplars } from '../lib/corpus'
@@ -110,7 +108,7 @@ export function useCompetitorAnalysis() {
         // Superseded by the agent loop (latest-wins steer) — silent, not a failure.
         if (abort.wasSuperseded()) return undefined
         console.error('[analysis:discover] failed:', err)
-        const message = buildErrorMessage(err, abort.signal, pickKey)
+        const message = buildPipelineErrorMessage(err, abort.signal, pickKey, 'Analysis timed out after 150 seconds. Try with fewer handles or check your Apify key.')
         setError(message)
         throw new Error(message, { cause: err })
       } finally {
@@ -186,7 +184,7 @@ export function useCompetitorAnalysis() {
       } catch (err) {
         if (abort.wasSuperseded()) return undefined
         console.error('[analysis:analyze] failed:', err)
-        const message = buildErrorMessage(err, abort.signal, () => null)
+        const message = buildPipelineErrorMessage(err, abort.signal, () => null, 'Analysis timed out after 150 seconds. Try with fewer handles or check your Apify key.')
         setError(message)
         throw new Error(message, { cause: err })
       } finally {
@@ -226,46 +224,4 @@ export function useCompetitorAnalysis() {
     isError: discoverMutation.isError || analyzeMutation.isError,
     reset,
   }
-}
-
-// ── Error message builder ──────────────────────────────────────────────────
-
-// Friendly, code-keyed error strings now live in lib/errorMessages.ts (shared with the
-// Phase-1b agent-loop tool-failure handling). SECURITY (C2/H11): never forward raw
-// error.message — Apify/Gemini bodies can echo request internals/handles.
-
-function buildErrorMessage(
-  err: unknown,
-  signal: AbortSignal,
-  pickKey: () => string | null,
-): string {
-  if (signal.aborted) {
-    return 'Analysis timed out after 150 seconds. Try with fewer handles or check your Apify key.'
-  }
-  if (err instanceof ApifyError) {
-    if (err.code === 'RATE_LIMITED') {
-      // The failing key was already placed in cooldown inside startRun (apifyCore owns
-      // per-key cooldown). We only report; pickKey() tells us if a retry can still proceed.
-      return `Apify key rate limited and placed in 15-minute cooldown. ${
-        pickKey() ? 'Retrying with next key — please try again.' : 'All keys are in cooldown.'
-      }`
-    }
-    // SECURITY (C2): map error code → fixed friendly string. Never forward
-    // err.message — it can carry the raw Apify response body.
-    return friendlyApify(err.code)
-  }
-  if (err instanceof GeminiError) {
-    return friendlyGemini(err.code)
-  }
-  if (err instanceof TypeError && (err.message === 'Failed to fetch' || err.message.includes('fetch'))) {
-    return `Network blocked — could not reach Apify API. If you're using Brave browser, click the Brave shield icon in the address bar and turn off "Block trackers & ads" for localhost, then try again.`
-  }
-  if (err instanceof Error) {
-    // Author-thrown, user-facing messages reach here and SHOULD show (e.g. "No
-    // verified competitors found — try different reference handles"). Raw Apify
-    // bodies never do: ApifyError is mapped by code above, and apifyCore no longer
-    // embeds the response body in the error message (C2).
-    return err.message
-  }
-  return 'An unexpected error occurred.'
 }

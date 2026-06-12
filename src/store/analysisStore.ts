@@ -17,11 +17,10 @@
 
 import { create } from 'zustand'
 import type { NormalizedProfile } from '../lib/transformers'
-import type { CompetitorAnalysisResult, DiscoveryResult, AnalysisOutput, ClarificationQuestion } from '../ai/prompts'
-import type { ParsedIntent } from '../ai/intentParser'
-// Type-only imports (erased at runtime — no cycle) for the reel result snapshot.
-import type { CreatorAnalysisState, SynthesisOutput } from './reelAnalysisStore'
-import type { DeepNicheReport } from '../ai/prompts/deepReelAnalysis'
+import type { CompetitorAnalysisResult, AnalysisOutput, ClarificationQuestion } from '../ai/prompts'
+
+// Re-export domain types so existing imports of `analysisStore` keep working unchanged.
+export type { CompetitorResultPayload, DiscoveryResultPayload, ReelResultPayload, ResultPayload, ChatMessage } from '../domain/chat'
 
 export type AnalysisStep = 1 | 2 | 3 | 4 | 5
 
@@ -58,60 +57,6 @@ export interface PendingDiscovery {
   clarificationQuestion: ClarificationQuestion
 }
 
-/**
- * Phase 2 (results-as-messages): a completed pipeline result, snapshotted INTO the
- * conversation as a message so it persists across reloads and interleaves with the chat
- * (multiple searches each keep their results in place) instead of rendering from transient
- * store status. Stage 1 = competitor, stage 2 = discovery; reel still positions a live marker.
- */
-export type CompetitorResultPayload = {
-  kind: 'competitor'
-  competitors: CompetitorAnalysisResult[]
-  summary: string
-  niche: string
-  profiles: NormalizedProfile[]
-  didExpand: boolean
-}
-export type DiscoveryResultPayload = {
-  kind: 'discovery'
-  results: DiscoveryResult[]
-  city: string
-  profiles: NormalizedProfile[]
-  didExpand: boolean
-  locationRelaxed: boolean
-}
-/**
- * A finished reel/hook run, snapshotted into the conversation it ran in (Phase 2 parity with
- * competitor/discovery). Replaces the old global-store + live-marker approach, which showed the
- * wrong run after switching conversations. `creatorStates` is trimmed (thumbnails + deep maps
- * dropped); the deep report re-runs on demand via the (independent) startDeepReport(handles).
- */
-export type ReelResultPayload = {
-  kind: 'reel'
-  handles: string[]
-  creatorStates: Record<string, CreatorAnalysisState>
-  synthesis: SynthesisOutput | null
-  deepReport: DeepNicheReport | null
-}
-export type ResultPayload = CompetitorResultPayload | DiscoveryResultPayload | ReelResultPayload
-
-export interface ChatMessage {
-  /** Stable unique id for React keys — monotonic, assigned by addMessage. */
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  timestamp: number
-  /**
-   * Controls rendering: text = plain bubble, options = pill choices, error = red bubble,
-   * result = inline result cards, reel = position marker for the (live) reel-analysis block.
-   */
-  type?: 'text' | 'options' | 'error' | 'result' | 'reel'
-  /** Present when type === 'options' */
-  options?: string[]
-  /** Present when type === 'result' — the snapshotted pipeline result rendered inline. */
-  result?: ResultPayload
-}
-
 export interface AnalysisState {
   status: AnalysisStatus
   currentStep: AnalysisStep
@@ -142,13 +87,6 @@ export interface AnalysisState {
   /** True when the competitor pipeline found < 8 candidates (sparse niche indicator). */
   didExpand: boolean
 
-  // NOTE: the chat transcript moved to conversationsStore (multi-conversation history) — this
-  // store now holds ONLY analysis state. The active conversation's messages live there.
-  /** Populated after successful seed discovery; read by confirmSeeds() in useConversation. */
-  discoveredSeeds: string[]
-  /** Populated after parseIntent() succeeds; read by confirmSeeds() to build analyze() params. */
-  parsedIntent: ParsedIntent | null
-
   // Actions
   startAnalysis: (params: AnalysisParams, runConversationId?: string) => void
   setStep: (step: AnalysisStep) => void
@@ -165,8 +103,6 @@ export interface AnalysisState {
   // Conversational actions
   startChat: () => void
   setStatus: (status: AnalysisStatus) => void
-  setDiscoveredSeeds: (seeds: string[]) => void
-  setParsedIntent: (intent: ParsedIntent | null) => void
 }
 
 const initialState = {
@@ -185,9 +121,6 @@ const initialState = {
   candidateCount: 0,
   stepProgressDetail: '',
   didExpand: false,
-  // Conversational fields — T22: included in initialState for proper reset()
-  discoveredSeeds: [] as string[],
-  parsedIntent: null,
 }
 
 export const useAnalysisStore = create<AnalysisState>()((set) => ({
@@ -229,8 +162,4 @@ export const useAnalysisStore = create<AnalysisState>()((set) => ({
   startChat: () => set({ ...initialState, status: 'chatting' }),
 
   setStatus: (status) => set({ status }),
-
-  setDiscoveredSeeds: (seeds) => set({ discoveredSeeds: seeds }),
-
-  setParsedIntent: (intent) => set({ parsedIntent: intent }),
 }))

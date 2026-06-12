@@ -24,12 +24,10 @@ import { generateHashtags } from '../lib/hashtagGenerator'
 import { runLocationDiscovery } from '../lib/discoveryClient'
 import { analyzeDiscovery } from '../ai/gemini'
 import type { DiscoveryResult } from '../ai/prompts'
-import { ApifyError } from '../lib/apifyCore'
-import { GeminiError } from '../ai/gemini'
 import { linkAbort } from '../lib/abortControl'
 import { useCorpusStore } from '../store/corpusStore'
 import { dropDismissedCandidates, selectPreferenceExemplars } from '../lib/corpus'
-import { ALL_DISMISSED_MESSAGE, friendlyGemini } from '../lib/errorMessages'
+import { buildPipelineErrorMessage, ALL_DISMISSED_MESSAGE } from '../lib/errorMessages'
 
 const TIMEOUT_MS = 150_000
 // Minimum post-filter results before triggering a second hashtag batch
@@ -211,29 +209,12 @@ export function useLocationDiscovery() {
         // Superseded by the agent loop (latest-wins steer) — silent, not a failure.
         if (abort.wasSuperseded()) return undefined
         console.error('[discovery] failed:', err)
-        let message = 'An unexpected error occurred.'
-
-        if (abort.signal.aborted) {
-          message = 'Discovery timed out after 150 seconds. Try Standard depth or check your Apify key.'
-        } else if (err instanceof ApifyError) {
-          if (err.code === 'RATE_LIMITED') {
-            // The failing key was already cooled down inside startRun (apifyCore owns per-key cooldown).
-            message = `Apify key rate limited. ${
-              pickKey() ? 'Retrying with next key — please try again.' : 'All keys are in cooldown.'
-            }`
-          } else {
-            message = `Scraping error — try again or check your Apify key.`
-          }
-        } else if (err instanceof GeminiError) {
-          // SECURITY (C2/H11): map the code to a fixed string — never forward err.message,
-          // which can echo the raw Gemini response body (prompt text / key fragments).
-          message = friendlyGemini(err.code)
-        } else if (err instanceof TypeError && err.message.includes('fetch')) {
-          message = `Network blocked — could not reach Apify API. If you're using Brave, disable shields for this page.`
-        } else if (err instanceof Error) {
-          message = err.message
-        }
-
+        const message = buildPipelineErrorMessage(
+          err,
+          abort.signal,
+          pickKey,
+          'Discovery timed out after 150 seconds. Try Standard depth or check your Apify key.',
+        )
         setError(message)
         throw new Error(message, { cause: err })
       } finally {

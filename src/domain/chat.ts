@@ -1,0 +1,64 @@
+/**
+ * Domain types for the chat transcript and pipeline result payloads.
+ *
+ * These types are conversation-level (one ChatMessage per turn; ResultPayload holds
+ * the snapshotted output of a finished pipeline run). Kept out of the store files so
+ * components, hooks, and libraries can import types without pulling in store logic.
+ *
+ * Re-exported from analysisStore for backward compatibility.
+ */
+
+import type { NormalizedProfile } from '../lib/transformers'
+import type { CompetitorAnalysisResult, DiscoveryResult } from '../ai/prompts'
+import type { CreatorAnalysisState, SynthesisOutput } from '../store/reelAnalysisStore'
+import type { DeepNicheReport } from '../ai/prompts/deepReelAnalysis'
+
+export type CompetitorResultPayload = {
+  kind: 'competitor'
+  competitors: CompetitorAnalysisResult[]
+  summary: string
+  niche: string
+  profiles: NormalizedProfile[]
+  didExpand: boolean
+}
+
+export type DiscoveryResultPayload = {
+  kind: 'discovery'
+  results: DiscoveryResult[]
+  city: string
+  profiles: NormalizedProfile[]
+  didExpand: boolean
+  locationRelaxed: boolean
+}
+
+/**
+ * A finished reel/hook run, snapshotted into the conversation it ran in.
+ * `creatorStates` is trimmed (thumbnails + deep maps dropped); the deep report
+ * re-runs on demand via startDeepReport(handles).
+ */
+export type ReelResultPayload = {
+  kind: 'reel'
+  handles: string[]
+  creatorStates: Record<string, CreatorAnalysisState>
+  synthesis: SynthesisOutput | null
+  deepReport: DeepNicheReport | null
+}
+
+export type ResultPayload = CompetitorResultPayload | DiscoveryResultPayload | ReelResultPayload
+
+export interface ChatMessage {
+  /** Stable unique id for React keys — monotonic, assigned by addMessage. */
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: number
+  /**
+   * Controls rendering: text = plain bubble, options = pill choices, error = red bubble,
+   * result = inline result cards, reel = position marker for the (live) reel-analysis block.
+   */
+  type?: 'text' | 'options' | 'error' | 'result' | 'reel'
+  /** Present when type === 'options' */
+  options?: string[]
+  /** Present when type === 'result' — the snapshotted pipeline result rendered inline. */
+  result?: ResultPayload
+}

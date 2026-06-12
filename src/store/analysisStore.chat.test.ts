@@ -19,18 +19,6 @@ describe('analysisStore — startChat', () => {
     useAnalysisStore.getState().startChat()
     expect(useAnalysisStore.getState().status).toBe('chatting')
   })
-
-  it('resets discoveredSeeds', () => {
-    useAnalysisStore.getState().setDiscoveredSeeds(['handle1'])
-    useAnalysisStore.getState().startChat()
-    expect(useAnalysisStore.getState().discoveredSeeds).toHaveLength(0)
-  })
-
-  it('resets parsedIntent to null', () => {
-    useAnalysisStore.getState().setParsedIntent({ needsClarification: true, question: 'What niche?' })
-    useAnalysisStore.getState().startChat()
-    expect(useAnalysisStore.getState().parsedIntent).toBeNull()
-  })
 })
 
 describe('analysisStore — setStatus', () => {
@@ -80,51 +68,27 @@ describe('analysisStore — setResults stores candidate profiles', () => {
   })
 })
 
-describe('analysisStore — setDiscoveredSeeds', () => {
-  it('stores discovered seeds', () => {
-    useAnalysisStore.getState().setDiscoveredSeeds(['handle1', 'handle2'])
-    expect(useAnalysisStore.getState().discoveredSeeds).toEqual(['handle1', 'handle2'])
-  })
-
-  it('overwrites existing seeds', () => {
-    useAnalysisStore.getState().setDiscoveredSeeds(['old'])
-    useAnalysisStore.getState().setDiscoveredSeeds(['new1', 'new2'])
-    expect(useAnalysisStore.getState().discoveredSeeds).toEqual(['new1', 'new2'])
-  })
-})
-
-describe('analysisStore — setParsedIntent', () => {
-  it('stores a needsClarification intent', () => {
-    const intent = { needsClarification: true as const, question: 'Which niche?' }
-    useAnalysisStore.getState().setParsedIntent(intent)
-    expect(useAnalysisStore.getState().parsedIntent).toEqual(intent)
-  })
-
-  it('can be cleared back to null', () => {
-    useAnalysisStore.getState().setParsedIntent({ needsClarification: true, question: 'Q' })
-    useAnalysisStore.getState().setParsedIntent(null)
-    expect(useAnalysisStore.getState().parsedIntent).toBeNull()
-  })
-})
-
 describe('analysisStore — reset', () => {
-  it('clears discoveredSeeds and parsedIntent', () => {
-    useAnalysisStore.getState().setDiscoveredSeeds(['h1'])
-    useAnalysisStore.getState().setParsedIntent({ needsClarification: true, question: 'Q' })
+  it('clears status back to idle', () => {
+    useAnalysisStore.getState().setStatus('running')
     useAnalysisStore.getState().reset()
-    expect(useAnalysisStore.getState().discoveredSeeds).toHaveLength(0)
-    expect(useAnalysisStore.getState().parsedIntent).toBeNull()
+    expect(useAnalysisStore.getState().status).toBe('idle')
+  })
+
+  it('clears competitors and candidateCount', () => {
+    useAnalysisStore.getState().setResults({ competitors: [], niche: 'x', summary: 's' }, [], 23)
+    useAnalysisStore.getState().reset()
+    expect(useAnalysisStore.getState().candidateCount).toBe(0)
+    expect(useAnalysisStore.getState().competitors).toHaveLength(0)
   })
 })
 
 describe('analysisStore — chatting → confirming lifecycle', () => {
-  it('full flow: startChat → discovering → setDiscoveredSeeds → confirming', () => {
+  it('full flow: startChat → discovering → confirming', () => {
     useAnalysisStore.getState().startChat()
     expect(useAnalysisStore.getState().status).toBe('chatting')
     useAnalysisStore.getState().setStatus('discovering')
     expect(useAnalysisStore.getState().status).toBe('discovering')
-    useAnalysisStore.getState().setDiscoveredSeeds(['user1', 'user2'])
-    expect(useAnalysisStore.getState().discoveredSeeds).toHaveLength(2)
     useAnalysisStore.getState().setStatus('confirming')
     expect(useAnalysisStore.getState().status).toBe('confirming')
   })

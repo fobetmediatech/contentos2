@@ -2,22 +2,19 @@
  * PIPELINE_REGISTRY — maps pipelineType → PipelineToolDescriptor.
  *
  * Pure data, no hook calls, no side effects.
- * Each entry is the single source of truth for its pipeline's UI metadata.
+ * Each entry is the single source of truth for its pipeline's step labels and display name.
  *
- * Extension guide (current — pre Phase 3 refactor):
- *   1. Add a new PipelineToolDescriptor entry here.
- *   2. Add a GeminiFunctionDeclaration to AGENT_TOOLS in agentTools.ts.
+ * Extension guide:
+ *   1. Add a new PipelineToolDescriptor entry here with id, name, and steps.
+ *   2. Add a tool record (declaration + Zod schema + toAction) in agentTools.ts.
  *   3. Add a dispatch branch in useAgentConversation.ts → dispatchTool().
  *   4. Add a result store (see analysisStore.ts / discoveryStore.ts pattern).
  *   5. Add a result message component and wire it into ChatPage's render block.
- *   Phase 3 of the improvement plan replaces steps 2-5 with a single PIPELINES
- *   registry entry — see docs/superpowers/plans/ for the full migration.
  */
 
 import { STEP_LABELS } from '../store/analysisStore'
 import { DISCOVERY_STEP_LABELS } from '../store/discoveryStore'
-import { PROCEED_LABEL, DISCOVERY_REDIRECT_TO_COMPETITOR, REEL_ANALYZE_LABEL } from '../lib/constants'
-import type { PipelineToolDescriptor, ResolvedIntent } from './types'
+import type { PipelineToolDescriptor } from './types'
 
 /** Steps shown in the reel/hook analysis progress (rendered inline by InlineReelResults). */
 const reelSteps: string[] = ['Scraping reels', 'Analyzing hooks', 'Synthesizing patterns']
@@ -34,46 +31,17 @@ export const PIPELINE_REGISTRY: Record<string, PipelineToolDescriptor> = {
     id: 'competitor',
     name: 'Competitor Analysis',
     steps: competitorSteps,
-    /**
-     * Unused at runtime — the competitor confirming message is built in
-     * useConversation.ts after runCompetitorDiscovery() returns (not here).
-     * Kept for interface completeness; use this field if the competitor
-     * pipeline is ever refactored to use the registry confirm path.
-     */
-    confirmMessage: (intent: ResolvedIntent) => {
-      const niche = 'niche' in intent ? intent.niche : ''
-      const location = 'location' in intent ? (intent.location ?? '') : ''
-      return `Found accounts in the **${niche}** space${location ? ` in ${location}` : ''}. Which direction should I focus on?`
-    },
-    confirmOptions: () => [
-      PROCEED_LABEL,
-      'Micro-influencers (under 100K followers)',
-      'Macro creators (100K+ followers)',
-      'Include businesses and brands',
-    ],
   },
 
   discovery: {
     id: 'discovery',
     name: 'Location Discovery',
     steps: discoverySteps,
-    confirmMessage: (intent: ResolvedIntent) => {
-      const niche = 'niche' in intent ? intent.niche : ''
-      const location = 'location' in intent ? (intent.location ?? '') : ''
-      return `Running **location discovery** — finding ${niche} creators physically based in **${location}**. Say "go" to start, or type what you actually want.\n\nWrong pipeline? Try typing "show me who dominates this niche globally" instead.`
-    },
-    confirmOptions: () => [PROCEED_LABEL, DISCOVERY_REDIRECT_TO_COMPETITOR],
   },
 
   reel: {
     id: 'reel',
     name: 'Reel Hook Analysis',
     steps: reelSteps,
-    confirmMessage: (intent: ResolvedIntent) => {
-      const handles = ('knownHandles' in intent ? (intent.knownHandles ?? []) : [])
-      const shown = handles.slice(0, 4).map((h) => '@' + h).join(', ')
-      return `Break down the hook patterns in recent reels for ${shown || 'these creators'}? I'll analyze the top ~10 reels each — about 2–3 min per creator.`
-    },
-    confirmOptions: () => [REEL_ANALYZE_LABEL],
   },
 }

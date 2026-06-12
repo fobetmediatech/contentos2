@@ -7,6 +7,7 @@
 import type { CompetitorResultPayload } from '../store/analysisStore'
 import type { NormalizedProfile } from '../lib/transformers'
 import type { CompetitorAnalysisResult } from '../ai/prompts'
+import { deriveRankedView } from './rankedResultView'
 
 export function deriveCompetitorView(payload: CompetitorResultPayload): {
   profileMap: Map<string, NormalizedProfile>
@@ -14,12 +15,5 @@ export function deriveCompetitorView(payload: CompetitorResultPayload): {
   top: CompetitorAnalysisResult[]
   trending: CompetitorAnalysisResult[]
 } {
-  const profileMap = new Map(payload.profiles.map((p) => [p.username, p]))
-  const ers = payload.competitors
-    .map((c) => profileMap.get(c.username)?.engagementRate)
-    .filter((er): er is number => er !== null && er !== undefined)
-  const cohortAvgER = ers.length > 0 ? ers.reduce((a, b) => a + b, 0) / ers.length : 3.0
-  const top = payload.competitors.filter((c) => c.category === 'top').sort((a, b) => a.rank - b.rank)
-  const trending = payload.competitors.filter((c) => c.category === 'trending').sort((a, b) => a.rank - b.rank)
-  return { profileMap, cohortAvgER, top, trending }
+  return deriveRankedView(payload.competitors, payload.profiles)
 }
