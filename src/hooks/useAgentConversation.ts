@@ -25,6 +25,7 @@ import { useLocationDiscovery } from './useLocationDiscovery'
 import { useReelAnalysis } from './useReelAnalysis'
 import { callGeminiWithTools, callGeminiContent, GeminiError } from '../ai/gemini'
 import type { GeminiTurn } from '../ai/gemini'
+import type { ContentContext } from '../ai/prompts'
 import { AGENT_TOOLS, AGENT_SYSTEM_PROMPT, runAgentTurn, buildGeminiHistory } from '../tools/agentTools'
 import type { AgentAction } from '../tools/agentTools'
 import { generateHashtags } from '../lib/hashtagGenerator'
@@ -98,6 +99,44 @@ export function useAgentConversation() {
 
   const agentError = (err: unknown): string =>
     err instanceof GeminiError ? friendlyGemini(err.code) : 'Something went wrong — try again.'
+
+  /**
+   * Assemble research context for the content copilot from the active conversation's
+   * latest result + the live reel synthesis. Returns undefined when no context exists.
+   */
+  const buildContentContext = (): ContentContext | undefined => {
+    const convState = useConversationsStore.getState()
+    const messages = convState.conversations[convState.activeId]?.messages ?? []
+    const lastResult = [...messages].reverse().find((m) => m.type === 'result')
+    const payload = lastResult?.result
+
+    const ctx: ContentContext = {}
+
+    if (payload?.kind === 'competitor') {
+      const profileMap = new Map(payload.profiles.map((p) => [p.username, p]))
+      ctx.researchSummary = `Found ${payload.competitors.length} competitors in ${payload.niche}.`
+      ctx.accounts = payload.competitors.slice(0, 10).map((c) => {
+        const p = profileMap.get(c.username)
+        return { username: c.username, followers: p?.followersCount ?? 0, er: p?.engagementRate ?? 0 }
+      })
+    } else if (payload?.kind === 'discovery') {
+      const profileMap = new Map(payload.profiles.map((p) => [p.username, p]))
+      ctx.researchSummary = `Found ${payload.results.length} creators in ${payload.city}.`
+      ctx.accounts = payload.results.slice(0, 10).map((r) => {
+        const p = profileMap.get(r.username)
+        return { username: r.username, followers: p?.followersCount ?? 0, er: p?.engagementRate ?? 0 }
+      })
+    }
+
+    const synthesis = useReelAnalysisStore.getState().synthesis
+    if (synthesis) {
+      ctx.hookPatterns = synthesis.topPatterns.map((p) => ({ archetype: p.archetype, count: p.count }))
+      ctx.replicateTips = synthesis.replicateTips
+    }
+
+    if (!ctx.researchSummary && !ctx.hookPatterns && !ctx.replicateTips) return undefined
+    return ctx
+  }
 
   const sendMessage = async (text: string) => {
     const safeText = text.replace(/[\n\r]/g, ' ').trim().slice(0, 500)
@@ -180,7 +219,7 @@ export function useAgentConversation() {
 
       case 'answer': {
         clarifyTurnsRef.current = 0
-        const reply = await callGeminiContent(geminiKeys, action.message, undefined, signal)
+        const reply = await callGeminiContent(geminiKeys, action.message, buildContentContext(), signal)
         if (signal.aborted) return
         bot(reply)
         return

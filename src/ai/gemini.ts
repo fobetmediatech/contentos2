@@ -470,6 +470,7 @@ export async function callGeminiContent(
       generationConfig: {
         temperature: 0.7,       // natural, conversational copywriting tone
         maxOutputTokens: 1024,  // content generation (hook lists, scripts) runs longer
+        thinkingConfig: { thinkingBudget: 0 },  // prose answer — no chain-of-thought needed
       },
     },
     signal,
@@ -481,7 +482,13 @@ export async function callGeminiContent(
     throw new GeminiError('SAFETY_BLOCK', 'Gemini blocked the follow-up response.', false)
   }
 
-  const text = joinThoughtFilteredText(json.candidates[0].content?.parts).trim()
+  const candidate = json.candidates[0]
+
+  if (candidate.finishReason === 'MAX_TOKENS') {
+    throw new GeminiError('PARSE_ERROR', 'Gemini response was cut off (MAX_TOKENS) — try a shorter request.', false)
+  }
+
+  const text = joinThoughtFilteredText(candidate.content?.parts).trim()
 
   if (!text) {
     throw new GeminiError('SAFETY_BLOCK', 'Gemini returned an empty follow-up response.', false)

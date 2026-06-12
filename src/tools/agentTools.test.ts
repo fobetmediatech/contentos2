@@ -46,6 +46,27 @@ describe('buildGeminiHistory', () => {
     expect(turns[2].parts[0].text).toBe('now find some in mumbai')
   })
 
+  it('preserves result message when followed by another model turn (steer scenario)', () => {
+    // Repro: reel analysis completes (result message), then user steers mid-run
+    // triggering a "Switched" bot message. The result must NOT be replaced.
+    const msgs: HistoryMessage[] = [
+      { role: 'user', content: 'analyze reels for @handle', type: 'text' },
+      { role: 'assistant', content: 'Analyzing reels for @handle.', type: 'reel' },
+      { role: 'assistant', content: 'Reel breakdown for @handle.', type: 'result' },
+      { role: 'assistant', content: 'Switched — picking up your new request.', type: 'text' },
+      { role: 'user', content: 'write 5 hooks', type: 'text' },
+    ]
+    const turns = buildGeminiHistory(msgs, 8)
+    // Result should survive; "Switched" dropped
+    const modelTexts = turns.filter((t) => t.role === 'model').map((t) => t.parts[0].text)
+    expect(modelTexts).toContain('Reel breakdown for @handle.')
+    expect(modelTexts).not.toContain('Switched — picking up your new request.')
+    // Must still alternate
+    for (let i = 1; i < turns.length; i++) {
+      expect(turns[i].role).not.toBe(turns[i - 1].role)
+    }
+  })
+
   it('drops leading model turns so contents starts with a user turn', () => {
     const msgs: HistoryMessage[] = [
       { role: 'assistant', content: 'Welcome!', type: 'text' },

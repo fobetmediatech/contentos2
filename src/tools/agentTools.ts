@@ -257,21 +257,36 @@ export interface HistoryMessage {
  * version couldn't be, which is how the consecutive-user-turn contamination shipped).
  */
 export function buildGeminiHistory(messages: HistoryMessage[], window: number): GeminiTurn[] {
-  const mapped = messages
+  const filtered = messages
     .filter((m) => m.type !== 'error' && m.content)
     .slice(-window)
-    .map((m): GeminiTurn => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.content }] }))
-  // Collapse consecutive same-role turns, keeping the LATEST of each run, so contents
-  // strictly alternate. A filtered-out error between two user messages otherwise left two
-  // adjacent user turns, which Gemini conflated — bleeding the prior (failed) search's
-  // handle + niche into the new request ("@nike.training" + "ai" → "@nike.trainingai").
-  // Keeping the latest drops the stale request; the live message stands alone.
+
+  // Collapse consecutive same-role turns so contents strictly alternates.
+  // Exception: once a result message lands at the tail of `turns`, it is NEVER
+  // replaced by a subsequent same-role turn. Result messages anchor research
+  // context in history (e.g. a "Switched" steer bubble must not overwrite them).
   const turns: GeminiTurn[] = []
-  for (const t of mapped) {
+  let prevTurnWasResult = false
+
+  for (const m of filtered) {
+    const turn: GeminiTurn = { role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.content }] }
+    const isResult = m.type === 'result'
     const prev = turns[turns.length - 1]
-    if (prev && prev.role === t.role) turns[turns.length - 1] = t
-    else turns.push(t)
+
+    if (prev && prev.role === turn.role) {
+      if (prevTurnWasResult) {
+        // Preserve the result — drop this same-role turn instead.
+      } else {
+        // Normal collapse: keep the latest of consecutive same-role turns.
+        turns[turns.length - 1] = turn
+        prevTurnWasResult = isResult
+      }
+    } else {
+      turns.push(turn)
+      prevTurnWasResult = isResult
+    }
   }
+
   // Drop leading model turns so contents starts with a user turn (the API requires it).
   while (turns.length > 0 && turns[0].role === 'model') turns.shift()
   return turns
