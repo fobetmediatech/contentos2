@@ -16,6 +16,9 @@ spike/
 .DS_Store
 *.local
 
+# npm lockfile (project uses bun — keep bun.lock only)
+package-lock.json
+
 # gstack
 .claude/skills/gstack/
 .gstack/

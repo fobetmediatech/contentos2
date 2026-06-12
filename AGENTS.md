@@ -2,21 +2,23 @@
 
 ## gstack
 
-This project ships with [gstack](https://github.com/garrytan/gstack) under `.Codex/skills/gstack`. Use it for browsing, planning, reviewing, and shipping work.
+This project ships with [gstack](https://github.com/garrytan/gstack) under `.claude/skills/gstack`. Use it for browsing, planning, reviewing, and shipping work.
 
 ### Teammate setup (one-time)
 
 After cloning the repo:
 
 ```bash
-# 1. Install bun (gstack dependency)
-brew install oven-sh/bun/bun
+# 1. Install bun (Windows — PowerShell)
+powershell -c "irm bun.sh/install.ps1 | iex"
+# macOS: brew install oven-sh/bun/bun
+# Linux: curl -fsSL https://bun.sh/install | bash
 
 # 2. Run the gstack setup to link skills + install browsers
-cd .Codex/skills/gstack && ./setup
+cd .claude/skills/gstack && ./setup
 ```
 
-This links gstack's slash commands into `~/.Codex/commands/` and downloads the Playwright browsers used by `/browse`.
+This links gstack's slash commands into `~/.claude/commands/` and downloads the Playwright browsers used by `/browse`.
 
 ### Browsing rule
 
@@ -63,19 +65,24 @@ NEVER use `mcp__claude-in-chrome__*` tools.
 
 ## Project overview
 
-**Content OS 2.0** — a browser-based Instagram research tool. No backend. All API keys stored in `localStorage`. Two pipelines:
+**Content OS 2.0** — a browser-based Instagram research SaaS (internal team tool). Three pipelines:
 
 1. **Competitor Analysis** — scrape reference accounts → extract `relatedProfiles` → Gemini ranking → top/trending cards
 2. **Location Discovery** — city + niche → hashtag generation → profile scrape → location filter → AI-ranked creator cards
+3. **Reel Hook Analysis** — scrape top reels → Gemini hook analysis per creator → cross-creator pattern synthesis
 
-Entry point: `ChatPage` — conversational interface that routes to either pipeline based on Gemini intent classification.
+Entry point: `ChatPage` — conversational interface that routes to all three pipelines via Gemini function-calling (NOT intentParser.ts — that file is dead code).
+
+**Backend:** One Vercel serverless function (`api/analyze-reel-video.ts`) for deep multimodal reel analysis. Supabase (Postgres + RLS) backs conversation sync and the shared team corpus.
+
+**Keys:** Gemini and Apify keys are build-time env vars (`VITE_` prefix, baked into the public bundle). Phase 1 of the improvement plan migrates all third-party calls to server-side proxies.
 
 ## Commands
 
 ```bash
 npm run dev          # Start Vite dev server
 npm run build        # TypeScript check + Vite build
-npm run test         # Run 578 unit tests (vitest)
+bun run test         # Run 608+ unit tests (vitest) — exits 0 on a fresh clone
 npm run test:watch   # Watch mode
 npm run lint         # ESLint
 npm run test:discovery  # Integration test for discovery pipeline (needs real API keys)
@@ -96,7 +103,7 @@ src/
     useLocationDiscovery.ts   # TanStack Query mutation for discovery pipeline
     useReelAnalysis.ts        # Reel scrape + hook analysis + synthesis; self-contained deep-report run
   ai/
-    intentParser.ts           # Gemini intent classification (pipeline routing)
+    intentParser.ts           # DEAD CODE — types only; live routing is Gemini function-calling in useAgentConversation.ts
     gemini.ts                 # Gemini REST API caller (no SDK)
     prompts.ts                # Prompt builders for all Gemini calls
     prompts/                  # Per-feature prompt modules (e.g. deepReelAnalysis)
@@ -133,7 +140,7 @@ src/
     persistStorage.ts         # Import-safe persist storage wrapper (never throws)
     reelPersist.ts            # Reel persist guard — drop interrupted mid-runs on restore
   components/
-    AppLayout.tsx             # Top nav (Chat | Memory | Report | Settings) + Outlet
+    AppLayout.tsx             # Top nav (Chat | Memory | Report — NO Settings page) + Outlet
     ChatMessage.tsx           # Chat bubble with optional options
     CompetitorResultMessage.tsx  # Inline competitor results (results-as-messages)
     DiscoveryResultMessage.tsx   # Inline discovery results

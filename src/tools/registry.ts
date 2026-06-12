@@ -4,10 +4,14 @@
  * Pure data, no hook calls, no side effects.
  * Each entry is the single source of truth for its pipeline's UI metadata.
  *
- * Extension guide:
+ * Extension guide (current — pre Phase 3 refactor):
  *   1. Add a new PipelineToolDescriptor entry here.
- *   2. Add a dispatch case in useConversation.ts → confirmSeeds().
- *   That's it — ChatPage and useActivePipeline pick it up automatically.
+ *   2. Add a GeminiFunctionDeclaration to AGENT_TOOLS in agentTools.ts.
+ *   3. Add a dispatch branch in useAgentConversation.ts → dispatchTool().
+ *   4. Add a result store (see analysisStore.ts / discoveryStore.ts pattern).
+ *   5. Add a result message component and wire it into ChatPage's render block.
+ *   Phase 3 of the improvement plan replaces steps 2-5 with a single PIPELINES
+ *   registry entry — see docs/superpowers/plans/ for the full migration.
  */
 
 import { STEP_LABELS } from '../store/analysisStore'

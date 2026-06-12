@@ -9,8 +9,10 @@ This project ships with [gstack](https://github.com/garrytan/gstack) under `.cla
 After cloning the repo:
 
 ```bash
-# 1. Install bun (gstack dependency)
-brew install oven-sh/bun/bun
+# 1. Install bun (Windows — PowerShell)
+powershell -c "irm bun.sh/install.ps1 | iex"
+# macOS: brew install oven-sh/bun/bun
+# Linux: curl -fsSL https://bun.sh/install | bash
 
 # 2. Run the gstack setup to link skills + install browsers
 cd .claude/skills/gstack && ./setup
@@ -63,23 +65,31 @@ NEVER use `mcp__claude-in-chrome__*` tools.
 
 ## Project overview
 
-**Content OS 2.0** — a browser-based Instagram research tool. No backend. All API keys stored in `localStorage`. Two pipelines:
+**Content OS 2.0** — a browser-based Instagram research SaaS (internal team tool). Three pipelines:
 
 1. **Competitor Analysis** — scrape reference accounts → extract `relatedProfiles` → Gemini ranking → top/trending cards
 2. **Location Discovery** — city + niche → hashtag generation → profile scrape → location filter → AI-ranked creator cards
+3. **Reel Hook Analysis** — scrape top reels → Gemini hook analysis per creator → cross-creator pattern synthesis
 
-Entry point: `ChatPage` — conversational interface that routes to either pipeline based on Gemini intent classification.
+Entry point: `ChatPage` — conversational interface that routes to all three pipelines via Gemini function-calling (NOT intentParser.ts — that file is dead code).
+
+**Backend:** One Vercel serverless function (`api/analyze-reel-video.ts`) for deep multimodal reel analysis (Gemini Files API, Clerk JWT-gated). Supabase (Postgres + RLS) backs conversation sync (`user_state` table) and the shared team corpus (`corpus_creators`, `corpus_sightings`, `corpus_content`).
+
+**Keys:** Gemini and Apify keys are build-time env vars (`VITE_` prefix — baked into the public JS bundle). Clerk gates the React UI only, not the static assets. Phase 1 of the improvement plan (`docs/superpowers/plans/`) migrates all third-party calls to server-side proxies.
 
 ## Commands
 
 ```bash
-npm run dev          # Start Vite dev server
-npm run build        # TypeScript check + Vite build
-npm run test         # Run 578 unit tests (vitest)
-npm run test:watch   # Watch mode
-npm run lint         # ESLint
-npm run test:discovery  # Integration test for discovery pipeline (needs real API keys)
+bun run dev          # Start Vite dev server
+bun run build        # Typecheck (app + api) + Vite build
+bun run test         # Run 608+ unit tests (vitest) — exits 0 on a fresh clone
+bun run test:watch   # Watch mode
+bun run lint         # ESLint
+bun run typecheck:api        # Typecheck api/ directory only
+bun run test:discovery       # Integration test for discovery pipeline (needs real API keys)
 ```
+
+**Package manager: bun** (not npm/yarn — `vercel.json` builds with bun; `bun.lock` is the authoritative lockfile; `package-lock.json` is gitignored).
 
 ## Project structure
 
@@ -96,8 +106,8 @@ src/
     useLocationDiscovery.ts   # TanStack Query mutation for discovery pipeline
     useReelAnalysis.ts        # Reel scrape + hook analysis + synthesis; self-contained deep-report run
   ai/
-    intentParser.ts           # Gemini intent classification (pipeline routing)
-    gemini.ts                 # Gemini REST API caller (no SDK)
+    intentParser.ts           # DEAD CODE — types only; live routing is Gemini function-calling in useAgentConversation.ts
+    gemini.ts                 # Gemini REST API caller (no SDK) — all browser-side Gemini calls go here
     prompts.ts                # Prompt builders for all Gemini calls
     prompts/                  # Per-feature prompt modules (e.g. deepReelAnalysis)
   lib/
@@ -113,8 +123,10 @@ src/
     reelVideoClient.ts        # Batch-resolve reel video URLs (deep multimodal path)
     reelSnapshot.ts           # buildReelResultPayload — snapshot a finished reel run (per-conversation parity)
     deepReelCache.ts          # IndexedDB cache for deep per-reel analyses (free re-runs)
-    corpus.ts                 # Pure corpus core (mergeCreator, recognition, CorpusRepository)
-    corpusIdb.ts              # IndexedDB-backed corpus (creators + content stores)
+    corpus.ts                 # Pure corpus core (mergeCreator, recognition, CorpusRepository interface)
+    corpusIdb.ts              # Re-exports createSupabaseCorpus() as `corpus` — filename kept for import compat
+    supabaseCorpus.ts         # Supabase-backed CorpusRepository (the shared team brain)
+    supabaseClient.ts         # Single Supabase client — Clerk JWT via accessToken callback
     corpusHarvest.ts          # Map pipeline results → corpus creator/content records
     errorMessages.ts          # Fixed, user-safe error strings (code-keyed; never raw API bodies)
     devLog.ts                 # DEV-only console helpers (C3 — research-target data never logs in prod)
@@ -131,11 +143,25 @@ src/
     reelAnalysisStore.ts      # Zustand — reel run state (persisted; reelConversationId tags the owning chat)
     conversationsStore.ts     # Zustand — multi-conversation chat history (persisted) + legacy migration
     corpusStore.ts            # Zustand — corpus hydration + remembered count
-    keysStore.ts              # Zustand — API keys (persisted)
+    keysStore.ts              # Zustand — API keys from build-time env (NOT persisted — redeploy to rotate)
     persistStorage.ts         # Import-safe persist storage wrapper (never throws)
     reelPersist.ts            # Reel persist guard — drop interrupted mid-runs on restore
+    supabaseStorage.ts        # Zustand PersistStorage backed by Supabase user_state table
+```
+
+```
+api/
+  analyze-reel-video.ts       # Vercel serverless: Clerk JWT gate → Gemini Files API video analysis
+  _lib/
+    geminiFiles.ts            # Gemini Files API helper (upload + generate)
+    deepReelPrompt.ts         # Prompt builder for the deep multimodal path
+  tsconfig.json               # Separate tsconfig for Vercel functions (nodenext, strict: true)
+```
+
+```
+src/
   components/
-    AppLayout.tsx             # Top nav (Chat | Memory | Report | Settings) + Outlet
+    AppLayout.tsx             # Top nav (Chat | Memory | Report — NO Settings page) + Outlet
     ChatMessage.tsx           # Chat bubble with optional options
     CompetitorResultMessage.tsx  # Inline competitor results (results-as-messages)
     DiscoveryResultMessage.tsx   # Inline discovery results

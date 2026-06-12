@@ -1,11 +1,12 @@
 {
   "name": "instagram-competitor-finder",
   "private": true,
-  "version": "3.4.0.0",
+  "version": "3.5.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && tsc -p api/tsconfig.json && vite build",
+    "typecheck:api": "tsc -p api/tsconfig.json",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
