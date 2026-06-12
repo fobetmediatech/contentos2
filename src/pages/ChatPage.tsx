@@ -81,6 +81,11 @@ export function ChatPage() {
   const conversationMessages = conversations[activeConversationId]?.messages ?? EMPTY_MESSAGES
   const conversationList = useMemo(() => sortConversations(conversations), [conversations])
 
+  // 2.1: runConversationId — the conversation each pipeline run belongs to, so results
+  // and errors land in the right chat even when the user switches mid-run.
+  const competitorRunConversationId = useAnalysisStore((s) => s.runConversationId)
+  const discoveryRunConversationId = useDiscoveryStore((s) => s.runConversationId)
+
   const discoveryStatus = useDiscoveryStore((s) => s.status)
   const discoveryError = useDiscoveryStore((s) => s.error)
   const discoveryDidExpand = useDiscoveryStore((s) => s.didExpand)
@@ -141,30 +146,27 @@ export function ChatPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Analysis error → surface as chat message
+  // Analysis error → surface as chat message in the conversation the run started in (2.1).
   useEffect(() => {
     if (status === 'error' && analysisError && !analysisErrorHandledRef.current) {
       analysisErrorHandledRef.current = true
-      addMessage({ role: 'assistant', content: analysisError, timestamp: Date.now(), type: 'error' })
+      addMessageTo(competitorRunConversationId ?? activeConversationId, { role: 'assistant', content: analysisError, timestamp: Date.now(), type: 'error' })
       setStatus('chatting')
     }
     if (status !== 'error') {
       analysisErrorHandledRef.current = false
     }
-  }, [status, analysisError, addMessage, setStatus])
+  }, [status, analysisError, addMessageTo, competitorRunConversationId, activeConversationId, setStatus])
 
-  // Discovery error → surface as chat message then reset.
-  // M9: all read values are in deps (addMessage/setStatus/resetDiscovery are stable
-  // Zustand refs). resetDiscovery flips status off 'error' immediately, so the guard
-  // stops a re-fire — no duplicate error bubble.
+  // Discovery error → surface as chat message in the conversation the run started in (2.1).
   useEffect(() => {
     if (discoveryStatus === 'error') {
       const errMsg = discoveryError ?? 'Discovery failed — please try again.'
-      addMessage({ role: 'assistant', content: errMsg, type: 'error' })
+      addMessageTo(discoveryRunConversationId ?? activeConversationId, { role: 'assistant', content: errMsg, type: 'error' })
       setStatus('chatting')
       resetDiscovery()
     }
-  }, [discoveryStatus, discoveryError, addMessage, setStatus, resetDiscovery])
+  }, [discoveryStatus, discoveryError, addMessageTo, discoveryRunConversationId, activeConversationId, setStatus, resetDiscovery])
 
   // Results-as-messages (Phase 2): when a competitor run finishes, SNAPSHOT it into the
   // conversation as a `type:'result'` message (persists + interleaves), then flip status back
@@ -181,7 +183,8 @@ export function ChatPage() {
       // reference accounts) — the ranked competitors live in the candidate set, so this is what
       // gives cards their metrics and feeds the corpus real creators.
       const matched = candidateProfiles.filter((p) => handles.has(p.username))
-      addMessage({
+      // 2.1: route to the conversation the run started in, not the currently-active one.
+      addMessageTo(competitorRunConversationId ?? activeConversationId, {
         role: 'assistant',
         type: 'result',
         content: `Found ${competitors.length} competitor${competitors.length !== 1 ? 's' : ''}${niche ? ` in ${niche}` : ''}.`,
@@ -202,28 +205,16 @@ export function ChatPage() {
         .catch(() => {})
       setStatus('chatting')
     }
-  }, [status, competitors, summary, niche, candidateProfiles, analysisDidExpand, addMessage, setStatus])
+  }, [status, competitors, summary, niche, candidateProfiles, analysisDidExpand, addMessageTo, competitorRunConversationId, activeConversationId, setStatus])
 
-  // Reel position marker: when a reel run STARTS (activeHandles 0 → non-empty), drop a
-  // `type:'reel'` marker into the conversation so the (live) reel block renders in place —
-  // subsequent chats append BELOW it instead of piling above a bottom-pinned block. One
-  // marker per run; the latest marker is the one that renders (older ones no-op).
+  // 2.4: Reset reelActiveRef when a run ends so the next run can add its marker.
+  // The marker itself is now added imperatively in handleAnalyzeReels / dispatchTool
+  // to avoid React batching masking the 0→non-empty activeHandles edge on back-to-back runs.
   useEffect(() => {
-    const active = activeHandles.length > 0
-    if (active && !reelActiveRef.current) {
-      reelActiveRef.current = true
-      // Tag the run with the conversation it started in: the live block only renders here
-      // (gated below), and on supersede the snapshot lands here too.
-      setReelConversationId(activeConversationId)
-      addMessage({
-        role: 'assistant',
-        type: 'reel',
-        content: `Analyzing reels for ${activeHandles.map((h) => `@${h}`).join(', ')}.`,
-      })
-    } else if (!active) {
+    if (activeHandles.length === 0) {
       reelActiveRef.current = false
     }
-  }, [activeHandles, addMessage, setReelConversationId, activeConversationId])
+  }, [activeHandles])
 
   // Results-as-messages (stage 2): snapshot a finished DISCOVERY run into the conversation as
   // a `type:'result'` message, then reset the discovery store. Armed only while a real run is
@@ -235,7 +226,8 @@ export function ChatPage() {
       discoveryResultArmedRef.current = false
       const handles = new Set(discoveryResults.map((r) => r.username))
       const matched = discoveryProfiles.filter((p) => handles.has(p.username))
-      addMessage({
+      // 2.1: route to the conversation the run started in, not the currently-active one.
+      addMessageTo(discoveryRunConversationId ?? activeConversationId, {
         role: 'assistant',
         type: 'result',
         content: `Found ${discoveryResults.length} creator${discoveryResults.length !== 1 ? 's' : ''}${discoveryCity ? ` in ${discoveryCity}` : ''}.`,
@@ -255,7 +247,7 @@ export function ChatPage() {
         .catch(() => {})
       resetDiscovery()
     }
-  }, [discoveryStatus, discoveryResults, discoveryCity, discoveryNiche, discoveryProfiles, discoveryDidExpand, discoveryLocationRelaxed, addMessage, resetDiscovery])
+  }, [discoveryStatus, discoveryResults, discoveryCity, discoveryNiche, discoveryProfiles, discoveryDidExpand, discoveryLocationRelaxed, addMessageTo, discoveryRunConversationId, activeConversationId, resetDiscovery])
 
   // Reel → corpus content: when a reel run's synthesis finishes, harvest each analyzed reel
   // into the corpus as content tied to its creator (the "content" half of the corpus). Armed
@@ -340,11 +332,14 @@ export function ChatPage() {
   }
 
   const handleSwitchConversation = (id: string) => {
+    // 2.2: abort any in-flight run so it doesn't complete and write results into the new conversation.
+    agentConv.abort()
     switchConversation(id)
     freshenAnalysis()
   }
 
   const handleDeleteConversation = (id: string) => {
+    agentConv.abort()
     deleteConversation(id)
     freshenAnalysis()
   }
@@ -365,6 +360,15 @@ export function ChatPage() {
     const handles = [...selectedHandles]
     setSelectedHandles([])
     snapshotCurrentReelRun() // if a finished reel run is on screen, preserve it before this supersedes it
+    // 2.4: set conversation binding + add marker BEFORE startReelAnalysis resets the store,
+    // so back-to-back runs each get their own marker regardless of React batching.
+    reelActiveRef.current = true
+    setReelConversationId(activeConversationId)
+    addMessage({
+      role: 'assistant',
+      type: 'reel',
+      content: `Analyzing reels for ${handles.map((h) => `@${h}`).join(', ')}.`,
+    })
     startReelAnalysis(handles)  // sets activeHandles in the reel store
   }
 

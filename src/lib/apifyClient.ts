@@ -150,10 +150,16 @@ export async function discoverCompetitors(
   // Build seen set to avoid re-scraping any handle
   const seenHandles = new Set(inputHandles.map((h) => h.replace(/^@/, '').toLowerCase()))
 
-  // Extract candidate handles from Round 1 relatedProfiles
+  // Extract candidate handles from Round 1 relatedProfiles.
+  // Sort by cross-profile adjacency frequency (handles appearing in more input profiles'
+  // relatedHandles are higher-signal) then cap to avoid unbounded Round 2 scrapes (2.13).
   const allRelated = inputProfiles.flatMap((p) => p.relatedHandles)
+  const handleFreq = new Map<string, number>()
+  for (const h of allRelated) handleFreq.set(h, (handleFreq.get(h) ?? 0) + 1)
   const candidateHandles = [...new Set(allRelated)]
     .filter((h) => !seenHandles.has(h.toLowerCase()))
+    .sort((a, b) => (handleFreq.get(b) ?? 0) - (handleFreq.get(a) ?? 0))
+    .slice(0, depth === 'deep' ? 40 : 25)
 
   if (candidateHandles.length === 0) {
     return { inputProfiles, candidateProfiles: [] }

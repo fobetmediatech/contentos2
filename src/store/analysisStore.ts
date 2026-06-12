@@ -116,6 +116,8 @@ export interface AnalysisState {
   status: AnalysisStatus
   currentStep: AnalysisStep
   params: AnalysisParams | null
+  /** Conversation the run started in — results + errors route here via addMessageTo (2.1). */
+  runConversationId: string | null
 
   /** Populated when status === 'clarifying'. Cleared on reset. */
   pendingDiscovery: PendingDiscovery | null
@@ -148,7 +150,7 @@ export interface AnalysisState {
   parsedIntent: ParsedIntent | null
 
   // Actions
-  startAnalysis: (params: AnalysisParams) => void
+  startAnalysis: (params: AnalysisParams, runConversationId?: string) => void
   setStep: (step: AnalysisStep) => void
   /** Transitions status to 'clarifying' and stores discovery data + generated question. */
   setClarification: (data: PendingDiscovery) => void
@@ -171,6 +173,7 @@ const initialState = {
   status: 'idle' as AnalysisStatus,
   currentStep: 1 as AnalysisStep,
   params: null,
+  runConversationId: null as string | null,
   pendingDiscovery: null,
   clarificationAnswer: null,
   inputProfiles: [],
@@ -192,8 +195,8 @@ export const useAnalysisStore = create<AnalysisState>()((set) => ({
 
   // Reset analysis-specific state for a new run. The chat transcript lives in
   // conversationsStore now, so this no longer needs to preserve it.
-  startAnalysis: (params) =>
-    set({ ...initialState, status: 'running', params, currentStep: 1 }),
+  startAnalysis: (params, runConversationId) =>
+    set({ ...initialState, status: 'running', params, currentStep: 1, runConversationId: runConversationId ?? null }),
 
   setStep: (step) => set({ currentStep: step }),
 

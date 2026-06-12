@@ -88,6 +88,7 @@ vi.mock('../store/reelAnalysisStore', () => ({
         activeHandles: mockStores.reelActiveHandles,
         synthesisStatus: mockStores.reelSynthesisStatus,
         reset: mockStores.reelReset,
+        setReelConversationId: vi.fn(), // 2.4: imperative marker path now calls this
       }),
     },
   ),

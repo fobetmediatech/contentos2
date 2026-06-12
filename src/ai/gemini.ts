@@ -180,15 +180,28 @@ export async function callGeminiWithSchema<T>(
   }
   if (thinkingBudget !== undefined) generationConfig.thinkingConfig = { thinkingBudget }
 
-  const { ok, status, json } = await geminiGenerate(
-    apiKeys,
-    { contents: [{ parts: [{ text: prompt }] }], generationConfig },
-    signal,
-  )
-  if (!ok) throw mapGeminiHttpError(status, json)
+  const requestBody = { contents: [{ parts: [{ text: prompt }] }], generationConfig }
+  // Retry once on retryable errors (500/503/429) with a short backoff.
+  const MAX_ATTEMPTS = 2
+  let lastOk = false
+  let lastStatus = 0
+  let lastJson: GeminiResponse = {}
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    if (signal?.aborted) throw new GeminiError('UNKNOWN', 'Aborted', false)
+    if (attempt > 0) await new Promise<void>((r) => setTimeout(r, 1500))
+    const result = await geminiGenerate(apiKeys, requestBody, signal)
+    lastOk = result.ok; lastStatus = result.status; lastJson = result.json
+    if (!result.ok) {
+      const err = mapGeminiHttpError(result.status, result.json)
+      if (err.retryable && attempt < MAX_ATTEMPTS - 1) continue
+      throw err
+    }
+    break
+  }
+  if (!lastOk) throw mapGeminiHttpError(lastStatus, lastJson)
 
   // Safety block: empty candidates array
-  if (!json.candidates || json.candidates.length === 0) {
+  if (!lastJson.candidates || lastJson.candidates.length === 0) {
     throw new GeminiError(
       'SAFETY_BLOCK',
       'Gemini blocked the response (content policy). Try rephrasing the input handles.',
@@ -196,7 +209,7 @@ export async function callGeminiWithSchema<T>(
     )
   }
 
-  const candidate = json.candidates[0]
+  const candidate = lastJson.candidates[0]
   const text = joinThoughtFilteredText(candidate.content?.parts)
 
   // MAX_TOKENS means the model stopped mid-output — JSON will be truncated and unparseable.

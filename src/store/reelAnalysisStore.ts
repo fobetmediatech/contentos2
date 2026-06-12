@@ -200,12 +200,21 @@ export const useReelAnalysisStore = create<ReelAnalysisState>()(persist((set) =>
     deepReport: s.deepReport,
     deepReportStatus: s.deepReportStatus,
   }),
+  version: 1,
+  migrate: (state) => state,
   merge: (persisted, current) => {
     const p = (persisted ?? {}) as Partial<ReelAnalysisState>
     const creatorStates = (p.creatorStates ?? {}) as Record<string, { status: string }>
     if (!isCleanReelRun({ synthesisStatus: p.synthesisStatus ?? 'idle', deepReportStatus: p.deepReportStatus ?? 'idle', creatorStates })) {
       return current // interrupted run → discard, come back to a clean slate
     }
-    return { ...current, ...p }
+    // 2.11: clamp any non-terminal status to 'failed' so a reload never restores a
+    // forever-spinner (e.g. synthesisStatus='done' + deepReportStatus='running' passes
+    // isCleanReelRun but would restore a stuck deep-report spinner).
+    const SYNTH_TERMINAL = new Set(['done', 'failed', 'idle'])
+    const DEEP_TERMINAL = new Set(['done', 'failed', 'unavailable', 'idle'])
+    const synthesisStatus = SYNTH_TERMINAL.has(p.synthesisStatus ?? '') ? (p.synthesisStatus as ReelAnalysisState['synthesisStatus']) : 'failed'
+    const deepReportStatus = DEEP_TERMINAL.has(p.deepReportStatus ?? '') ? (p.deepReportStatus as ReelAnalysisState['deepReportStatus']) : 'failed'
+    return { ...current, ...p, synthesisStatus: synthesisStatus ?? 'idle', deepReportStatus: deepReportStatus ?? 'idle' }
   },
 }))

@@ -29,6 +29,10 @@ describe('supabaseStorage', () => {
   })
 
   it('setItem upserts { key, value } (no user_id — server-defaulted)', async () => {
+    // Phase 2.7: setItem is gated on a prior successful getItem — hydrate the key first.
+    mock = makeSupabaseMock({ maybeSingle: [null] })
+    await supabaseStorage.getItem('contentos-reels')
+    mock = makeSupabaseMock({}) // fresh mock so only the upsert from setItem is captured
     await supabaseStorage.setItem('contentos-reels', { state: { x: 2 }, version: 0 })
     expect(mock.calls.upsert[0]).toEqual({ key: 'contentos-reels', value: { state: { x: 2 }, version: 0 } })
   })

@@ -22,6 +22,7 @@
 
 import { useMutation } from '@tanstack/react-query'
 import { useAnalysisStore, type AnalysisParams } from '../store/analysisStore'
+import { useConversationsStore } from '../store/conversationsStore'
 import { useKeysStore } from '../store/keysStore'
 import { discoverCompetitors } from '../lib/apifyClient'
 import { analyzeCompetitors, generateClarificationQuestion } from '../ai/gemini'
@@ -48,7 +49,10 @@ export function useCompetitorAnalysis() {
       const abort = linkAbort(TIMEOUT_MS, externalSignal)
 
       try {
-        startAnalysis(params)
+        // 2.1: capture the active conversation so results land there even if the user
+        // switches conversations while the 150s scrape is running.
+        const runConversationId = useConversationsStore.getState().activeId
+        startAnalysis(params, runConversationId)
 
         // Step 1: Scraping reference accounts (steps 2–4 inside discoverCompetitors)
         setStep(1)
@@ -206,9 +210,12 @@ export function useCompetitorAnalysis() {
    * Pass an empty string to proceed without refinement ("Looks right, proceed as-is").
    */
   const answerClarification = (answer: string, externalSignal?: AbortSignal) => {
-    storeAnswerClarification(answer)
+    // 2.2: check params BEFORE mutating status — storeAnswerClarification sets status:'running',
+    // so calling it when params is null (e.g. conversation switched mid-run) creates a permanent
+    // fake spinner that can never resolve.
     const currentParams = useAnalysisStore.getState().params
     if (!currentParams) return
+    storeAnswerClarification(answer)
     analyzeMutation.mutate({ answer, nicheContext: currentParams.nicheContext, externalSignal })
   }
 

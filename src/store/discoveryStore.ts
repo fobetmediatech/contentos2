@@ -38,6 +38,8 @@ export interface DiscoveryState {
   status: DiscoveryStatus
   currentStep: DiscoveryStep
   params: DiscoveryParams | null
+  /** Conversation the run started in — results + errors route here via addMessageTo (2.1). */
+  runConversationId: string | null
   /** All profiles that were scraped (before AI selection) */
   candidateProfiles: NormalizedProfile[]
   /** The 10 results Gemini selected */
@@ -55,7 +57,7 @@ export interface DiscoveryState {
   didExpand: boolean
 
   // Actions
-  startDiscovery: (params: DiscoveryParams) => void
+  startDiscovery: (params: DiscoveryParams, runConversationId?: string) => void
   setStep: (step: DiscoveryStep) => void
   setStepProgressDetail: (detail: string | null) => void
   setResults: (
@@ -73,6 +75,7 @@ const initialState = {
   status: 'idle' as DiscoveryStatus,
   currentStep: 1 as DiscoveryStep,
   params: null,
+  runConversationId: null as string | null,
   candidateProfiles: [],
   results: [],
   niche: '',
@@ -86,8 +89,8 @@ const initialState = {
 export const useDiscoveryStore = create<DiscoveryState>()((set) => ({
   ...initialState,
 
-  startDiscovery: (params) =>
-    set({ ...initialState, status: 'running', params, currentStep: 1 }),
+  startDiscovery: (params, runConversationId) =>
+    set({ ...initialState, status: 'running', params, currentStep: 1, runConversationId: runConversationId ?? null }),
 
   setStep: (step) => set({ currentStep: step }),
 

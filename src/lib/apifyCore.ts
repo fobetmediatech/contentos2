@@ -115,10 +115,22 @@ export async function startRun(
   return { runId: json.data.id, datasetId: json.data.defaultDatasetId }
 }
 
+// Max consecutive transient errors (429/5xx) before giving up on a poll (2.14).
+const MAX_TRANSIENT_FAILURES = 4
+// 2.14: only 429 and 5xx are transient; all other non-ok statuses (4xx including 404)
+// are hard failures that should surface immediately.
+const isPollTransient = (status: number) => status === 429 || status >= 500
+
 /**
  * Poll an actor run via the /api/apify proxy until it succeeds or fails.
  * Returns the resolved datasetId.
  * The _apiKey parameter is kept for call-site compatibility but ignored.
+ *
+ * Phase 2.12: on abort/timeout, fires best-effort abort of the server-side Apify run
+ * so it doesn't keep consuming Apify credits after the client has moved on.
+ *
+ * Phase 2.14: tolerates up to MAX_TRANSIENT_FAILURES consecutive 429/5xx responses
+ * within the deadline — a single network blip no longer kills a 2-minute scrape.
  */
 export async function pollRun(
   runId: string,
@@ -131,8 +143,29 @@ export async function pollRun(
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (clerkToken) headers['Authorization'] = `Bearer ${clerkToken}`
 
+  const abortApifyRun = () => {
+    // Fire-and-forget: abort the Apify actor run so it stops consuming credits.
+    // Use optional chaining on .catch so test mocks that return undefined don't crash.
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+    (fetch(BASE_URL, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ operation: 'abort', runId }),
+    }) as Promise<unknown> | undefined)?.catch?.(() => {})
+  }
+
+  // Pre-loop guard: if the signal is already aborted before we start, bail immediately
+  // without touching Apify (the caller handles cleanup for pre-start aborts).
+  if (signal?.aborted) throw new ApifyError('ABORTED', 'Request aborted', 0)
+
+  let transientFailures = 0
+
   while (Date.now() < deadline) {
-    if (signal?.aborted) throw new ApifyError('ABORTED', 'Request aborted', 0)
+    if (signal?.aborted) {
+      // Mid-poll abort: signal fired during an ongoing scrape — tell Apify to stop.
+      abortApifyRun()
+      throw new ApifyError('ABORTED', 'Request aborted', 0)
+    }
 
     let res: Response
     try {
@@ -147,13 +180,24 @@ export async function pollRun(
       // not an ApifyError — translate it so callers' `instanceof ApifyError` checks hold
       // and a timeout surfaces as the right message instead of "unexpected error".
       if (signal?.aborted || (err as { name?: string })?.name === 'AbortError') {
+        abortApifyRun()
         throw new ApifyError('ABORTED', 'Request aborted', 0)
       }
       throw err
     }
 
-    if (!res.ok) throw new ApifyError('POLL_FAILED', `Poll failed: ${res.status}`, res.status)
+    if (!res.ok) {
+      // 2.14: retry only truly transient failures (429 rate-limit, 5xx server error);
+      // hard-fail on everything else (4xx including 404 = bad request / not-found).
+      if (isPollTransient(res.status) && transientFailures < MAX_TRANSIENT_FAILURES) {
+        transientFailures++
+        await sleep(POLL_INTERVAL_MS * (transientFailures + 1)) // progressive backoff
+        continue
+      }
+      throw new ApifyError('POLL_FAILED', `Poll failed: ${res.status}`, res.status)
+    }
 
+    transientFailures = 0 // reset on a successful response
     const json = (await res.json()) as ApifyRunResponse
     const { status } = json.data
     const datasetId = json.data.defaultDatasetId
@@ -167,7 +211,8 @@ export async function pollRun(
     await sleep(POLL_INTERVAL_MS)
   }
 
-  throw new ApifyError('POLL_TIMEOUT', `Run ${runId} did not complete within ${MAX_POLL_MS / 1000}s`, 0)
+  abortApifyRun()
+  throw new ApifyError('POLL_TIMEOUT', `Run ${runId} did not complete within ${(maxPollMs ?? MAX_POLL_MS) / 1000}s`, 0)
 }
 
 /**

@@ -103,5 +103,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return
   }
 
+  if (operation === 'abort') {
+    // Best-effort: abort an orphaned server-side run so it stops consuming Apify credits.
+    // The client fires this on abort/timeout — failures are silently swallowed (fire-and-forget).
+    const runId = String(body.runId ?? '')
+    if (!runId) { res.status(400).json({ error: 'runId required' }); return }
+    const upstream = await fetch(`${APIFY_BASE}/actor-runs/${runId}/abort`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}` },
+    }).catch(() => null)
+    const status = upstream?.status ?? 200
+    res.status(status >= 400 ? status : 200).json({ aborted: true })
+    return
+  }
+
   res.status(400).json({ error: 'Invalid operation' })
 }

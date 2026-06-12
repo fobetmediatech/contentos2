@@ -18,6 +18,7 @@
 
 import { useMutation } from '@tanstack/react-query'
 import { useDiscoveryStore, type DiscoveryParams } from '../store/discoveryStore'
+import { useConversationsStore } from '../store/conversationsStore'
 import { useKeysStore } from '../store/keysStore'
 import { generateHashtags } from '../lib/hashtagGenerator'
 import { runLocationDiscovery } from '../lib/discoveryClient'
@@ -45,7 +46,10 @@ export function useLocationDiscovery() {
       const abort = linkAbort(TIMEOUT_MS, externalSignal)
 
       try {
-        startDiscovery(params)
+        // 2.1: capture the active conversation so results land there even if the user
+        // switches conversations while the 150s pipeline is running.
+        const runConversationId = useConversationsStore.getState().activeId
+        startDiscovery(params, runConversationId)
 
         // Sanitize user-supplied strings before embedding in AI prompts
         const safeCity = params.city.replace(/[\n\r]/g, ' ').trim()

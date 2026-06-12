@@ -200,7 +200,17 @@ export function useAgentConversation() {
     const { name, args } = action
 
     if (name === 'analyze_reels') {
-      startReelAnalysis((args.handles as string[]) ?? [], signal)
+      const handles = (args.handles as string[]) ?? []
+      // 2.4: add marker imperatively before startReelAnalysis resets the store, so
+      // React batching can't mask the 0→non-empty activeHandles edge in ChatPage's effect.
+      const convId = useConversationsStore.getState().activeId
+      useReelAnalysisStore.getState().setReelConversationId(convId)
+      addMessage({
+        role: 'assistant',
+        type: 'reel',
+        content: `Analyzing reels for ${handles.map((h: string) => `@${h}`).join(', ')}.`,
+      })
+      startReelAnalysis(handles, signal)
       return
     }
 
@@ -239,5 +249,12 @@ export function useAgentConversation() {
     analyze({ handles: seeds.slice(0, SEED_LIMIT), depth: 'standard', clientName: '', nicheContext }, signal)
   }
 
-  return { sendMessage, isThinking }
+  // 2.2: exposed so ChatPage can abort in-flight runs on conversation switch/delete,
+  // preventing results from landing in the wrong conversation.
+  const abort = () => {
+    currentRun.current?.abort()
+    stopLingeringProgress()
+  }
+
+  return { sendMessage, isThinking, abort }
 }

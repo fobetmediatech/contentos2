@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import pLimit from 'p-limit'
 import { useReelAnalysisStore } from '../store/reelAnalysisStore'
 import { useKeysStore } from '../store/keysStore'
@@ -16,6 +16,11 @@ import {
   synthesizeDeepReport,
 } from '../lib/reelAnalyzer'
 import type { DeepReelStatus } from '../store/reelAnalysisStore'
+
+// 2.3: module-scope controller shared across ALL mounted instances of useReelAnalysis
+// (ChatPage + useAgentConversation both mount this hook; per-instance refs meant one
+// instance's abort couldn't cancel the other's in-flight run).
+const sharedAbortRef: { current: AbortController | null } = { current: null }
 
 // Cap Gemini concurrency across all creators in a run.
 const geminiLimiter = pLimit(5)
@@ -83,9 +88,10 @@ export function useReelAnalysis() {
 
   const { apifyKeys, geminiKeys } = useKeysStore()
 
-  // One controller per run, aborted on unmount.
-  const abortRef = useRef<AbortController | null>(null)
-  useEffect(() => () => abortRef.current?.abort(), [])
+  // Cleanup: abort any in-flight run when the component tree unmounts (navigation away).
+  // Both mounted instances (ChatPage + useAgentConversation) register this; when both
+  // unmount simultaneously the second abort is a no-op on the already-aborted controller.
+  useEffect(() => () => { sharedAbortRef.current?.abort() }, [])
 
   async function runCreatorPipeline(handle: string, signal: AbortSignal) {
     try {
@@ -125,10 +131,10 @@ export function useReelAnalysis() {
     if (handles.length === 0) return
 
     // New run: cancel any in-flight run, reset state, seed fresh.
-    abortRef.current?.abort()
+    sharedAbortRef.current?.abort()
     reset()
     const controller = new AbortController()
-    abortRef.current = controller
+    sharedAbortRef.current = controller
 
     // Let the agent loop (T8) supersede this run via an external signal. Reel already
     // returns silently on abort (per-creator `if (signal.aborted) return`), so forwarding
@@ -264,9 +270,9 @@ export function useReelAnalysis() {
       return
     }
 
-    abortRef.current?.abort()
+    sharedAbortRef.current?.abort()
     const controller = new AbortController()
-    abortRef.current = controller
+    sharedAbortRef.current = controller
     if (controller.signal.aborted) return
 
     // ENRICH IN PLACE — do NOT reset(). reset() wiped the quick hook analysis AND nulled

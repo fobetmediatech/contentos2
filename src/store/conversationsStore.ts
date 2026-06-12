@@ -176,4 +176,7 @@ export const useConversationsStore = create<ConversationsState>()(persist((set, 
   storage: supabaseStorage,
   skipHydration: true,
   partialize: (s) => ({ conversations: s.conversations, activeId: s.activeId }),
+  version: 1,
+  // Identity migration for v1 — any future schema change adds a numbered case here.
+  migrate: (state) => state,
 }))
