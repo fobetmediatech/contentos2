@@ -110,7 +110,7 @@ function mapGeminiHttpError(httpStatus: number, body: GeminiResponse): GeminiErr
     status === 'PERMISSION_DENIED' ||
     msg.toLowerCase().includes('api key')
   if (isAuth) {
-    return new GeminiError('AUTH_ERROR', 'Invalid Gemini API key. Check VITE_GEMINI_KEY in .env.', false)
+    return new GeminiError('AUTH_ERROR', 'Invalid Gemini API key. Check GEMINI_API_KEY in the server environment.', false)
   }
   return new GeminiError('UNKNOWN', `Unexpected Gemini error: ${httpStatus} ${msg}`, true)
 }

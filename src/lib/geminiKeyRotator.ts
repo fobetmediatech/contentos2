@@ -6,7 +6,8 @@
  * (60s), not benched for 15 min like an out-of-credit Apify account. Same TOCTOU-safe
  * synchronous read-then-write pattern; its own storage namespace ('gemini_*').
  *
- * The pool comes from VITE_GEMINI_KEYS (comma-separated) + VITE_GEMINI_KEY (keysStore).
+ * Phase 1: key selection moved server-side (api/gemini.ts). This rotator is kept for
+ * backward compatibility but is no longer used in production — the proxy holds the pool.
  * Round-robin spreads concurrent multi-user load across every key so no single key's
  * RPM/TPM is the bottleneck; the cooldown routes around a key that just 429'd.
  */
