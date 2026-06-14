@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "content-os",
-      "runtimeExecutable": "npm",
+      "runtimeExecutable": "bun",
       "runtimeArgs": ["run", "dev"],
       "port": 5173
     }

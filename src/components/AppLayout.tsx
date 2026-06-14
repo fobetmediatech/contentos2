@@ -87,9 +87,65 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
           <UserButton
             appearance={{
               variables: {
-                colorBackground: '#3D3025',
+                colorBackground: '#2C2218',
                 colorText: '#F5EDD6',
+                colorTextSecondary: '#C4A882',
                 colorPrimary: '#E07B3A',
+                colorTextOnPrimaryBackground: '#F5EDD6',
+                colorInputBackground: '#3D3025',
+                colorInputText: '#F5EDD6',
+                colorNeutral: '#C4A882',
+                borderRadius: '10px',
+                fontFamily: '"Outfit", sans-serif',
+                fontSize: '14px',
+              },
+              elements: {
+                card: {
+                  backgroundColor: '#2C2218',
+                  border: '1px solid rgba(245,237,214,0.12)',
+                  boxShadow: '0 8px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(245,237,214,0.06)',
+                },
+                userPreviewMainIdentifier: {
+                  color: '#F5EDD6',
+                  fontWeight: '600',
+                  fontFamily: '"Outfit", sans-serif',
+                },
+                userPreviewSecondaryIdentifier: {
+                  color: '#C4A882',
+                  fontFamily: '"DM Mono", monospace',
+                  fontSize: '12px',
+                  letterSpacing: '0.01em',
+                },
+                userPreviewAvatarBox: {
+                  outline: '2px solid rgba(224,123,58,0.35)',
+                  outlineOffset: '1px',
+                },
+                userButtonPopoverActionButton: {
+                  color: '#F5EDD6',
+                  borderRadius: '8px',
+                  transition: 'background-color 150ms ease',
+                },
+                userButtonPopoverActionButtonText: {
+                  color: '#F5EDD6',
+                  fontFamily: '"Outfit", sans-serif',
+                  fontWeight: '500',
+                },
+                userButtonPopoverActionButtonIcon: {
+                  color: '#C4A882',
+                },
+                userButtonPopoverFooter: {
+                  borderTop: '1px solid rgba(245,237,214,0.08)',
+                },
+                userButtonPopoverFooterPagesLink: {
+                  color: '#7A6A54',
+                },
+                badge: {
+                  backgroundColor: 'rgba(224,123,58,0.15)',
+                  color: '#F4A97B',
+                  border: '1px solid rgba(224,123,58,0.25)',
+                  fontFamily: '"DM Mono", monospace',
+                  letterSpacing: '0.04em',
+                },
               },
             }}
           />
