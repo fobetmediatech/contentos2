@@ -205,15 +205,18 @@ Return only valid JSON matching the synthesis schema. Do not add commentary outs
 // Batch schema + prompt (quick-path cache: one Gemini call for N uncached reels)
 // ---------------------------------------------------------------------------
 
-/** Array wrapper around REEL_ANALYSIS_SCHEMA — one element per reel, same order as input. */
+/** Object wrapper around REEL_ANALYSIS_SCHEMA array — Gemini requires root type:'object'. */
 export const REEL_ANALYSIS_BATCH_SCHEMA = {
-  type: 'array',
-  items: REEL_ANALYSIS_SCHEMA,
+  type: 'object',
+  properties: {
+    analyses: { type: 'array', items: REEL_ANALYSIS_SCHEMA },
+  },
+  required: ['analyses'],
 }
 
 /**
  * Build a single prompt that analyses N reels in one call.
- * The response is an array of REEL_ANALYSIS_SCHEMA objects in the same order as `reels`.
+ * The response is { analyses: [...] } — an object wrapper required by Gemini (root arrays rejected).
  * commentsLikesRatio is NOT in the schema — callers compute it client-side after.
  */
 export function buildReelAnalysisBatchPrompt(
@@ -252,10 +255,10 @@ ${HOOK_TAXONOMY_TABLE}
 
 ## Task
 
-Analyse the ${reels.length} reel(s) below and return an array of ${reels.length} classification object(s).
+Analyse the ${reels.length} reel(s) below and return a JSON object with an "analyses" key containing an array of ${reels.length} classification object(s).
 
 **Rules:**
-- Return an array with EXACTLY ${reels.length} element(s), one per reel, in the SAME ORDER as the input array.
+- Return \`{ "analyses": [...] }\` with EXACTLY ${reels.length} element(s) in the array, one per reel, in the SAME ORDER as the input array.
 - \`hookArchetype\` MUST be one of the exact enum values in the taxonomy above.
 - \`secondaryArchetype\` is optional — only populate if a second archetype is clearly present.
 - \`openingLine\`: the verbatim hook — the first line of the caption (or the implied on-screen opening line) that stops the scroll. Quote it directly when present; otherwise reconstruct the most likely opening line. Keep it under ~120 characters.
@@ -270,5 +273,5 @@ Analyse the ${reels.length} reel(s) below and return an array of ${reels.length}
 ${reelsJson}
 \`\`\`
 
-Return only a valid JSON array matching the schema. Do not add commentary outside the JSON array.`
+Return only a valid JSON object matching the schema. Do not add commentary outside the JSON.`
 }

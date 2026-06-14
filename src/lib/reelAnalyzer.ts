@@ -168,9 +168,10 @@ export async function analyzeReelsBatch(
   if (uncached.length === 0) return cached
 
   // Batch all cache-miss reels into a single Gemini call.
+  // Schema root is type:'object' (Gemini rejects root arrays) — unwrap .analyses after.
   const prompt = buildReelAnalysisBatchPrompt(uncached)
-  const rawArray = await callGeminiWithSchema<
-    Array<{
+  const { analyses: rawArray } = await callGeminiWithSchema<{
+    analyses: Array<{
       hookArchetype: string
       secondaryArchetype?: string
       openingLine?: string
@@ -179,7 +180,7 @@ export async function analyzeReelsBatch(
       replicationTemplate: string
       lowConfidenceNote?: string
     }>
-  >(geminiKey, prompt, REEL_ANALYSIS_BATCH_SCHEMA, { temperature: 0.3, thinkingBudget: 0, signal })
+  }>(geminiKey, prompt, REEL_ANALYSIS_BATCH_SCHEMA, { temperature: 0.3, thinkingBudget: 0, signal })
 
   // Map array response back to reels by index, compute client-side ratio, write cache.
   const fresh: Record<string, ReelAnalysis> = {}
