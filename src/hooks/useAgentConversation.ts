@@ -31,7 +31,6 @@ import type { AgentAction } from '../tools/agentTools'
 import { generateHashtags } from '../lib/hashtagGenerator'
 import { scrapeHashtagUsernames } from '../lib/apifyClient'
 import { friendlyGemini } from '../lib/errorMessages'
-import { GEMINI_KEY_MISSING_MSG } from '../lib/constants'
 
 const HISTORY_WINDOW = 8       // turns sent to the model per call (cap context cost)
 const THINKING_BUDGET = 512    // small budget so ask-vs-act reasons without big latency (6A)
@@ -163,11 +162,6 @@ export function useAgentConversation() {
     }
 
     addMessage({ role: 'user', content: safeText, type: 'text' })
-
-    if (!geminiKeys.length) {
-      bot(GEMINI_KEY_MISSING_MSG, 'error')
-      return
-    }
 
     const controller = new AbortController()
     currentRun.current = controller
