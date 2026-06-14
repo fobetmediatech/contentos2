@@ -13,7 +13,7 @@ import { ApifyError } from './apifyCore'
 import { GeminiError } from '../ai/gemini'
 
 export const APIFY_FRIENDLY: Record<string, string> = {
-  QUOTA_EXCEEDED: 'Apify monthly usage limit reached — add a key from another account to VITE_APIFY_KEYS in .env, upgrade your plan, or wait for the monthly reset.',
+  QUOTA_EXCEEDED: 'Apify monthly usage limit reached — add a key from another account to APIFY_KEY_N in the server environment, upgrade your plan, or wait for the monthly reset.',
   RUN_START_FAILED: 'Scraping failed to start — try again or check your Apify key.',
   POLL_FAILED: 'Lost connection to Apify while scraping — try again.',
   RUN_FAILED: 'The scrape failed on Apify — try again with different handles.',
@@ -25,7 +25,7 @@ export const APIFY_FRIENDLY: Record<string, string> = {
 }
 
 export const GEMINI_FRIENDLY: Record<string, string> = {
-  AUTH_ERROR: 'Gemini API key is invalid or missing — update VITE_GEMINI_KEY in .env.',
+  AUTH_ERROR: 'Gemini API key is invalid or missing — check GEMINI_API_KEY in the server environment.',
   RATE_LIMITED: 'Gemini rate limit hit — wait a few seconds and try again.',
   SAFETY_BLOCK: 'The AI declined this request — try different inputs.',
   INVALID_PROMPT: 'AI analysis failed on the input — try again.',

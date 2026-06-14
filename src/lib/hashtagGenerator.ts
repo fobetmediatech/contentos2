@@ -176,7 +176,7 @@ Return ONLY a JSON array of strings. No # prefix. No explanation. No markdown.`
       s === 'UNAUTHENTICATED' ||
       s === 'PERMISSION_DENIED' ||
       (json.error?.message ?? '').toLowerCase().includes('api key')
-    if (isAuth) throw new GeminiError('AUTH_ERROR', 'Invalid Gemini API key. Check VITE_GEMINI_KEY in .env.', false)
+    if (isAuth) throw new GeminiError('AUTH_ERROR', 'Invalid Gemini API key. Check GEMINI_API_KEY in the server environment.', false)
     throw new Error(`Gemini hashtag call failed: ${status}`)
   }
   const candidate = json.candidates?.[0]
@@ -247,18 +247,18 @@ export async function generateHashtags(
     return { hashtags: ruleFallback(city.trim(), niche.trim(), count), fromAI: false }
   }
 
-  // Try Gemini — fall back to rules on any error
-  if ((Array.isArray(apiKeys) ? apiKeys : [apiKeys]).some((k) => k.trim())) {
-    try {
-      const hashtags = await callGeminiForHashtags(apiKeys, safeCity, safeNiche, count, signal, excludeHashtags)
-      devLog(`[hashtagGenerator] Gemini returned ${hashtags.length} hashtags:`, hashtags)
-      return { hashtags, fromAI: true }
-    } catch (err) {
-      // H10: a bad/expired Gemini key is a real problem the user must fix — don't mask
-      // it as "worse hashtags". Re-throw auth errors; fall back only on transient/parse.
-      if (err instanceof GeminiError && err.code === 'AUTH_ERROR') throw err
-      devWarn('[hashtagGenerator] Gemini call failed, using rule fallback:', err)
-    }
+  // Try Gemini via the server proxy — fall back to rules on any transient error.
+  // Phase 1: apiKeys is always [] (proxy selects keys server-side), so we no longer
+  // gate on client-side key presence. The proxy is always reachable.
+  try {
+    const hashtags = await callGeminiForHashtags(apiKeys, safeCity, safeNiche, count, signal, excludeHashtags)
+    devLog(`[hashtagGenerator] Gemini returned ${hashtags.length} hashtags:`, hashtags)
+    return { hashtags, fromAI: true }
+  } catch (err) {
+    // H10: a bad/expired Gemini key is a real problem the user must fix — don't mask
+    // it as "worse hashtags". Re-throw auth errors; fall back only on transient/parse.
+    if (err instanceof GeminiError && err.code === 'AUTH_ERROR') throw err
+    devWarn('[hashtagGenerator] Gemini call failed, using rule fallback:', err)
   }
 
   const hashtags = ruleFallback(safeCity, safeNiche, count)

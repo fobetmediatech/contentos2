@@ -24,22 +24,27 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-// ── Rule-fallback path (no fetch needed) ─────────────────────────────────────
+// ── Rule-fallback path (Gemini call fails) ────────────────────────────────────
+// Phase 1: the guard on client-side key presence is gone — the proxy is always
+// attempted. Rule fallback is triggered when the proxy returns a non-auth error.
 
-describe('generateHashtags — excludeHashtags with rule fallback (empty API key)', () => {
+describe('generateHashtags — excludeHashtags with rule fallback (Gemini unavailable)', () => {
   it('returns rule-based hashtags without crashing when excludeHashtags is provided', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new Error('proxy error')))
     const result = await generateHashtags('', 'Mumbai', 'food', 'standard', undefined, ['MumbaiFood', 'MumbaiFoodie'])
     expect(result.fromAI).toBe(false)
     expect(result.hashtags.length).toBeGreaterThan(0)
   })
 
   it('returns rule-based hashtags without crashing when excludeHashtags is empty array', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new Error('proxy error')))
     const result = await generateHashtags('', 'Mumbai', 'food', 'standard', undefined, [])
     expect(result.fromAI).toBe(false)
     expect(result.hashtags.length).toBeGreaterThan(0)
   })
 
   it('returns rule-based hashtags without crashing when excludeHashtags is undefined', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new Error('proxy error')))
     const result = await generateHashtags('', 'Mumbai', 'food', 'standard', undefined, undefined)
     expect(result.fromAI).toBe(false)
     expect(result.hashtags.length).toBeGreaterThan(0)
