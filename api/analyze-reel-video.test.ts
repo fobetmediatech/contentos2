@@ -30,7 +30,7 @@ vi.mock('@clerk/backend', () => ({
   verifyToken: verifyTokenMock,
 }))
 
-import handler, { analyzeReelVideo, coerceDeepAnalysis, HandlerError } from './analyze-reel-video.js'
+import handler, { analyzeReelVideo, coerceDeepAnalysis, HandlerError, pickGeminiKey } from './analyze-reel-video.js'
 
 const APIFY_URL = 'https://api.apify.com/v2/key-value-stores/abc/records/DX_Video.mp4'
 
@@ -219,5 +219,29 @@ describe('handler', () => {
     await handler(mockReq('POST', { downloadedVideoUrl: 'https://evil.example.com/x.mp4', shortCode: 'a' }, AUTHED), res as never)
     expect(res.statusCode).toBe(400)
     expect(HandlerError).toBeDefined()
+  })
+})
+
+// --------------------------------------------------------------------------
+// Regression: GEMINI_API_KEY may be a comma-separated POOL; the function must pass ONE key
+// to the Files API, not the whole "k1,k2,..." string (which Google 401s -> the deep-report bug).
+describe('pickGeminiKey', () => {
+  it('returns a SINGLE member of a comma-separated GEMINI_API_KEY pool (never the whole string)', () => {
+    process.env.GEMINI_API_KEY = 'k1,k2,k3'
+    delete process.env.GEMINI_KEYS
+    for (let i = 0; i < 25; i++) expect(['k1', 'k2', 'k3']).toContain(pickGeminiKey())
+  })
+
+  it('merges GEMINI_KEYS, trims, and drops blanks', () => {
+    process.env.GEMINI_API_KEY = 'a, b ,'
+    process.env.GEMINI_KEYS = 'c'
+    const seen = new Set(Array.from({ length: 40 }, () => pickGeminiKey()))
+    expect([...seen].sort()).toEqual(['a', 'b', 'c'])
+  })
+
+  it('returns empty string when no keys are configured', () => {
+    delete process.env.GEMINI_API_KEY
+    delete process.env.GEMINI_KEYS
+    expect(pickGeminiKey()).toBe('')
   })
 })

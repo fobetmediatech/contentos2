@@ -34,6 +34,24 @@ export const config = { maxDuration: 120 }
 const ALLOWED_HOSTS = new Set(['api.apify.com'])
 const MAX_VIDEO_BYTES = 50 * 1024 * 1024 // 50MB ceiling — reels are a few MB; guard against abuse
 
+/**
+ * Pick ONE Gemini key. GEMINI_API_KEY may hold a comma-separated POOL (same value the
+ * /api/gemini proxy splits) plus an optional GEMINI_KEYS. geminiFiles uses the key as a
+ * single `x-goog-api-key` value, so passing the whole "k1,k2,..." string makes Google reject
+ * it with 401 ("Files API start failed (401)") — the deep-report bug. Random pick spreads the
+ * deep report's concurrent per-reel uploads across the pool. Math.random is load-balancing,
+ * not cryptography.
+ */
+export function pickGeminiKey(): string {
+  const keys = [
+    ...String(process.env.GEMINI_API_KEY ?? '').split(','),
+    ...String(process.env.GEMINI_KEYS ?? '').split(','),
+  ]
+    .map((k) => k.trim())
+    .filter(Boolean)
+  return keys[Math.floor(Math.random() * keys.length)] ?? ''
+}
+
 export interface AnalyzeReelInput {
   downloadedVideoUrl: string
   shortCode: string
@@ -152,7 +170,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   const user = await requireClerkUser(req, res)
   if (!user) return
 
-  const geminiApiKey = process.env.GEMINI_API_KEY
+  const geminiApiKey = pickGeminiKey() // ONE key from the pool — never the whole comma string
   if (!geminiApiKey) {
     res.status(500).json({ error: 'Server not configured' })
     return
