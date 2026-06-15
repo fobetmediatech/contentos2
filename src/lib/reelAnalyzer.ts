@@ -63,18 +63,20 @@ export async function analyzeReelDeep(
   // Auth: the function verifies the Clerk session JWT server-side. The old
   // VITE_REEL_FN_SECRET shared-secret header was removed — a static secret in
   // the public bundle gates nothing.
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  const token = await getClerkSessionToken()
-  if (token) headers['Authorization'] = `Bearer ${token}`
+  const reqBody = JSON.stringify({ downloadedVideoUrl, shortCode: reel.shortCode, caption: reel.caption })
+  const post = async (): Promise<Response> => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    const token = await getClerkSessionToken()
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    return fetch(ANALYZE_REEL_FN, { method: 'POST', headers, body: reqBody, signal })
+  }
 
   let res: Response
   try {
-    res = await fetch(ANALYZE_REEL_FN, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ downloadedVideoUrl, shortCode: reel.shortCode, caption: reel.caption }),
-      signal,
-    })
+    res = await post()
+    // A 401 here under the deep report's concurrent burst is almost always a transient token
+    // miss — retry ONCE with a freshly fetched (coalesced) token before failing the reel.
+    if (res.status === 401) res = await post()
   } catch (err) {
     if (signal?.aborted || (err as { name?: string })?.name === 'AbortError') {
       throw new DeepAnalysisError('Aborted', 0)
