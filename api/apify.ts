@@ -39,6 +39,37 @@ function pickKey(keys: string[]): string {
   return keys[Math.floor(Math.random() * keys.length)]
 }
 
+// Statuses worth retrying on a DIFFERENT key: 429 (rate limited) and 402 (account
+// out of credit). Other statuses (incl. 4xx for a bad run/dataset) are the caller's
+// problem, not the key's, so we pass them straight back.
+const RETRYABLE = new Set([429, 402])
+
+/**
+ * Run an upstream Apify request with key failover, mirroring the Gemini proxy: shuffle
+ * the pool and, on a 429/402, roll to the next key before giving up. All keys are assumed
+ * to share one Apify workspace, so any key can poll/fetch any run. Without this, a single
+ * rate-limited or credit-exhausted key would fail the whole pipeline for the team even
+ * though other funded keys are available.
+ */
+async function fetchWithFailover(
+  keys: string[],
+  build: (apiKey: string) => { url: string; init?: RequestInit },
+): Promise<Response> {
+  // Math.random() shuffle is fine here — load-balancing, not cryptography.
+  const shuffled = [...keys].sort(() => Math.random() - 0.5)
+  for (let i = 0; i < shuffled.length; i++) {
+    const { url, init } = build(shuffled[i])
+    const res = await fetch(url, init)
+    if (RETRYABLE.has(res.status) && i < shuffled.length - 1) {
+      await res.body?.cancel()
+      continue
+    }
+    return res
+  }
+  // Unreachable: the final iteration always returns. Satisfies the type checker.
+  throw new Error('fetchWithFailover: empty key pool')
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' })
@@ -63,7 +94,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   }
 
   const operation = String(body.operation ?? '')
-  const apiKey = pickKey(keys)
 
   if (operation === 'start') {
     const actorId = String(body.actorId ?? '')
@@ -71,11 +101,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       res.status(400).json({ error: 'Actor not allowed' })
       return
     }
-    const upstream = await fetch(`${APIFY_BASE}/acts/${actorId}/runs`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(body.input ?? {}),
-    })
+    const upstream = await fetchWithFailover(keys, (apiKey) => ({
+      url: `${APIFY_BASE}/acts/${actorId}/runs`,
+      init: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify(body.input ?? {}),
+      },
+    }))
     const text = await upstream.text()
     res.status(upstream.status).setHeader('Content-Type', 'application/json').end(text)
     return
@@ -84,9 +117,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   if (operation === 'poll') {
     const runId = String(body.runId ?? '')
     if (!runId) { res.status(400).json({ error: 'runId required' }); return }
-    const upstream = await fetch(`${APIFY_BASE}/actor-runs/${runId}`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    })
+    const upstream = await fetchWithFailover(keys, (apiKey) => ({
+      url: `${APIFY_BASE}/actor-runs/${runId}`,
+      init: { headers: { Authorization: `Bearer ${apiKey}` } },
+    }))
     const text = await upstream.text()
     res.status(upstream.status).setHeader('Content-Type', 'application/json').end(text)
     return
@@ -95,9 +129,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   if (operation === 'fetch') {
     const datasetId = String(body.datasetId ?? '')
     if (!datasetId) { res.status(400).json({ error: 'datasetId required' }); return }
-    const upstream = await fetch(`${APIFY_BASE}/datasets/${datasetId}/items?clean=true`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    })
+    const upstream = await fetchWithFailover(keys, (apiKey) => ({
+      url: `${APIFY_BASE}/datasets/${datasetId}/items?clean=true`,
+      init: { headers: { Authorization: `Bearer ${apiKey}` } },
+    }))
     const text = await upstream.text()
     res.status(upstream.status).setHeader('Content-Type', 'application/json').end(text)
     return
@@ -106,8 +141,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   if (operation === 'abort') {
     // Best-effort: abort an orphaned server-side run so it stops consuming Apify credits.
     // The client fires this on abort/timeout — failures are silently swallowed (fire-and-forget).
+    // Single key is fine here: it's fire-and-forget, so failover would add no value.
     const runId = String(body.runId ?? '')
     if (!runId) { res.status(400).json({ error: 'runId required' }); return }
+    const apiKey = pickKey(keys)
     const upstream = await fetch(`${APIFY_BASE}/actor-runs/${runId}/abort`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}` },
