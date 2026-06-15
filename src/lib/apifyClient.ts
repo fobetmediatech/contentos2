@@ -55,9 +55,9 @@ async function scrapeHandles(
   const input = buildProfileScraperInput(handles)
   // Per-run key failover: spreads across accounts AND rolls a tapped-out key (402) to a funded one.
   const raw = await withKeyFailover(apifyKeys, async (apiKey) => {
-    const { runId, datasetId } = await startRun(ACTORS.PROFILE_SCRAPER, input, apiKey, signal)
-    const resolvedDatasetId = await pollRun(runId, apiKey, signal)
-    return fetchDataset<ApifyProfileRaw>(resolvedDatasetId || datasetId, apiKey, signal)
+    const { runId, datasetId, keyIndex } = await startRun(ACTORS.PROFILE_SCRAPER, input, apiKey, signal)
+    const resolvedDatasetId = await pollRun(runId, apiKey, signal, undefined, keyIndex)
+    return fetchDataset<ApifyProfileRaw>(resolvedDatasetId || datasetId, apiKey, signal, keyIndex)
   })
   return normalizeProfiles(raw)
 }
@@ -87,9 +87,9 @@ export async function scrapeHashtagUsernames(
   const top3 = hashtags.slice(0, 3)
   const input = buildHashtagScraperInput(top3, perHashtag)
   const posts = await withKeyFailover(apifyKeys, async (apiKey) => {
-    const { runId, datasetId } = await startRun(ACTORS.HASHTAG_SCRAPER, input, apiKey, signal)
-    const resolvedDatasetId = await pollRun(runId, apiKey, signal)
-    return fetchDataset<HashtagPostRaw>(resolvedDatasetId || datasetId, apiKey, signal)
+    const { runId, datasetId, keyIndex } = await startRun(ACTORS.HASHTAG_SCRAPER, input, apiKey, signal)
+    const resolvedDatasetId = await pollRun(runId, apiKey, signal, undefined, keyIndex)
+    return fetchDataset<HashtagPostRaw>(resolvedDatasetId || datasetId, apiKey, signal, keyIndex)
   })
 
   // Extract ownerUsername from each post, drop missing/empty values

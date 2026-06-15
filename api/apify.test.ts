@@ -52,6 +52,17 @@ function fetchReturning(statuses: number[]) {
   })
 }
 
+/** fetch double that records the Authorization header (key) + url of each call. */
+function fetchRecording(status = 200) {
+  const calls: { url: string; auth?: string }[] = []
+  const fn = vi.fn(async (url: string, init?: RequestInit) => {
+    const auth = (init?.headers as Record<string, string> | undefined)?.Authorization
+    calls.push({ url: String(url), auth })
+    return { status, body: { cancel: vi.fn() }, text: async () => '{}' } as unknown as Response
+  })
+  return Object.assign(fn, { calls })
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   verifyTokenMock.mockResolvedValue({ sub: 'user_123' })
@@ -118,5 +129,58 @@ describe('/api/apify key failover', () => {
     await handler(mockReq('POST', { operation: 'start', actorId: 'evil~actor', input: {} }, AUTHED), res as never)
     expect(res.statusCode).toBe(400)
     expect(f).not.toHaveBeenCalled()
+  })
+})
+
+// Key affinity: an Apify run is owned by the account that started it, so poll/fetch/abort
+// MUST reuse that same key — otherwise Apify 403s (the bug the smoke test surfaced).
+describe('/api/apify key affinity (run lifecycle pinning)', () => {
+  it('start reports the key index it used via x-apify-key-index header', async () => {
+    process.env.APIFY_KEYS = 'solo'                  // single key → deterministic index 0
+    const f = fetchRecording(200)
+    vi.stubGlobal('fetch', f)
+    const res = mockRes()
+    await handler(mockReq('POST', START, AUTHED), res as never)
+    expect(res.statusCode).toBe(200)
+    expect(res.headers['x-apify-key-index']).toBe('0')
+    expect(f.calls[0].auth).toBe('Bearer solo')
+  })
+
+  it('poll reuses the pinned key — single call, no cross-account failover', async () => {
+    const f = fetchRecording(200)                    // keys = k1,k2,k3 (from beforeEach)
+    vi.stubGlobal('fetch', f)
+    const res = mockRes()
+    await handler(mockReq('POST', { operation: 'poll', runId: 'run1', keyIndex: 1 }, AUTHED), res as never)
+    expect(f).toHaveBeenCalledTimes(1)               // does NOT shuffle across accounts
+    expect(f.calls[0].auth).toBe('Bearer k2')        // keys[1]
+    expect(f.calls[0].url).toContain('/actor-runs/run1')
+  })
+
+  it('fetch reuses the pinned key', async () => {
+    const f = fetchRecording(200)
+    vi.stubGlobal('fetch', f)
+    const res = mockRes()
+    await handler(mockReq('POST', { operation: 'fetch', datasetId: 'ds1', keyIndex: 2 }, AUTHED), res as never)
+    expect(f).toHaveBeenCalledTimes(1)
+    expect(f.calls[0].auth).toBe('Bearer k3')        // keys[2]
+    expect(f.calls[0].url).toContain('/datasets/ds1/items')
+  })
+
+  it('poll WITHOUT a keyIndex falls back to failover (legacy / pre-deploy runs)', async () => {
+    const f = fetchReturning([429, 200])             // first key rate-limited → rolls over
+    vi.stubGlobal('fetch', f)
+    const res = mockRes()
+    await handler(mockReq('POST', { operation: 'poll', runId: 'run1' }, AUTHED), res as never)
+    expect(f).toHaveBeenCalledTimes(2)
+    expect(res.statusCode).toBe(200)
+  })
+
+  it('poll with an out-of-range keyIndex ignores it and falls back to failover', async () => {
+    const f = fetchReturning([429, 200])
+    vi.stubGlobal('fetch', f)
+    const res = mockRes()
+    await handler(mockReq('POST', { operation: 'poll', runId: 'run1', keyIndex: 99 }, AUTHED), res as never)
+    expect(f).toHaveBeenCalledTimes(2)               // invalid index → not pinned → failover
+    expect(res.statusCode).toBe(200)
   })
 })

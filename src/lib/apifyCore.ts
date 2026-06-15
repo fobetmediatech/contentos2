@@ -94,7 +94,7 @@ export async function startRun(
   input: Record<string, unknown>,
   _apiKey: string,
   signal?: AbortSignal,
-): Promise<{ runId: string; datasetId: string }> {
+): Promise<{ runId: string; datasetId: string; keyIndex?: number }> {
   if ((import.meta as { env?: { DEV?: boolean } }).env?.DEV) console.debug('[apify] proxy start', actorId)
   const clerkToken = await getClerkSessionToken()
   const res = await fetch(BASE_URL, {
@@ -116,8 +116,13 @@ export async function startRun(
     throw new ApifyError('RUN_START_FAILED', `Failed to start actor run (${res.status})`, res.status)
   }
 
+  // The proxy reports which key/account slot started the run; thread it into poll/fetch so
+  // they hit the SAME account (an Apify run 403s if polled with a different account's key).
+  const kiRaw = res.headers?.get?.('x-apify-key-index')
+  const keyIndex = kiRaw != null && kiRaw.trim() !== '' && Number.isInteger(Number(kiRaw)) ? Number(kiRaw) : undefined
+
   const json = (await res.json()) as ApifyRunResponse
-  return { runId: json.data.id, datasetId: json.data.defaultDatasetId }
+  return { runId: json.data.id, datasetId: json.data.defaultDatasetId, keyIndex }
 }
 
 // Max consecutive transient errors (429/5xx) before giving up on a poll (2.14).
@@ -142,11 +147,14 @@ export async function pollRun(
   _apiKey: string,
   signal?: AbortSignal,
   maxPollMs?: number,
+  keyIndex?: number,
 ): Promise<string> {
   const deadline = Date.now() + (maxPollMs ?? MAX_POLL_MS)
   const clerkToken = await getClerkSessionToken()
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (clerkToken) headers['Authorization'] = `Bearer ${clerkToken}`
+  // Echo the starting account back so the proxy reuses it (omitted when absent → legacy path).
+  const pin = keyIndex != null ? { keyIndex } : {}
 
   const abortApifyRun = () => {
     // Fire-and-forget: abort the Apify actor run so it stops consuming credits.
@@ -154,7 +162,7 @@ export async function pollRun(
     (fetch(BASE_URL, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ operation: 'abort', runId }),
+      body: JSON.stringify({ operation: 'abort', runId, ...pin }),
     }) as Promise<unknown> | undefined)?.catch?.(() => {})
   }
 
@@ -177,7 +185,7 @@ export async function pollRun(
       res = await fetch(BASE_URL, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ operation: 'poll', runId }),
+        body: JSON.stringify({ operation: 'poll', runId, ...pin }),
         signal,
       })
     } catch (err) {
@@ -225,7 +233,12 @@ export async function pollRun(
  * Fetch all items from an Apify dataset via the /api/apify proxy.
  * The _apiKey parameter is kept for call-site compatibility but ignored.
  */
-export async function fetchDataset<T>(datasetId: string, _apiKey: string, signal?: AbortSignal): Promise<T[]> {
+export async function fetchDataset<T>(
+  datasetId: string,
+  _apiKey: string,
+  signal?: AbortSignal,
+  keyIndex?: number,
+): Promise<T[]> {
   const clerkToken = await getClerkSessionToken()
   const res = await fetch(BASE_URL, {
     method: 'POST',
@@ -233,7 +246,8 @@ export async function fetchDataset<T>(datasetId: string, _apiKey: string, signal
       'Content-Type': 'application/json',
       ...(clerkToken ? { Authorization: `Bearer ${clerkToken}` } : {}),
     },
-    body: JSON.stringify({ operation: 'fetch', datasetId }),
+    // Echo the run's account back so the dataset is fetched with the owning key (omit if absent).
+    body: JSON.stringify({ operation: 'fetch', datasetId, ...(keyIndex != null ? { keyIndex } : {}) }),
     signal,
   })
   if (!res.ok) throw new ApifyError('DATASET_FETCH_FAILED', `Dataset fetch failed: ${res.status}`, res.status)

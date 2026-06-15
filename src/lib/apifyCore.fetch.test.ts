@@ -50,6 +50,20 @@ describe('startRun', () => {
     expect(result.datasetId).toBe('ds-456')
   })
 
+  it('reads the owning key index from the x-apify-key-index header', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: { get: (h: string) => (h === 'x-apify-key-index' ? '2' : null) },
+        json: () => Promise.resolve({ data: { id: 'r', status: 'READY', defaultDatasetId: 'd' } }),
+      }),
+    )
+    const result = await startRun('actor-id', {}, 'api-key')
+    expect(result.keyIndex).toBe(2) // threaded into poll/fetch so they hit the same account
+  })
+
   it('throws RATE_LIMITED on 429', async () => {
     vi.stubGlobal(
       'fetch',
@@ -299,5 +313,28 @@ describe('fetchDataset', () => {
     expect(url).toBe('/api/apify')
     const body = JSON.parse(options.body as string)
     expect(body).toEqual({ operation: 'fetch', datasetId: 'ds-1' })
+  })
+})
+
+// Key affinity threading: poll/fetch must echo the run's keyIndex back to the proxy so the
+// SAME Apify account is used for the run lifecycle (a different account 403s the run).
+describe('key affinity threading', () => {
+  it('pollRun sends keyIndex to the proxy when provided', async () => {
+    const f = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ data: { id: 'r', status: 'SUCCEEDED', defaultDatasetId: 'd' } }),
+    })
+    vi.stubGlobal('fetch', f)
+    await pollRun('run-1', 'ignored-key', undefined, undefined, 1)
+    const body = JSON.parse((f.mock.calls[0] as [string, RequestInit])[1].body as string)
+    expect(body).toEqual({ operation: 'poll', runId: 'run-1', keyIndex: 1 })
+  })
+
+  it('fetchDataset sends keyIndex to the proxy when provided', async () => {
+    const f = vi.fn().mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) })
+    vi.stubGlobal('fetch', f)
+    await fetchDataset('ds-1', 'ignored-key', undefined, 3)
+    const body = JSON.parse((f.mock.calls[0] as [string, RequestInit])[1].body as string)
+    expect(body).toEqual({ operation: 'fetch', datasetId: 'ds-1', keyIndex: 3 })
   })
 })

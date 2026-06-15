@@ -145,9 +145,9 @@ async function scrapeProfiles(
   const input = buildProfileScraperInput(handles)
   // Per-run key failover: spreads across accounts AND rolls a tapped-out key (402) to a funded one.
   const raw = await withKeyFailover(apifyKeys, async (apiKey) => {
-    const { runId, datasetId } = await startRun(ACTORS.PROFILE_SCRAPER, input, apiKey, signal)
-    const resolvedDatasetId = await pollRun(runId, apiKey, signal)
-    return fetchDataset<ApifyProfileRaw>(resolvedDatasetId || datasetId, apiKey, signal)
+    const { runId, datasetId, keyIndex } = await startRun(ACTORS.PROFILE_SCRAPER, input, apiKey, signal)
+    const resolvedDatasetId = await pollRun(runId, apiKey, signal, undefined, keyIndex)
+    return fetchDataset<ApifyProfileRaw>(resolvedDatasetId || datasetId, apiKey, signal, keyIndex)
   })
   return normalizeProfiles(raw)
 }
@@ -326,9 +326,9 @@ export async function runLocationDiscovery(
   // Step 1: ALL hashtags in ONE actor run → pay startup cost once, not N times.
   const hashtagInput = buildHashtagScraperInput(hashtags, postsLimit)
   const posts = await withKeyFailover(apifyKeys, async (apiKey) => {
-    const { runId: hRunId, datasetId: hDatasetId } = await startRun(ACTORS.HASHTAG_SCRAPER, hashtagInput, apiKey, signal)
-    const hResolved = await pollRun(hRunId, apiKey, signal)
-    return fetchDataset<HashtagPostRaw>(hResolved || hDatasetId, apiKey, signal)
+    const { runId: hRunId, datasetId: hDatasetId, keyIndex: hKeyIndex } = await startRun(ACTORS.HASHTAG_SCRAPER, hashtagInput, apiKey, signal)
+    const hResolved = await pollRun(hRunId, apiKey, signal, undefined, hKeyIndex)
+    return fetchDataset<HashtagPostRaw>(hResolved || hDatasetId, apiKey, signal, hKeyIndex)
   })
 
   const allHandles = posts

@@ -12,7 +12,11 @@
  * Security properties:
  *   - Actor allowlist: only the 4 Instagram actors used by this product.
  *   - Fails closed: missing keys → 500; missing/invalid token → 401.
- *   - Random key selection per call; all keys assumed same Apify workspace.
+ *
+ * Key affinity: the pool is N SEPARATE Apify accounts (not one workspace), so a run is
+ * owned by the account whose key started it. `start` reports its key index via the
+ * `x-apify-key-index` response header; the client echoes it back as `keyIndex` on
+ * poll/fetch/abort so the SAME account's key is reused (a different key 403s the run).
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { requireClerkUser } from './_lib/auth.js'
@@ -45,29 +49,44 @@ function pickKey(keys: string[]): string {
 const RETRYABLE = new Set([429, 402])
 
 /**
- * Run an upstream Apify request with key failover, mirroring the Gemini proxy: shuffle
- * the pool and, on a 429/402, roll to the next key before giving up. All keys are assumed
- * to share one Apify workspace, so any key can poll/fetch any run. Without this, a single
- * rate-limited or credit-exhausted key would fail the whole pipeline for the team even
- * though other funded keys are available.
+ * Run an upstream Apify request with key failover, used by `start` (and as a legacy
+ * fallback for poll/fetch): shuffle the pool and, on a 429/402, roll to the next key
+ * before giving up. Returns which pool slot served the request so the caller can pin the
+ * run's later poll/fetch/abort to that same account (a different account 403s the run).
+ * Without failover, a single rate-limited or credit-exhausted key would fail the whole
+ * pipeline even though other funded keys are available.
  */
 async function fetchWithFailover(
   keys: string[],
   build: (apiKey: string) => { url: string; init?: RequestInit },
-): Promise<Response> {
-  // Math.random() shuffle is fine here — load-balancing, not cryptography.
-  const shuffled = [...keys].sort(() => Math.random() - 0.5)
-  for (let i = 0; i < shuffled.length; i++) {
-    const { url, init } = build(shuffled[i])
+): Promise<{ res: Response; index: number }> {
+  // Shuffle INDICES (not the keys) so we can report the original pool slot that served it.
+  // Math.random() is fine here — load-balancing, not cryptography.
+  const order = keys.map((_, i) => i).sort(() => Math.random() - 0.5)
+  for (let n = 0; n < order.length; n++) {
+    const index = order[n]
+    const { url, init } = build(keys[index])
     const res = await fetch(url, init)
-    if (RETRYABLE.has(res.status) && i < shuffled.length - 1) {
+    if (RETRYABLE.has(res.status) && n < order.length - 1) {
       await res.body?.cancel()
       continue
     }
-    return res
+    return { res, index }
   }
   // Unreachable: the final iteration always returns. Satisfies the type checker.
   throw new Error('fetchWithFailover: empty key pool')
+}
+
+/**
+ * Resolve the key a follow-up request (poll/fetch/abort) MUST reuse. An Apify run is owned
+ * by the account whose key started it, so polling/fetching/aborting with a different
+ * account's key returns 403. The client echoes back the `keyIndex` that `start` reported;
+ * we reuse exactly that pool slot. Returns null when no valid index is supplied (legacy
+ * callers / runs started before this shipped) — the caller then falls back to failover.
+ */
+function pinnedKey(keys: string[], body: Record<string, unknown>): string | null {
+  const ki = body.keyIndex
+  return typeof ki === 'number' && Number.isInteger(ki) && ki >= 0 && ki < keys.length ? keys[ki] : null
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
@@ -101,7 +120,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       res.status(400).json({ error: 'Actor not allowed' })
       return
     }
-    const upstream = await fetchWithFailover(keys, (apiKey) => ({
+    const { res: upstream, index } = await fetchWithFailover(keys, (apiKey) => ({
       url: `${APIFY_BASE}/acts/${actorId}/runs`,
       init: {
         method: 'POST',
@@ -110,17 +129,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       },
     }))
     const text = await upstream.text()
-    res.status(upstream.status).setHeader('Content-Type', 'application/json').end(text)
+    res
+      .status(upstream.status)
+      .setHeader('Content-Type', 'application/json')
+      .setHeader('x-apify-key-index', String(index)) // client pins poll/fetch/abort to this account
+      .end(text)
     return
   }
 
   if (operation === 'poll') {
     const runId = String(body.runId ?? '')
     if (!runId) { res.status(400).json({ error: 'runId required' }); return }
-    const upstream = await fetchWithFailover(keys, (apiKey) => ({
-      url: `${APIFY_BASE}/actor-runs/${runId}`,
-      init: { headers: { Authorization: `Bearer ${apiKey}` } },
-    }))
+    // Reuse the account that started the run (failing over to another account would 403).
+    // No pin (legacy caller / pre-deploy run) → fall back to failover.
+    const pinned = pinnedKey(keys, body)
+    const upstream = pinned
+      ? await fetch(`${APIFY_BASE}/actor-runs/${runId}`, { headers: { Authorization: `Bearer ${pinned}` } })
+      : (await fetchWithFailover(keys, (apiKey) => ({
+          url: `${APIFY_BASE}/actor-runs/${runId}`,
+          init: { headers: { Authorization: `Bearer ${apiKey}` } },
+        }))).res
     const text = await upstream.text()
     res.status(upstream.status).setHeader('Content-Type', 'application/json').end(text)
     return
@@ -129,10 +157,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   if (operation === 'fetch') {
     const datasetId = String(body.datasetId ?? '')
     if (!datasetId) { res.status(400).json({ error: 'datasetId required' }); return }
-    const upstream = await fetchWithFailover(keys, (apiKey) => ({
-      url: `${APIFY_BASE}/datasets/${datasetId}/items?clean=true`,
-      init: { headers: { Authorization: `Bearer ${apiKey}` } },
-    }))
+    // The dataset belongs to the run's account — reuse the pinned key (else failover).
+    const pinned = pinnedKey(keys, body)
+    const upstream = pinned
+      ? await fetch(`${APIFY_BASE}/datasets/${datasetId}/items?clean=true`, { headers: { Authorization: `Bearer ${pinned}` } })
+      : (await fetchWithFailover(keys, (apiKey) => ({
+          url: `${APIFY_BASE}/datasets/${datasetId}/items?clean=true`,
+          init: { headers: { Authorization: `Bearer ${apiKey}` } },
+        }))).res
     const text = await upstream.text()
     res.status(upstream.status).setHeader('Content-Type', 'application/json').end(text)
     return
@@ -141,10 +173,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   if (operation === 'abort') {
     // Best-effort: abort an orphaned server-side run so it stops consuming Apify credits.
     // The client fires this on abort/timeout — failures are silently swallowed (fire-and-forget).
-    // Single key is fine here: it's fire-and-forget, so failover would add no value.
+    // Must use the OWNING account's key (pinned) — a different account can't abort the run.
     const runId = String(body.runId ?? '')
     if (!runId) { res.status(400).json({ error: 'runId required' }); return }
-    const apiKey = pickKey(keys)
+    const apiKey = pinnedKey(keys, body) ?? pickKey(keys)
     const upstream = await fetch(`${APIFY_BASE}/actor-runs/${runId}/abort`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}` },
