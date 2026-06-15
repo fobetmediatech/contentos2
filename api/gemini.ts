@@ -67,14 +67,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   const shuffled = [...keys].sort(() => Math.random() - 0.5)
   for (let i = 0; i < shuffled.length; i++) {
     const apiKey = shuffled[i]
-    // Google AI Studio keys starting with AIza use the x-goog-api-key header.
-    // Newer OAuth-style keys (AQ..., ya29...) require Authorization: Bearer.
-    const authHeaders: Record<string, string> = apiKey.startsWith('AIza')
-      ? { 'x-goog-api-key': apiKey }
-      : { Authorization: `Bearer ${apiKey}` }
     const upstream = await fetch(`${GEMINI_BASE}/models/${model}:${endpoint}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeaders },
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
       body: JSON.stringify(body),
     })
     // On 429, try the next key if one is available; otherwise pass the 429 back.
