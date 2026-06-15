@@ -69,9 +69,9 @@ export async function scrapeReelVideos(
     const input = buildReelVideoScraperInput(reelUrls)
     // Per-run key failover: a tapped-out account (402) rolls over to a funded key.
     const raw = await withKeyFailover(apifyKeys, async (apiKey) => {
-      const { runId, datasetId } = await startRun(ACTORS.REEL_VIDEO_SCRAPER, input, apiKey, signal)
-      await pollRun(runId, apiKey, signal, VIDEO_POLL_MS)
-      return fetchDataset<RawReelVideoItem>(datasetId, apiKey, signal)
+      const { runId, datasetId, keyIndex } = await startRun(ACTORS.REEL_VIDEO_SCRAPER, input, apiKey, signal)
+      await pollRun(runId, apiKey, signal, VIDEO_POLL_MS, keyIndex)
+      return fetchDataset<RawReelVideoItem>(datasetId, apiKey, signal, keyIndex)
     })
 
     const { videos, errors } = extractReelVideos(raw)
