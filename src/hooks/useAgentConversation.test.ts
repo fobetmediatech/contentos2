@@ -99,9 +99,10 @@ vi.mock('../store/keysStore', () => ({
 }))
 
 const analyzeMock = vi.fn()
+const answerClarificationMock = vi.fn()
 const discoverMock = vi.fn()
 const reelMock = vi.fn()
-vi.mock('./useCompetitorAnalysis', () => ({ useCompetitorAnalysis: vi.fn(() => ({ analyze: analyzeMock })) }))
+vi.mock('./useCompetitorAnalysis', () => ({ useCompetitorAnalysis: vi.fn(() => ({ analyze: analyzeMock, answerClarification: answerClarificationMock })) }))
 vi.mock('./useLocationDiscovery', () => ({ useLocationDiscovery: vi.fn(() => ({ discover: discoverMock })), MIN_LOCATION_RESULTS: 4 }))
 vi.mock('./useReelAnalysis', () => ({ useReelAnalysis: vi.fn(() => ({ startAnalysis: reelMock })) }))
 
@@ -164,6 +165,19 @@ describe('useAgentConversation', () => {
     await act(async () => { await hook.current.sendMessage('find me good accounts') })
     expect(lastBot()?.content).toBe('Which kind of accounts?')
     expect(analyzeMock).not.toHaveBeenCalled()
+  })
+
+  it('routes a typed answer during clarification to the ranking hook (fires Phase 2)', async () => {
+    // Regression: the typed-answer path used to call the STORE's answerClarification (a no-op
+    // that only flips status→running), so ranking never fired and the run hung on step 4.
+    mockStores.analysisStatus = 'clarifying'
+    const { result: hook } = renderHook(() => useAgentConversation())
+    await act(async () => { await hook.current.sendMessage('focus on micro creators') })
+    expect(answerClarificationMock).toHaveBeenCalledTimes(1)
+    expect(answerClarificationMock.mock.calls[0][0]).toBe('focus on micro creators')
+    // Must NOT fall through to a fresh agent turn (no new discovery / Gemini planning).
+    expect(analyzeMock).not.toHaveBeenCalled()
+    expect(callTools).not.toHaveBeenCalled()
   })
 
   it('renders tappable pills when ask_clarification includes options (TD1)', async () => {

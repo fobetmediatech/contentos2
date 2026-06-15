@@ -124,7 +124,9 @@ export function useCompetitorAnalysis() {
 
   const analyzeMutation = useMutation({
     mutationFn: async ({ answer, nicheContext, externalSignal }: { answer: string; nicheContext: string; externalSignal?: AbortSignal }) => {
-      if (!geminiKeys.length) throw new Error('Gemini API key is not configured.')
+      // No client-side key guard: keys live server-side now (keysStore.geminiKeys is always []),
+      // so `!geminiKeys.length` was ALWAYS true and threw "Gemini API key is not configured" the
+      // moment ranking fired. The /api/gemini proxy enforces config + surfaces it as a pipeline error.
 
       // Read pendingDiscovery synchronously from store at call time — avoids stale closure.
       const discovery = useAnalysisStore.getState().pendingDiscovery
