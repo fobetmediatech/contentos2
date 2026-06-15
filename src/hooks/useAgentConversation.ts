@@ -41,7 +41,7 @@ export function useAgentConversation() {
   // The transcript lives in conversationsStore now; addMessage writes to the active conversation.
   const addMessage = useConversationsStore((s) => s.addMessage)
   const { geminiKeys, apifyKeys } = useKeysStore()
-  const { analyze } = useCompetitorAnalysis()
+  const { analyze, answerClarification: answerAnalysisClarification } = useCompetitorAnalysis()
   const { discover } = useLocationDiscovery()
   const { startAnalysis: startReelAnalysis } = useReelAnalysis()
 
@@ -141,11 +141,13 @@ export function useAgentConversation() {
     const safeText = text.replace(/[\n\r]/g, ' ').trim().slice(0, 500)
     if (!safeText) return
 
-    // 5.1: mid-clarification typed answer — route to answerClarification so the user's
-    // free-text refines the ranking prompt instead of silently killing the run.
+    // 5.1: mid-clarification typed answer — route to the HOOK's answerClarification so the
+    // user's free-text refines the ranking prompt AND Phase 2 (ranking) actually fires.
+    // The STORE action only flips status→'running' + saves the answer; it never calls
+    // analyzeMutation.mutate(), which left the run stuck spinning on step 4 forever.
     if (useAnalysisStore.getState().status === 'clarifying') {
       addMessage({ role: 'user', content: safeText, type: 'text' })
-      useAnalysisStore.getState().answerClarification(safeText)
+      answerAnalysisClarification(safeText, currentRun.current?.signal)
       return
     }
 
