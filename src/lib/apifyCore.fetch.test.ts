@@ -22,6 +22,10 @@ vi.mock('./apifyCore', async () => {
   }
 })
 
+// Mock the Clerk token source so we can assert a FRESH token is fetched per poll.
+const getTokenMock = vi.hoisted(() => vi.fn())
+vi.mock('./clerkToken', () => ({ getClerkSessionToken: getTokenMock }))
+
 beforeEach(() => {
   vi.resetAllMocks()
 })
@@ -173,6 +177,24 @@ describe('pollRun — terminal states', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(makePollResponse('SUCCEEDED', 'ds-ok')))
     const dsId = await pollRun('run-1', 'api-key')
     expect(dsId).toBe('ds-ok')
+  })
+
+  it('fetches a FRESH Clerk token on every poll (token-expiry guard)', async () => {
+    // Regression: pollRun used to grab one token before the loop and reuse it for up to
+    // 110-180s; Clerk tokens expire in ~60s, so slow reel-video scrapes 401'd mid-poll.
+    getTokenMock.mockResolvedValueOnce('tok-1').mockResolvedValueOnce('tok-2')
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(makePollResponse('RUNNING'))
+      .mockResolvedValueOnce(makePollResponse('SUCCEEDED', 'ds-ok'))
+    vi.stubGlobal('fetch', fetchMock)
+    const dsId = await pollRun('run-1', 'ignored-key')
+    expect(dsId).toBe('ds-ok')
+    expect(getTokenMock).toHaveBeenCalledTimes(2) // once PER poll, not once for the whole loop
+    const h1 = (fetchMock.mock.calls[0][1] as RequestInit).headers as Record<string, string>
+    const h2 = (fetchMock.mock.calls[1][1] as RequestInit).headers as Record<string, string>
+    expect(h1.Authorization).toBe('Bearer tok-1')
+    expect(h2.Authorization).toBe('Bearer tok-2') // fresh token on the 2nd poll
   })
 
   it('throws RUN_FAILED when status is FAILED', async () => {
