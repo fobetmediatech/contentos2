@@ -64,6 +64,7 @@ vi.mock('../lib/reelAnalyzer', () => ({
 
 import { useReelAnalysis } from './useReelAnalysis'
 import { useReelAnalysisStore } from '../store/reelAnalysisStore'
+import { useConversationsStore } from '../store/conversationsStore'
 import type { ReelData, StoredDeepReelAnalysis } from '../store/reelAnalysisStore'
 
 const reel = (sc: string): ReelData => ({
@@ -223,5 +224,25 @@ describe('useReelAnalysis.startDeepReport — R2 partial-failure', () => {
     expect(s.creatorStates.nike.analyses.a).toBeTruthy() // quick hook analysis preserved (not wiped)
     expect(s.creatorStates.nike.deepAnalyses?.a).toBeTruthy() // deep analysis layered on top
     expect(mocks.scrapeTopReels).not.toHaveBeenCalled() // reused the already-scraped reels, no re-scrape
+  })
+})
+
+describe('useReelAnalysis.startAnalysis — conversation binding (blank-reel regression)', () => {
+  it('binds the run to the active conversation after reset(), so the live reel block renders', async () => {
+    // Regression: startAnalysis() calls reset() which nulls reelConversationId. The callers
+    // (dispatchTool / handleAnalyzeReels) set it BEFORE calling, so reset() wiped it and ChatPage's
+    // render gate `reelConversationId === activeConversationId` never matched — the entire reel
+    // block (progress, results, AND error states) rendered blank. startAnalysis must re-bind the
+    // run to the active conversation after the reset, mirroring competitor/discovery startX().
+    mocks.scrapeTopReels.mockResolvedValue([reel('a'), reel('b')])
+    const activeId = useConversationsStore.getState().activeId
+    expect(activeId).toBeTruthy()
+
+    const { result } = renderHook(() => useReelAnalysis())
+    await act(async () => {
+      await result.current.startAnalysis(['nike'])
+    })
+
+    expect(useReelAnalysisStore.getState().reelConversationId).toBe(activeId)
   })
 })

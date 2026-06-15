@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import pLimit from 'p-limit'
 import { useReelAnalysisStore } from '../store/reelAnalysisStore'
+import { useConversationsStore } from '../store/conversationsStore'
 import { useKeysStore } from '../store/keysStore'
 import { scrapeTopReels, NoReelsError } from '../lib/reelScraper'
 import { scrapeReelVideos } from '../lib/reelVideoClient'
@@ -81,6 +82,7 @@ export function useReelAnalysis() {
     deepReport,
     deepReportStatus,
     setActiveHandles,
+    setReelConversationId,
     setCreatorState,
     setDeepReel,
     setSynthesis,
@@ -139,6 +141,12 @@ export function useReelAnalysis() {
     // New run: cancel any in-flight run, reset state, seed fresh.
     sharedAbortRef.current?.abort()
     reset()
+    // reset() nulls reelConversationId, so re-bind this run to the active conversation HERE.
+    // ChatPage gates the live reel block on `reelConversationId === activeConversationId`; if the
+    // binding is null the whole block — progress, results, AND per-creator error states — renders
+    // blank. Setting it after reset (not before, where the caller did and reset wiped it) mirrors
+    // how the competitor/discovery startX() capture runConversationId at run start.
+    setReelConversationId(useConversationsStore.getState().activeId)
     const controller = new AbortController()
     sharedAbortRef.current = controller
 
