@@ -85,6 +85,20 @@ interface ApifyDatasetResponse<T> {
 // ----- Core API calls -----
 
 /**
+ * Build request headers with a FRESH Clerk token. MUST be called immediately before each
+ * proxy request: Clerk session tokens expire in ~60s, so a token captured once and reused
+ * across a long poll loop goes stale mid-run and the proxy 401s. (Fast profile scrapes
+ * finished under 60s and slipped by; slow reel-video scrapes ran past it and 401'd.)
+ * getClerkSessionToken() → Clerk getToken() auto-refreshes, so each call yields a valid token.
+ */
+async function authHeaders(): Promise<Record<string, string>> {
+  const token = await getClerkSessionToken()
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  return headers
+}
+
+/**
  * Start an actor run via the /api/apify proxy. Returns runId + datasetId for polling.
  * The _apiKey parameter is kept for call-site compatibility but ignored — the proxy
  * selects a key from server env.
@@ -96,13 +110,9 @@ export async function startRun(
   signal?: AbortSignal,
 ): Promise<{ runId: string; datasetId: string; keyIndex?: number }> {
   if ((import.meta as { env?: { DEV?: boolean } }).env?.DEV) console.debug('[apify] proxy start', actorId)
-  const clerkToken = await getClerkSessionToken()
   const res = await fetch(BASE_URL, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(clerkToken ? { Authorization: `Bearer ${clerkToken}` } : {}),
-    },
+    headers: await authHeaders(),
     body: JSON.stringify({ operation: 'start', actorId, input }),
     signal,
   })
@@ -150,20 +160,21 @@ export async function pollRun(
   keyIndex?: number,
 ): Promise<string> {
   const deadline = Date.now() + (maxPollMs ?? MAX_POLL_MS)
-  const clerkToken = await getClerkSessionToken()
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (clerkToken) headers['Authorization'] = `Bearer ${clerkToken}`
   // Echo the starting account back so the proxy reuses it (omitted when absent → legacy path).
   const pin = keyIndex != null ? { keyIndex } : {}
 
   const abortApifyRun = () => {
-    // Fire-and-forget: abort the Apify actor run so it stops consuming credits.
-    // Use optional chaining on .catch so test mocks that return undefined don't crash.
-    (fetch(BASE_URL, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ operation: 'abort', runId, ...pin }),
-    }) as Promise<unknown> | undefined)?.catch?.(() => {})
+    // Fire-and-forget: abort the Apify actor run so it stops consuming credits. A long poll can
+    // outlive the token that started it, so fetch a FRESH token here too. Fully swallowed.
+    void (async () => {
+      try {
+        await fetch(BASE_URL, {
+          method: 'POST',
+          headers: await authHeaders(),
+          body: JSON.stringify({ operation: 'abort', runId, ...pin }),
+        })
+      } catch { /* fire-and-forget */ }
+    })()
   }
 
   // Pre-loop guard: if the signal is already aborted before we start, bail immediately
@@ -184,7 +195,7 @@ export async function pollRun(
     try {
       res = await fetch(BASE_URL, {
         method: 'POST',
-        headers,
+        headers: await authHeaders(), // FRESH token each poll — Clerk tokens expire ~60s
         body: JSON.stringify({ operation: 'poll', runId, ...pin }),
         signal,
       })
@@ -239,13 +250,9 @@ export async function fetchDataset<T>(
   signal?: AbortSignal,
   keyIndex?: number,
 ): Promise<T[]> {
-  const clerkToken = await getClerkSessionToken()
   const res = await fetch(BASE_URL, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(clerkToken ? { Authorization: `Bearer ${clerkToken}` } : {}),
-    },
+    headers: await authHeaders(),
     // Echo the run's account back so the dataset is fetched with the owning key (omit if absent).
     body: JSON.stringify({ operation: 'fetch', datasetId, ...(keyIndex != null ? { keyIndex } : {}) }),
     signal,
