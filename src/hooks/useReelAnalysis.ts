@@ -22,6 +22,13 @@ import type { DeepReelStatus } from '../store/reelAnalysisStore'
 // instance's abort couldn't cancel the other's in-flight run).
 const sharedAbortRef: { current: AbortController | null } = { current: null }
 
+// Count of currently-mounted hook instances. The shared run is aborted on unmount only
+// when the LAST instance unmounts (true navigation away from every surface that renders
+// the run) — NOT when any single instance unmounts. Without this, a transient unmount of
+// one mount point (e.g. a route transition that briefly drops the agent-loop consumer
+// while ChatPage keeps rendering) would cancel a run the other instance is still showing.
+let mountCount = 0
+
 // Deep (multimodal) fn-call concurrency. Conservative: the Vercel function uses a
 // SINGLE Gemini key (no server-side rotation), so this caps concurrent Gemini uploads.
 const deepLimiter = pLimit(3)
@@ -86,10 +93,18 @@ export function useReelAnalysis() {
 
   const { apifyKeys, geminiKeys } = useKeysStore()
 
-  // Cleanup: abort any in-flight run when the component tree unmounts (navigation away).
-  // Both mounted instances (ChatPage + useAgentConversation) register this; when both
-  // unmount simultaneously the second abort is a no-op on the already-aborted controller.
-  useEffect(() => () => { sharedAbortRef.current?.abort() }, [])
+  // Cleanup: abort the in-flight run only when the LAST mounted instance unmounts
+  // (navigation away from every surface that renders the run). If decrement leaves another
+  // instance mounted, the run keeps going — a single instance unmounting must not cancel a
+  // run the other is still showing. New-run supersede is handled in startAnalysis, which
+  // aborts the prior controller regardless of which instance triggers it.
+  useEffect(() => {
+    mountCount++
+    return () => {
+      mountCount--
+      if (mountCount <= 0) sharedAbortRef.current?.abort()
+    }
+  }, [])
 
   async function runCreatorPipeline(handle: string, signal: AbortSignal) {
     try {

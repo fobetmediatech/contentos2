@@ -10,11 +10,21 @@
  * SEMANTICS match corpus.ts so the in-memory double and this impl behave identically.
  */
 import { supabase } from './supabaseClient'
+import { getClerkUserId } from './clerkToken'
+import { devWarn } from './devLog'
 import {
   SIGHTINGS_CAP,
   type CorpusRepository, type CreatorInput, type CreatorRecord,
   type ContentRecord, type Feedback, type Sighting, type CorpusSort,
 } from './corpus'
+
+// corpus_feedback.polarity is constrained to ('save','dismiss') by the migration, but the
+// app's Feedback vocabulary is ('saved','dismissed'). Map so the append-only event log
+// satisfies its CHECK constraint regardless of whether the migration has been re-aligned.
+const FEEDBACK_POLARITY: Record<Feedback, 'save' | 'dismiss'> = {
+  saved: 'save',
+  dismissed: 'dismiss',
+}
 
 const SORT_COLUMN: Record<CorpusSort, string> = {
   lastSeenAt: 'last_seen_at',
@@ -171,6 +181,27 @@ export function createSupabaseCorpus(): CorpusRepository {
         .select()
       if (error) throw error
       if (!data || (data as unknown[]).length === 0) return undefined
+
+      // Phase 4.4 training signal: append the verdict to the append-only corpus_feedback
+      // event log (the corpus_creators.feedback column above is the legacy backwards-compat
+      // copy). Best-effort by design — a failure here (migration not yet applied, RLS, no
+      // user id) must NEVER break the user-facing feedback write. Only save/dismiss are
+      // events; clearing feedback (null) records nothing. The insert RLS requires
+      // user_id = the Clerk sub, so we set it explicitly from the session token.
+      if (feedback) {
+        try {
+          const userId = await getClerkUserId()
+          if (userId) {
+            const { error: fErr } = await supabase
+              .from('corpus_feedback')
+              .insert({ username, user_id: userId, polarity: FEEDBACK_POLARITY[feedback] })
+            if (fErr) devWarn('[corpus] feedback event log insert failed', fErr)
+          }
+        } catch (err) {
+          devWarn('[corpus] feedback event log insert threw', err)
+        }
+      }
+
       return repo.get(username)
     },
 

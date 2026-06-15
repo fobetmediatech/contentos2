@@ -19,3 +19,26 @@ export function setClerkTokenGetter(fn: () => Promise<string | null>): void {
 export async function getClerkSessionToken(): Promise<string | null> {
   return getClerkToken ? await getClerkToken() : null
 }
+
+/**
+ * Current Clerk user id — the JWT `sub` claim, decoded client-side.
+ *
+ * Some Supabase writes need the user id in the row itself (e.g. corpus_feedback.user_id,
+ * whose insert RLS requires `user_id = auth.jwt()->>'sub'`); decoding the already-attached
+ * session token avoids threading the id through every caller. Returns null when signed out,
+ * not yet wired, or the token can't be parsed — callers treat that as "skip" (never throw).
+ */
+export async function getClerkUserId(): Promise<string | null> {
+  const token = await getClerkSessionToken()
+  if (!token) return null
+  try {
+    const payload = token.split('.')[1]
+    if (!payload) return null
+    let b64 = payload.replace(/-/g, '+').replace(/_/g, '/')
+    b64 += '='.repeat((4 - (b64.length % 4)) % 4) // restore base64url padding
+    const sub = (JSON.parse(atob(b64)) as { sub?: unknown }).sub
+    return typeof sub === 'string' ? sub : null
+  } catch {
+    return null
+  }
+}
