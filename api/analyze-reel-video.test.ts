@@ -30,7 +30,7 @@ vi.mock('@clerk/backend', () => ({
   verifyToken: verifyTokenMock,
 }))
 
-import handler, { analyzeReelVideo, coerceDeepAnalysis, HandlerError } from './analyze-reel-video'
+import handler, { analyzeReelVideo, coerceDeepAnalysis, HandlerError } from './analyze-reel-video.js'
 
 const APIFY_URL = 'https://api.apify.com/v2/key-value-stores/abc/records/DX_Video.mp4'
 
@@ -53,7 +53,7 @@ const GEMINI_DATA = {
 }
 
 /** Build a fetch mock that returns a video Response (or a failure). */
-function videoFetch(opts: { ok?: boolean; contentType?: string; bytes?: Uint8Array } = {}) {
+function videoFetch(opts: { ok?: boolean; contentType?: string; bytes?: Uint8Array<ArrayBuffer> } = {}) {
   const { ok = true, contentType = 'video/mp4', bytes = new Uint8Array([1, 2, 3, 4]) } = opts
   return vi.fn(async () => new Response(ok ? bytes : null, { status: ok ? 200 : 500, headers: { 'content-type': contentType } }))
 }

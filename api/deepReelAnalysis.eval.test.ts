@@ -16,9 +16,9 @@
 
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { analyzeReelVideo } from './analyze-reel-video'
-import { scrapeReelVideos } from '../src/lib/reelVideoClient'
-import { HOOK_ARCHETYPES } from '../src/ai/prompts/reelAnalysis'
+import { analyzeReelVideo } from './analyze-reel-video.js'
+import { scrapeReelVideos } from '../src/lib/reelVideoClient.js'
+import { HOOK_ARCHETYPES } from '../src/ai/prompts/reelAnalysis.js'
 
 function loadEnvFile(): Record<string, string> {
   const env: Record<string, string> = {}

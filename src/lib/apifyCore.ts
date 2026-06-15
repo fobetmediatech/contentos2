@@ -95,7 +95,7 @@ export async function startRun(
   _apiKey: string,
   signal?: AbortSignal,
 ): Promise<{ runId: string; datasetId: string }> {
-  if (import.meta.env.DEV) console.debug('[apify] proxy start', actorId)
+  if ((import.meta as { env?: { DEV?: boolean } }).env?.DEV) console.debug('[apify] proxy start', actorId)
   const clerkToken = await getClerkSessionToken()
   const res = await fetch(BASE_URL, {
     method: 'POST',
@@ -109,7 +109,7 @@ export async function startRun(
 
   if (!res.ok) {
     const body = await res.text()
-    if (import.meta.env.DEV) console.error('[apify] startRun failed', res.status, body)
+    if ((import.meta as { env?: { DEV?: boolean } }).env?.DEV) console.error('[apify] startRun failed', res.status, body)
     if (res.status === 429) throw new ApifyError('RATE_LIMITED', 'Apify rate limited — all server keys exhausted.', res.status)
     if (res.status === 402) throw new ApifyError('QUOTA_EXCEEDED', 'Apify account out of credit', res.status)
     if (res.status === 403 && /limit|usage|feature-disabled/i.test(body)) throw new ApifyError('QUOTA_EXCEEDED', 'Apify monthly usage limit exceeded', res.status)

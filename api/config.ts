@@ -12,7 +12,7 @@ import { requireClerkUser } from './_lib/auth.js'
 
 function hasGeminiKeys(): boolean {
   const keys = [
-    process.env.GEMINI_API_KEY ?? '',
+    ...String(process.env.GEMINI_API_KEY ?? '').split(','),
     ...String(process.env.GEMINI_KEYS ?? '').split(','),
   ].filter((k) => k.trim())
   return keys.length > 0

@@ -13,8 +13,8 @@
 
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { analyzeReelVideo } from './analyze-reel-video'
-import { HOOK_ARCHETYPES } from '../src/ai/prompts/reelAnalysis'
+import { analyzeReelVideo } from './analyze-reel-video.js'
+import { HOOK_ARCHETYPES } from '../src/ai/prompts/reelAnalysis.js'
 
 function geminiKeyFromEnvFile(): string | undefined {
   try {

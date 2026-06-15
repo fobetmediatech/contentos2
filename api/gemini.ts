@@ -20,7 +20,7 @@ const ALLOWED_MODEL_RE = /^gemini-[\w.-]+$/
 
 function getGeminiKeys(): string[] {
   return [
-    process.env.GEMINI_API_KEY ?? '',
+    ...String(process.env.GEMINI_API_KEY ?? '').split(','),
     ...String(process.env.GEMINI_KEYS ?? '').split(','),
   ]
     .map((k) => k.trim())
