@@ -9,15 +9,31 @@
  */
 
 let getClerkToken: (() => Promise<string | null>) | null = null
+let inflight: Promise<string | null> | null = null
 
 /** Wire the Clerk token source. Called once from App.tsx on sign-in. */
 export function setClerkTokenGetter(fn: () => Promise<string | null>): void {
   getClerkToken = fn
 }
 
-/** Current Clerk session JWT, or null when signed out / not yet wired. */
+/**
+ * Current Clerk session JWT, or null when signed out / not yet wired.
+ *
+ * Concurrent callers are COALESCED onto a single in-flight getToken() call. The deep report
+ * fires a burst of proxy requests at once (pLimit), and concurrent Clerk getToken() calls
+ * during a token-refresh window can resolve null — which drops the Authorization header and
+ * 401s the request (sequential apify polls never collided, so only the bursty reel-analyze
+ * path failed). Sharing one fetch makes the whole burst use the same valid token.
+ */
 export async function getClerkSessionToken(): Promise<string | null> {
-  return getClerkToken ? await getClerkToken() : null
+  if (!getClerkToken) return null
+  if (inflight) return inflight
+  const fetcher = getClerkToken
+  // While a fetch is in flight, all callers share it; clear the slot once it settles so the
+  // next call mints a fresh token. No newer in-flight can exist meanwhile (callers above
+  // reuse this one), so an unconditional reset is safe.
+  inflight = fetcher().finally(() => { inflight = null })
+  return inflight
 }
 
 /**
