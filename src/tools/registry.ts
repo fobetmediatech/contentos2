@@ -15,6 +15,13 @@ import type { PipelineToolDescriptor } from './types'
 /** Steps shown in the reel/hook analysis progress (rendered inline by InlineReelResults). */
 const reelSteps: string[] = ['Scraping reels', 'Analyzing hooks', 'Synthesizing patterns']
 
+/**
+ * Phases of a single-reel case study (rendered inline by SingleReelResultMessage,
+ * which reads the store's free-form `progress` label rather than an indexed step bar).
+ * Listed here so the registry stays a complete catalog of pipelines.
+ */
+const singleReelSteps: string[] = ['Scraping reel', 'Analyzing hook & psychology']
+
 const competitorSteps: string[] = Object.values(STEP_LABELS)
 // Only steps 1-5 in the static registry — step 6 ("Expanding search") is
 // conditionally added at runtime by useActivePipeline when the quality gate fires.
@@ -39,5 +46,11 @@ export const PIPELINE_REGISTRY: Record<string, PipelineToolDescriptor> = {
     id: 'reel',
     name: 'Reel Hook Analysis',
     steps: reelSteps,
+  },
+
+  'single-reel': {
+    id: 'single-reel',
+    name: 'Single Reel Case Study',
+    steps: singleReelSteps,
   },
 }

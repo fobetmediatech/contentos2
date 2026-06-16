@@ -69,9 +69,25 @@ describe('PIPELINE_REGISTRY — reel entry', () => {
   })
 })
 
+describe('PIPELINE_REGISTRY — single-reel entry', () => {
+  const entry = PIPELINE_REGISTRY['single-reel']
+
+  it('exists in the registry', () => {
+    expect(entry).toBeDefined()
+  })
+
+  it('has id "single-reel"', () => {
+    expect(entry.id).toBe('single-reel')
+  })
+
+  it('has a non-empty steps array', () => {
+    expect(entry.steps.length).toBeGreaterThan(0)
+  })
+})
+
 describe('PIPELINE_REGISTRY — registry shape invariants', () => {
-  it('has exactly 3 entries (competitor + discovery + reel)', () => {
-    expect(Object.keys(PIPELINE_REGISTRY)).toHaveLength(3)
+  it('has exactly 4 entries (competitor + discovery + reel + single-reel)', () => {
+    expect(Object.keys(PIPELINE_REGISTRY)).toHaveLength(4)
   })
 
   it('every entry id matches its key', () => {
