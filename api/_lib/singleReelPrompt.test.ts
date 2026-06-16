@@ -38,6 +38,15 @@ describe('coerceExtraction', () => {
     expect(out.segments).toEqual([])
     expect(out.videoAnalysis).toBeTypeOf('object')
   })
+  it('preserves explicit null sentinels for unknown numeric fields', () => {
+    const out = coerceExtraction({
+      transcript: '', segments: [],
+      videoAnalysis: { duration_s: null, cuts_count: null, t0_frame: 'x', visual_beats: [{ t_start: null, t_end: null, on_screen: 'a', function: 'b' }] },
+    })
+    expect(out.videoAnalysis.duration_s).toBeNull()
+    expect(out.videoAnalysis.cuts_count).toBeNull()
+    expect(out.videoAnalysis.visual_beats[0].t_start).toBeNull()
+  })
 })
 
 describe('synthesis prompt', () => {

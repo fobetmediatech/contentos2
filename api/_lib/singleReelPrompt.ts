@@ -54,12 +54,12 @@ export const SINGLE_REEL_EXTRACTION_SCHEMA = {
     videoAnalysis: {
       type: 'object',
       properties: {
-        duration_s: { type: 'number' },
+        duration_s: { type: 'number', nullable: true },
         aspect_ratio: { type: 'string' },
         dominant_framing: { type: 'string' },
-        cuts_count: { type: 'integer' },
+        cuts_count: { type: 'integer', nullable: true },
         text_overlay_density: { type: 'string' },
-        captions_present: { type: 'boolean' },
+        captions_present: { type: 'boolean', nullable: true },
         trending_audio_hint: { type: 'string' },
         t0_frame: { type: 'string' },
         visual_beats: {
@@ -67,8 +67,8 @@ export const SINGLE_REEL_EXTRACTION_SCHEMA = {
           items: {
             type: 'object',
             properties: {
-              t_start: { type: 'number' },
-              t_end: { type: 'number' },
+              t_start: { type: 'number', nullable: true },
+              t_end: { type: 'number', nullable: true },
               on_screen: { type: 'string' },
               function: { type: 'string' },
             },
@@ -102,6 +102,7 @@ Never invent values. Use null where a number is genuinely unknown. Transcribe on
 
 // ----- Stage 2: synthesis (markdown) -----
 
+// NOTE: keep the 9 archetypes here in sync with HOOK_ARCHETYPES in api/_lib/deepReelPrompt.ts.
 const HOOK_ARCHETYPES_TEXT = `- **Curiosity gap** — Names a surprising outcome without revealing the cause. Example: "This $5 tool replaced my $2,000 one"
 - **Contrarian claim** — States a belief that contradicts audience consensus. Example: "Stop using X. Here's why."
 - **Sunk-cost / identity threat** — Attacks something the viewer has already invested in. Example: "3 years of React. All replaced by this."
@@ -227,7 +228,8 @@ Pure markdown. No preamble, no code-fence around the whole thing. Follow this st
 export function coerceExtraction(raw: unknown): ReelExtraction {
   const o = (raw ?? {}) as Record<string, unknown>
   const num = (v: unknown): number => (Number.isFinite(Number(v)) ? Number(v) : 0)
-  const numOrNull = (v: unknown): number | null => (Number.isFinite(Number(v)) ? Number(v) : null)
+  const numOrNull = (v: unknown): number | null =>
+    v === null || v === undefined ? null : Number.isFinite(Number(v)) ? Number(v) : null
   const str = (v: unknown, f = ''): string => (typeof v === 'string' ? v : f)
 
   const rawSegs = Array.isArray(o.segments) ? (o.segments as unknown[]) : []
