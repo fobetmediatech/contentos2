@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildDeepReelPrompt, buildDeepReportPrompt, DEEP_REEL_PROMPT_VERSION } from '../deepReelAnalysis'
+import { buildDeepReelPrompt, DEEP_REEL_PROMPT_VERSION } from '../deepReelAnalysis'
 
 describe('buildDeepReelPrompt (strengthened)', () => {
   const p = buildDeepReelPrompt('comment GUIDE for the free checklist')
@@ -27,7 +27,7 @@ describe('buildDeepReelPrompt (strengthened)', () => {
     expect(p).toMatch(/funnel/i)
   })
   it('still lists every required field', () => {
-    for (const f of ['spokenHookVerbatim', 'visualOpening', 'hookBreakdown', 'pacingEditing', 'audioStrategy', 'hookScore']) {
+    for (const f of ['hookArchetype', 'spokenHookVerbatim', 'visualOpening', 'hookBreakdown', 'pacingEditing', 'audioStrategy', 'retentionMechanism', 'psychologyTrigger', 'ctaType', 'ctaPlacement', 'replicationTemplate', 'whatToReplicate', 'whatToAvoid', 'hookScore']) {
       expect(p).toContain(f)
     }
   })
