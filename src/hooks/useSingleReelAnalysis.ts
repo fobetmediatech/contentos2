@@ -36,12 +36,13 @@ export function useSingleReelAnalysis() {
       // result lands in the right chat (mirrors how useReelAnalysis binds reelConversationId).
       const conversationId = useConversationsStore.getState().activeId
       const cached = await getCachedSingleReel(shortCode)
+      // Latest-wins: a steer during the (fast) IDB read must not land a stale result.
+      if (signal?.aborted) return
       if (cached) {
         store.startRun(shortCode, canonicalUrl, conversationId)
         useSingleReelStore.getState().setResult(cached)
         return
       }
-      if (signal?.aborted) return
 
       store.startRun(shortCode, canonicalUrl, conversationId)
 

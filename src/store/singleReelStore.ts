@@ -13,7 +13,7 @@ import { supabaseStorage } from './supabaseStorage'
 // Keep in sync with api/_lib/singleReelPrompt.ts
 // (app tsconfig.app.json includes only "src" — cannot import across the api/ boundary at build time)
 export interface ReelSegment {
-  start: number
+  start: number // seconds
   text: string
 }
 
