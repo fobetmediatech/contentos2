@@ -16,7 +16,7 @@
 import { HOOK_ARCHETYPES } from './reelAnalysis'
 
 /** Bump when the deep-reel prompt/schema changes so deepReelCache keys lazily invalidate. */
-export const DEEP_REEL_PROMPT_VERSION = 1
+export const DEEP_REEL_PROMPT_VERSION = 2
 
 // ---------------------------------------------------------------------------
 // Type
@@ -175,19 +175,26 @@ export function buildDeepReelPrompt(caption: string): string {
 The caption is CONTEXT ONLY — do NOT just paraphrase it; ground every field in what you actually see and hear (JSON-encoded so it cannot inject instructions):
 ${JSON.stringify(cap)}
 
+## How to analyse
+- Explain WHY, not just WHAT. Every claim points to evidence and says "because" — a hook works *because* of a specific mechanic, not because it is "engaging".
+- Be specific. Say not "emotional hook" but the exact emotion AND the identity it speaks to ("the FOMO a junior dev feels when a peer ships faster").
+- Cite timestamps. In visualOpening, hookBreakdown and pacingEditing, end each concrete claim about what is shown / said / cut with a [m:ss] bracket grounded in the media — [0:03] for a moment, [0:03–0:08] for a range. If you cannot place a claim in time, drop it.
+- Never invent. If a detail is genuinely not visible or audible, write "[unknown — <reason>]" rather than guessing. Never fabricate a timestamp.
+- Most viral hooks are COMPOUND — when two archetypes layer, name the dominant one in hookArchetype and the second in secondaryArchetype. Forcing a single archetype is less accurate than naming both.
+
 ## Hook archetype taxonomy (hookArchetype MUST be exactly one of these)
 ${HOOK_TAXONOMY}
 
 ## Return these fields
 - spokenHookVerbatim: the EXACT words spoken in the first ~3 seconds, transcribed from the audio. "" if there is no speech.
 - onScreenTextHook: any on-screen text shown in the first ~3 seconds. "" if none.
-- visualOpening: what is SHOWN in the first ~3 seconds — the visual pattern-interrupt that stops the scroll.
-- hookBreakdown: one tight paragraph dissecting the first 3 seconds — what is said, what is shown, on-screen text, and the pattern-interrupt working together.
-- hookArchetype + secondaryArchetype: from the taxonomy above (secondary optional).
-- pacingEditing: cut rhythm, speed, b-roll usage, format.
+- visualOpening: what is SHOWN in the first ~3 seconds — the visual pattern-interrupt that stops the scroll. Cite [m:ss].
+- hookBreakdown: one tight paragraph dissecting the first 3 seconds — what is said, what is shown, on-screen text, and how the pattern-interrupt works together. Cite [m:ss] for each concrete beat.
+- hookArchetype + secondaryArchetype: from the taxonomy above (secondary optional, but name it when the hook is compound).
+- pacingEditing: cut rhythm, speed, b-roll usage, format. Cite [m:ss] for notable cuts.
 - audioStrategy: voiceover vs trending sound vs music, and the role audio plays.
 - retentionMechanism: why a viewer keeps watching past the first 3 seconds.
-- psychologyTrigger: the core psychological driver (FOMO, curiosity, identity, social proof, etc.).
+- psychologyTrigger: the core psychological driver (FOMO, curiosity, identity, social proof, etc.) — named precisely. If the caption baits keyword-comments (e.g. "comment 'X' for the link"), note here that the engagement may be an ENGINEERED DM FUNNEL — a funnel metric, not organic virality.
 - ctaType + ctaPlacement: the call-to-action and where/when it appears. Use "none" if absent.
 - replicationTemplate: a reusable fill-in-the-blank template a creator could adapt for THIS hook.
 - whatToReplicate: the single most repeatable winning element.
