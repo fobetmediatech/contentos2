@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildDeepReelPrompt, DEEP_REEL_PROMPT_VERSION } from '../deepReelAnalysis'
+import { buildDeepReelPrompt, buildDeepReportPrompt, DEEP_REEL_PROMPT_VERSION } from '../deepReelAnalysis'
 
 describe('buildDeepReelPrompt (strengthened)', () => {
   const p = buildDeepReelPrompt('comment GUIDE for the free checklist')
@@ -36,5 +36,26 @@ describe('buildDeepReelPrompt (strengthened)', () => {
 describe('DEEP_REEL_PROMPT_VERSION', () => {
   it('is bumped to 2 so the deep cache lazily invalidates', () => {
     expect(DEEP_REEL_PROMPT_VERSION).toBe(2)
+  })
+})
+
+describe('buildDeepReportPrompt (strengthened)', () => {
+  const p = buildDeepReportPrompt([
+    {
+      handle: 'a', reelCount: 3,
+      archetypeDistribution: [{ archetype: 'Demo-first', count: 2 }],
+      dominantArchetype: 'Demo-first', avgHookScore: 7, medianViews: 1000,
+      consistencyScore: 0.66, signatureTemplate: 'X in Y seconds',
+      topExemplar: null,
+    },
+  ])
+  it('demands evidence-grounded, no-fabrication synthesis', () => {
+    expect(p).toMatch(/grounded/i)
+    expect(p).toMatch(/do not invent|never invent|\[unknown/i)
+  })
+  it('still returns the six report fields', () => {
+    for (const f of ['whoIsWinning', 'nicheFormula', 'gaps', 'replicate', 'avoid', 'test']) {
+      expect(p).toContain(f)
+    }
   })
 })

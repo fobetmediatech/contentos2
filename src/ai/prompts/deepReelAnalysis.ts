@@ -254,5 +254,5 @@ ${JSON.stringify(compact, null, 2)}
 - avoid: 2 things that correlate with weaker performance here.
 - test: 2-3 experiments worth running.
 
-Be specific and grounded in the data above. Return only valid JSON matching the schema.`
+Be specific and grounded strictly in the data above — every claim cites a creator's hook mix, scores or views. Do not invent creators, numbers, or trends not present in the playbooks; if the data is too thin for a field, say so plainly rather than fabricating. Return only valid JSON matching the schema.`
 }
