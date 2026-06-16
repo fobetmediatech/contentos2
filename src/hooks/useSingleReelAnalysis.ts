@@ -46,37 +46,39 @@ export function useSingleReelAnalysis() {
       store.startRun(shortCode, canonicalUrl, conversationId)
 
       try {
-        useSingleReelStore.getState().setProgress('Scraping reel…')
         const reel = await scrapeSingleReel(canonicalUrl, apifyKeys, signal)
         if (signal?.aborted) return
 
         useSingleReelStore.getState().setProgress('Transcribing & analysing…')
         // Attach the Clerk session JWT exactly as the deep reel path (analyze-reel-video) does:
         // getClerkSessionToken() → `Authorization: Bearer <token>` (coalesced across the burst).
-        const token = await getClerkSessionToken()
-        const res = await fetch('/api/analyze-single-reel', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        // A 401 can be a transient token-window miss — retry ONCE with a freshly fetched token.
+        const reqBody = JSON.stringify({
+          downloadedVideoUrl: reel.downloadedVideoUrl,
+          shortCode: reel.shortCode,
+          apify: {
+            ownerUsername: reel.ownerUsername,
+            caption: reel.caption,
+            likesCount: reel.likesCount,
+            commentsCount: reel.commentsCount,
+            videoViewCount: reel.videoViewCount,
+            videoDuration: reel.videoDuration,
+            hashtags: reel.hashtags,
+            timestamp: reel.timestamp,
+            musicInfo: reel.musicInfo,
           },
-          body: JSON.stringify({
-            downloadedVideoUrl: reel.downloadedVideoUrl,
-            shortCode: reel.shortCode,
-            apify: {
-              ownerUsername: reel.ownerUsername,
-              caption: reel.caption,
-              likesCount: reel.likesCount,
-              commentsCount: reel.commentsCount,
-              videoViewCount: reel.videoViewCount,
-              videoDuration: reel.videoDuration,
-              hashtags: reel.hashtags,
-              timestamp: reel.timestamp,
-              musicInfo: reel.musicInfo,
-            },
-          }),
-          signal,
         })
+        const post = async (): Promise<Response> => {
+          const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+          const token = await getClerkSessionToken()
+          if (token) headers['Authorization'] = `Bearer ${token}`
+          return fetch('/api/analyze-single-reel', { method: 'POST', headers, body: reqBody, signal })
+        }
+        let res = await post()
+        if (res.status === 401) {
+          if (signal?.aborted) return
+          res = await post()
+        }
         if (signal?.aborted) return
         if (!res.ok) {
           useSingleReelStore.getState().setError('Could not analyse that reel.')
