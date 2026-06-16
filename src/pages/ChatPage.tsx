@@ -26,6 +26,7 @@ import { ConversationSwitcher } from '../components/ConversationSwitcher'
 import { InlineReelResults } from '../components/InlineReelResults'
 import { ReelResultMessage } from '../components/ReelResultMessage'
 import { SingleReelResultMessage } from '../components/SingleReelResultMessage'
+import { useSingleReelStore } from '../store/singleReelStore'
 import type { NormalizedProfile } from '../lib/transformers'
 import type { ChatMessage as ChatMessageData } from '../store/analysisStore'
 import { useCorpusStore } from '../store/corpusStore'
@@ -108,6 +109,9 @@ export function ChatPage() {
   // routes its snapshot there on supersede (results-as-messages parity with competitor/discovery).
   const reelConversationId = useReelAnalysisStore((s) => s.reelConversationId)
   const setReelConversationId = useReelAnalysisStore((s) => s.setReelConversationId)
+  // Which conversation the current single-reel run belongs to — gates its live block to that
+  // chat (mirrors reelConversationId; the single-reel store calls this field `conversationId`).
+  const singleReelConversationId = useSingleReelStore((s) => s.conversationId)
 
   const [inputText, setInputText] = useState('')
   const [isNearBottom, setIsNearBottom] = useState(true)
@@ -395,6 +399,9 @@ export function ChatPage() {
   // Only the most recent reel marker renders the live block (the store holds one run); older
   // markers no-op. Empty when no reel run has started this session.
   const lastReelMarkerId = [...conversationMessages].reverse().find((m) => m.type === 'reel')?.id
+  // Same one-live-run rule for single-reel: only the latest marker in the owning conversation
+  // renders the live block — older/cross-conversation markers no-op (prevents ghost renders).
+  const lastSingleReelMarkerId = [...conversationMessages].reverse().find((m) => m.type === 'single-reel')?.id
   const isAnalysisRunning = status === 'running'
   const isAnalysisClarifying = status === 'clarifying'
   const isAnalysisDone = status === 'done'
@@ -565,10 +572,14 @@ export function ChatPage() {
                   ) : null
                 ) : message.type === 'single-reel' ? (
                   // Single-reel case study renders inline from the live single-reel store
-                  // (one active run at a time — the component reads the store directly).
-                  <div key={message.id} className="my-2">
-                    <SingleReelResultMessage />
-                  </div>
+                  // (one active run at a time — the component reads the store directly). Only the
+                  // LATEST marker in the owning conversation renders; older / cross-conversation
+                  // markers no-op (mirrors the reel branch's last-marker + same-conversation guard).
+                  message.id === lastSingleReelMarkerId && singleReelConversationId === activeConversationId ? (
+                    <div key={message.id} className="my-2">
+                      <SingleReelResultMessage />
+                    </div>
+                  ) : null
                 ) : (
                   <ChatMessage
                     key={message.id}

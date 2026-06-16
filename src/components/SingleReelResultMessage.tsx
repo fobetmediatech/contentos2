@@ -97,6 +97,7 @@ export function SingleReelResultMessage() {
             <div className="rounded-xl bg-surface border border-[rgba(245,237,214,0.08)] overflow-hidden">
               <button
                 onClick={() => setShowTranscript((v) => !v)}
+                aria-expanded={showTranscript}
                 className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-surface-raised transition-colors"
               >
                 <span className="font-mono text-[11px] uppercase tracking-wide text-muted">Transcript</span>
@@ -111,7 +112,7 @@ export function SingleReelResultMessage() {
                   {result.segments.length > 0 ? (
                     <div className="space-y-1.5">
                       {result.segments.map((seg, i) => (
-                        <p key={i} className="text-sm text-secondary leading-relaxed">
+                        <p key={`${i}-${seg.start}`} className="text-sm text-secondary leading-relaxed">
                           <span className="font-mono text-xs text-[#E07B3A] tabular-nums mr-2">
                             [{fmtTime(seg.start)}]
                           </span>

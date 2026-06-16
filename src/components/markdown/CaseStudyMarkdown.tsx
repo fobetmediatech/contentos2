@@ -53,6 +53,11 @@ export function CaseStudyMarkdown({ markdown }: { markdown: string }) {
           code: ({ children }) => (
             <code className="font-mono text-xs px-1 py-0.5 rounded-sm bg-surface-raised text-primary">{children}</code>
           ),
+          pre: ({ children }) => (
+            <pre className="my-3 overflow-x-auto rounded-lg bg-surface-raised p-3 font-mono text-xs text-primary">
+              {children}
+            </pre>
+          ),
           table: ({ children }) => (
             <div className="my-3 overflow-x-auto">
               <table className="w-full border-collapse text-left font-mono text-xs">{children}</table>
