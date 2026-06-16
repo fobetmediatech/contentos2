@@ -25,6 +25,7 @@ import { DiscoveryResultMessage } from '../components/DiscoveryResultMessage'
 import { ConversationSwitcher } from '../components/ConversationSwitcher'
 import { InlineReelResults } from '../components/InlineReelResults'
 import { ReelResultMessage } from '../components/ReelResultMessage'
+import { SingleReelResultMessage } from '../components/SingleReelResultMessage'
 import type { NormalizedProfile } from '../lib/transformers'
 import type { ChatMessage as ChatMessageData } from '../store/analysisStore'
 import { useCorpusStore } from '../store/corpusStore'
@@ -37,6 +38,7 @@ const TOOL_CHIPS: { tool: string; example: string; hint: string }[] = [
   { tool: 'Find competitors', example: 'Top fitness creators like @nike.training', hint: 'See who is winning in a niche' },
   { tool: 'Discover by city', example: 'Food bloggers in Mumbai', hint: 'Find creators based in a location' },
   { tool: 'Break down hooks', example: "Analyze @garyvee's reel hooks", hint: 'Reverse-engineer viral hook patterns' },
+  { tool: 'Analyze one reel', example: 'https://www.instagram.com/reel/...', hint: 'Paste a reel link for a full breakdown + transcript' },
 ]
 
 // Slim a profile before it's snapshotted into a persisted result message: drop the heavy
@@ -561,6 +563,12 @@ export function ChatPage() {
                       )}
                     </Fragment>
                   ) : null
+                ) : message.type === 'single-reel' ? (
+                  // Single-reel case study renders inline from the live single-reel store
+                  // (one active run at a time — the component reads the store directly).
+                  <div key={message.id} className="my-2">
+                    <SingleReelResultMessage />
+                  </div>
                 ) : (
                   <ChatMessage
                     key={message.id}
