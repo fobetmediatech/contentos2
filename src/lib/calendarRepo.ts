@@ -197,6 +197,11 @@ export async function updatePayment(id: string, patch: Partial<ClientPaymentInpu
   if (error) throw error
 }
 
+export async function deletePayment(id: string): Promise<void> {
+  const { error } = await supabase.from('client_payments').delete().eq('id', id)
+  if (error) throw error
+}
+
 // ---------- Roles ----------
 
 /**
