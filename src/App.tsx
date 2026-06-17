@@ -11,6 +11,9 @@ import { AppLayout } from './components/AppLayout'
 import { ChatPage } from './pages/ChatPage'
 import { ReportPage } from './pages/ReportPage'
 import { MemoryPage } from './pages/MemoryPage'
+import { CalendarPage } from './pages/CalendarPage'
+import { ClientsPage } from './pages/ClientsPage'
+import { PaymentsPage } from './pages/PaymentsPage'
 import { SignInPage } from './pages/SignInPage'
 
 const queryClient = new QueryClient({
@@ -100,6 +103,11 @@ export default function App() {
 
               {/* Creator/content memory — browse everything the corpus has remembered */}
               <Route path="memory" element={<MemoryPage />} />
+
+              {/* Calendar feature — content scheduling, clients, finance-gated payments */}
+              <Route path="calendar" element={<CalendarPage />} />
+              <Route path="clients" element={<ClientsPage />} />
+              <Route path="payments" element={<PaymentsPage />} />
 
               {/* Redirect all legacy / dead routes back to Chat (incl. the removed /settings —
                   keys are env-only now, configured via .env / Vercel env, no in-app entry) */}
