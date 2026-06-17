@@ -19,7 +19,15 @@
  * poll/fetch/abort so the SAME account's key is reused (a different key 403s the run).
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { setGlobalDispatcher, Agent } from 'undici'
 import { requireClerkUser } from './_lib/auth.js'
+
+// Node's default autoSelectFamily ("Happy Eyeballs") connect logic stalls ~6s reaching
+// Apify's dual-A-record AWS host from some networks, intermittently exceeding undici's
+// default 10s connect timeout (UND_ERR_CONNECT_TIMEOUT). Disabling it makes the connect
+// pick a working IP directly (~0.3-1.2s), and widening the connect timeout to 30s lets a
+// slow connect finish instead of aborting. Harmless on Vercel (fast path, Apify is IPv4-only).
+setGlobalDispatcher(new Agent({ connect: { timeout: 30_000, autoSelectFamily: false } }))
 
 const APIFY_BASE = 'https://api.apify.com/v2'
 
