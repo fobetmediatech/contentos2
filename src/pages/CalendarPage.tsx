@@ -21,13 +21,18 @@ import type { ContentType, PostStatus, ScheduledPost } from '../domain/calendar'
 const CONTENT_TYPES: ContentType[] = ['reel', 'post', 'story', 'carousel']
 const STATUSES: PostStatus[] = ['idea', 'draft', 'scheduled', 'posted', 'skipped']
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+]
 
+// Distinct hues per status so day chips are easy to tell apart: grey → yellow → orange → green → red.
 const STATUS_STYLES: Record<PostStatus, string> = {
-  idea: 'bg-surface-raised text-secondary',
-  draft: 'bg-[rgba(196,168,130,0.18)] text-secondary',
-  scheduled: 'bg-[rgba(224,123,58,0.20)] text-[#F4A97B]',
-  posted: 'bg-[rgba(76,175,125,0.18)] text-success',
-  skipped: 'bg-surface-raised text-muted line-through',
+  idea: 'bg-[rgba(122,106,84,0.22)] text-[#C4A882]',                // grey — rough idea
+  draft: 'bg-[rgba(232,197,71,0.16)] text-[#E8C547]',               // yellow — being prepared
+  scheduled: 'bg-[rgba(224,123,58,0.22)] text-[#F4A97B]',           // orange — ready to go out
+  posted: 'bg-[rgba(76,175,125,0.20)] text-[#5FBF94]',              // green — published
+  skipped: 'bg-[rgba(224,92,92,0.13)] text-[#C98A8A] line-through', // red, struck — dropped
 }
 
 const inputCls =
@@ -153,7 +158,11 @@ export function CalendarPage() {
   }
 
   const todayKey = ymd(new Date())
-  const monthLabel = month.toLocaleString(undefined, { month: 'long', year: 'numeric' })
+  const thisYear = new Date().getFullYear()
+  const displayedYear = month.getFullYear()
+  const minYear = Math.min(thisYear - 3, displayedYear)
+  const maxYear = Math.max(thisYear + 5, displayedYear)
+  const years = Array.from({ length: maxYear - minYear + 1 }, (_, i) => minYear + i)
 
   const renderModal = (d: Draft) => {
     const canSave = !!d.clientId && !Number.isNaN(d.scheduledFor)
@@ -336,7 +345,30 @@ export function CalendarPage() {
           >
             <ChevronRight size={18} />
           </button>
-          <span className="font-serif italic text-xl text-primary ml-2">{monthLabel}</span>
+          <select
+            value={month.getMonth()}
+            onChange={(e) => setMonth(new Date(month.getFullYear(), Number(e.target.value), 1))}
+            aria-label="Month"
+            className="ml-2 bg-[#3D3025] border border-[rgba(245,237,214,0.08)] rounded-md px-2 py-1 text-sm text-primary focus:outline-none focus:border-[#E07B3A]"
+          >
+            {MONTH_NAMES.map((m, i) => (
+              <option key={m} value={i}>
+                {m}
+              </option>
+            ))}
+          </select>
+          <select
+            value={month.getFullYear()}
+            onChange={(e) => setMonth(new Date(Number(e.target.value), month.getMonth(), 1))}
+            aria-label="Year"
+            className="bg-[#3D3025] border border-[rgba(245,237,214,0.08)] rounded-md px-2 py-1 text-sm text-primary focus:outline-none focus:border-[#E07B3A]"
+          >
+            {years.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
         </div>
         <button
           onClick={() => {
@@ -352,6 +384,16 @@ export function CalendarPage() {
       {clients.length === 0 && (
         <p className="text-muted text-sm mb-3">Add a client on the Clients tab first, then you can schedule posts.</p>
       )}
+
+      {/* Status legend */}
+      <div className="flex flex-wrap items-center gap-1.5 mb-3">
+        <span className="text-[11px] font-mono uppercase tracking-wide text-muted mr-1">Status</span>
+        {STATUSES.map((s) => (
+          <span key={s} className={`text-[11px] rounded px-1.5 py-0.5 ${STATUS_STYLES[s]}`}>
+            {s}
+          </span>
+        ))}
+      </div>
 
       {/* Weekday header */}
       <div className="grid grid-cols-7 gap-px mb-px">
