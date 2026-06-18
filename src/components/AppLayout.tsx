@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
-import { Brain, FileText, MessageSquare, CalendarDays, Users, Wallet } from 'lucide-react'
+import { Brain, FileText, MessageSquare, CalendarDays, Users, Wallet, BarChart2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { UserButton } from '@clerk/react'
 import { useCorpusStore } from '../store/corpusStore'
@@ -29,6 +29,7 @@ const NAV_SECTIONS: NavSection[] = [
   { path: '/payments', label: 'Payments', icon: Wallet, financeOnly: true },
   { path: '/memory', label: 'Memory', icon: Brain },
   { path: '/report', label: 'Report', icon: FileText },
+  { path: '/tracking', label: 'Dashboard', icon: BarChart2 },
 ]
 
 interface AppLayoutProps {

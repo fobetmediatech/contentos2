@@ -15,6 +15,8 @@ import { CalendarPage } from './pages/CalendarPage'
 import { ClientsPage } from './pages/ClientsPage'
 import { PaymentsPage } from './pages/PaymentsPage'
 import { SignInPage } from './pages/SignInPage'
+import { TrackingListPage } from './pages/TrackingListPage'
+import { TrackingAccountPage } from './pages/TrackingAccountPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -108,6 +110,10 @@ export default function App() {
               <Route path="calendar" element={<CalendarPage />} />
               <Route path="clients" element={<ClientsPage />} />
               <Route path="payments" element={<PaymentsPage />} />
+
+              {/* Instagram account tracking — list + per-account detail */}
+              <Route path="tracking" element={<TrackingListPage />} />
+              <Route path="tracking/:username" element={<TrackingAccountPage />} />
 
               {/* Redirect all legacy / dead routes back to Chat (incl. the removed /settings —
                   keys are env-only now, configured via .env / Vercel env, no in-app entry) */}
