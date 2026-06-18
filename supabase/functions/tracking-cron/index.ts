@@ -106,8 +106,11 @@ function normalizeReel(raw: RawReel, username: string, fetchedAt: string) {
   }
 }
 
-// deno-lint-ignore no-explicit-any
-async function fetchOneAccount(supabase: any, account: TrackedAccount, apifyToken: string) {
+async function fetchOneAccount(
+  supabase: ReturnType<typeof createClient>,
+  account: TrackedAccount,
+  apifyToken: string,
+) {
   const { username, scrape_window_days, scrape_interval_days } = account
   const fetchedAt = new Date().toISOString()
   // On both success and failure we advance next_fetch_at by the interval so a
