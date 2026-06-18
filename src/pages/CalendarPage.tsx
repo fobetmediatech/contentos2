@@ -1,16 +1,15 @@
 /**
  * CalendarPage — the content calendar (plan-only).
  *
- * A custom month grid (no calendar lib, so it themes to chai-dark and stays
- * React-19 / Vite-8 safe): pick a client (or all), click a day's + to schedule a
- * post, drag a post to another day to reschedule, and move it through
+ * Month grid: pick a tracked account (from the Dashboard) or all, click a day's + to
+ * schedule a post, drag a post to another day to reschedule, move it through
  * idea → draft → scheduled → posted (→ skipped). Never auto-publishes.
  */
 import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, Plus, X, Trash2 } from 'lucide-react'
 import {
-  listClients,
+  listAccounts,
   listScheduledPosts,
   createScheduledPost,
   updateScheduledPost,
@@ -28,11 +27,11 @@ const MONTH_NAMES = [
 
 // Distinct hues per status so day chips are easy to tell apart: grey → yellow → orange → green → red.
 const STATUS_STYLES: Record<PostStatus, string> = {
-  idea: 'bg-[rgba(122,106,84,0.22)] text-[#C4A882]',                // grey — rough idea
-  draft: 'bg-[rgba(232,197,71,0.16)] text-[#E8C547]',               // yellow — being prepared
-  scheduled: 'bg-[rgba(224,123,58,0.22)] text-[#F4A97B]',           // orange — ready to go out
-  posted: 'bg-[rgba(76,175,125,0.20)] text-[#5FBF94]',              // green — published
-  skipped: 'bg-[rgba(224,92,92,0.13)] text-[#C98A8A] line-through', // red, struck — dropped
+  idea: 'bg-[rgba(122,106,84,0.22)] text-[#C4A882]',
+  draft: 'bg-[rgba(232,197,71,0.16)] text-[#E8C547]',
+  scheduled: 'bg-[rgba(224,123,58,0.22)] text-[#F4A97B]',
+  posted: 'bg-[rgba(76,175,125,0.20)] text-[#5FBF94]',
+  skipped: 'bg-[rgba(224,92,92,0.13)] text-[#C98A8A] line-through',
 }
 
 const inputCls =
@@ -47,7 +46,7 @@ const sameMonth = (d: Date, m: Date) => d.getMonth() === m.getMonth() && d.getFu
 function buildGrid(month: Date): Date[] {
   const first = new Date(month.getFullYear(), month.getMonth(), 1)
   const start = new Date(first)
-  start.setDate(first.getDate() - first.getDay()) // back to the Sunday on/before the 1st
+  start.setDate(first.getDate() - first.getDay())
   return Array.from({ length: 42 }, (_, i) => {
     const d = new Date(start)
     d.setDate(start.getDate() + i)
@@ -56,7 +55,7 @@ function buildGrid(month: Date): Date[] {
 }
 
 interface Draft {
-  clientId: string
+  accountUsername: string
   scheduledFor: number
   contentType: ContentType
   title: string
@@ -71,20 +70,21 @@ export function CalendarPage() {
     const n = new Date()
     return new Date(n.getFullYear(), n.getMonth(), 1)
   })
-  const [clientFilter, setClientFilter] = useState<string>('all')
+  const [accountFilter, setAccountFilter] = useState<string>('all')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState<Draft | null>(null)
 
   const cells = useMemo(() => buildGrid(month), [month])
-  const from = useMemo(() => noonMs(cells[0]) - 12 * 3600_000, [cells]) // start of first cell day
-  const to = useMemo(() => noonMs(cells[41]) + 12 * 3600_000, [cells]) // end of last cell day
+  const from = useMemo(() => noonMs(cells[0]) - 12 * 3600_000, [cells])
+  const to = useMemo(() => noonMs(cells[41]) + 12 * 3600_000, [cells])
 
-  const { data: clients = [] } = useQuery({ queryKey: ['clients'], queryFn: listClients })
-  const clientName = (id: string) => clients.find((c) => c.id === id)?.name ?? 'Unknown'
+  const { data: accounts = [] } = useQuery({ queryKey: ['accounts'], queryFn: listAccounts })
+  const accountLabel = (u: string) => accounts.find((a) => a.username === u)?.fullName || u
 
   const { data: posts = [] } = useQuery({
-    queryKey: ['scheduled_posts', clientFilter, from],
-    queryFn: () => listScheduledPosts({ from, to, clientId: clientFilter === 'all' ? undefined : clientFilter }),
+    queryKey: ['scheduled_posts', accountFilter, from],
+    queryFn: () =>
+      listScheduledPosts({ from, to, accountUsername: accountFilter === 'all' ? undefined : accountFilter }),
   })
 
   const byDay = useMemo(() => {
@@ -110,7 +110,7 @@ export function CalendarPage() {
         status: d.status,
       }
       if (editingId) await updateScheduledPost(editingId, fields)
-      else await createScheduledPost({ clientId: d.clientId, ...fields })
+      else await createScheduledPost({ accountUsername: d.accountUsername, ...fields })
     },
     onSuccess: () => {
       invalidate()
@@ -134,7 +134,7 @@ export function CalendarPage() {
   const openCreate = (date: Date) => {
     setEditingId(null)
     setDraft({
-      clientId: clientFilter !== 'all' ? clientFilter : (clients[0]?.id ?? ''),
+      accountUsername: accountFilter !== 'all' ? accountFilter : (accounts[0]?.username ?? ''),
       scheduledFor: noonMs(date),
       contentType: 'reel',
       title: '',
@@ -147,7 +147,7 @@ export function CalendarPage() {
   const openEdit = (p: ScheduledPost) => {
     setEditingId(p.id)
     setDraft({
-      clientId: p.clientId,
+      accountUsername: p.accountUsername,
       scheduledFor: p.scheduledFor,
       contentType: p.contentType,
       title: p.title ?? '',
@@ -164,8 +164,11 @@ export function CalendarPage() {
   const maxYear = Math.max(thisYear + 5, displayedYear)
   const years = Array.from({ length: maxYear - minYear + 1 }, (_, i) => minYear + i)
 
+  const accountOption = (a: { username: string; fullName: string | null }) =>
+    a.fullName ? `${a.fullName} (@${a.username})` : `@${a.username}`
+
   const renderModal = (d: Draft) => {
-    const canSave = !!d.clientId && !Number.isNaN(d.scheduledFor)
+    const canSave = !!d.accountUsername && !Number.isNaN(d.scheduledFor)
     return (
       <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4" onClick={closeModal}>
         <div
@@ -181,17 +184,17 @@ export function CalendarPage() {
 
           <div className="space-y-3">
             <label className="block">
-              <span className="text-xs text-muted">Client</span>
+              <span className="text-xs text-muted">Account</span>
               <select
-                value={d.clientId}
+                value={d.accountUsername}
                 disabled={!!editingId}
-                onChange={(e) => setDraft({ ...d, clientId: e.target.value })}
+                onChange={(e) => setDraft({ ...d, accountUsername: e.target.value })}
                 className={`${inputCls} disabled:opacity-60`}
               >
-                <option value="">Select a client…</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
+                <option value="">Select an account…</option>
+                {accounts.map((a) => (
+                  <option key={a.username} value={a.username}>
+                    {accountOption(a)}
                   </option>
                 ))}
               </select>
@@ -312,17 +315,17 @@ export function CalendarPage() {
       <header className="flex flex-wrap items-center justify-between gap-3 mb-5">
         <div>
           <h1 className="font-serif italic text-3xl text-primary">Calendar</h1>
-          <p className="text-secondary text-sm mt-1">Plan which reel or post goes out — per client.</p>
+          <p className="text-secondary text-sm mt-1">Plan which reel or post goes out — per account.</p>
         </div>
         <select
-          value={clientFilter}
-          onChange={(e) => setClientFilter(e.target.value)}
+          value={accountFilter}
+          onChange={(e) => setAccountFilter(e.target.value)}
           className="bg-[#3D3025] border border-[rgba(245,237,214,0.08)] rounded-md px-3 py-2 text-sm text-primary focus:outline-none focus:border-[#E07B3A]"
         >
-          <option value="all">All clients</option>
-          {clients.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
+          <option value="all">All accounts</option>
+          {accounts.map((a) => (
+            <option key={a.username} value={a.username}>
+              {accountOption(a)}
             </option>
           ))}
         </select>
@@ -381,8 +384,8 @@ export function CalendarPage() {
         </button>
       </div>
 
-      {clients.length === 0 && (
-        <p className="text-muted text-sm mb-3">Add a client on the Clients tab first, then you can schedule posts.</p>
+      {accounts.length === 0 && (
+        <p className="text-muted text-sm mb-3">Add accounts in the Dashboard first, then you can schedule posts for them.</p>
       )}
 
       {/* Status legend */}
@@ -442,10 +445,10 @@ export function CalendarPage() {
                     e.dataTransfer.effectAllowed = 'move'
                   }}
                   onClick={() => openEdit(p)}
-                  title={`${clientName(p.clientId)} — ${p.title || p.contentType}`}
+                  title={`${accountLabel(p.accountUsername)} — ${p.title || p.contentType}`}
                   className={`text-left text-[11px] leading-tight rounded px-1.5 py-1 truncate cursor-pointer ${STATUS_STYLES[p.status]}`}
                 >
-                  {clientFilter === 'all' && <span className="opacity-70">{clientName(p.clientId)}: </span>}
+                  {accountFilter === 'all' && <span className="opacity-70">{accountLabel(p.accountUsername)}: </span>}
                   {p.title || p.contentType}
                 </button>
               ))}

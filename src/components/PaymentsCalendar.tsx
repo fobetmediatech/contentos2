@@ -2,9 +2,9 @@
  * PaymentsCalendar — a month-grid visual of payments by their date (paid_on).
  *
  * Each day shows its payments as chips colored by status (due = amber, paid = green,
- * overdue = red), so the payment schedule is readable at a glance instead of as a list.
- * Read-only overview — editing stays in the list view. Payments with no date are
- * counted below the grid.
+ * overdue = red); click a chip for full details incl. the note. Accounts are labeled
+ * via the accountLabel() lookup passed in. Read-only overview — editing stays in the
+ * list view. Payments with no date are counted below the grid.
  */
 import { useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, X } from 'lucide-react'
@@ -40,10 +40,10 @@ function buildGrid(month: Date): Date[] {
 
 interface Props {
   payments: ClientPayment[]
-  clientName: (id: string) => string
+  accountLabel: (username: string) => string
 }
 
-export function PaymentsCalendar({ payments, clientName }: Props) {
+export function PaymentsCalendar({ payments, accountLabel }: Props) {
   const [month, setMonth] = useState(() => {
     const n = new Date()
     return new Date(n.getFullYear(), n.getMonth(), 1)
@@ -165,10 +165,10 @@ export function PaymentsCalendar({ payments, clientName }: Props) {
                 <button
                   key={p.id}
                   onClick={() => setSelected(p)}
-                  title={`${clientName(p.clientId)} — ${p.currency} ${fmt(p.amount)} (${p.status})`}
+                  title={`${accountLabel(p.accountUsername)} — ${p.currency} ${fmt(p.amount)} (${p.status})`}
                   className={`text-left text-[11px] leading-tight rounded px-1.5 py-1 truncate cursor-pointer ${STATUS_CHIP[p.status]}`}
                 >
-                  {clientName(p.clientId)}: {p.currency} {fmt(p.amount)}
+                  {accountLabel(p.accountUsername)}: {p.currency} {fmt(p.amount)}
                 </button>
               ))}
             </div>
@@ -201,8 +201,8 @@ export function PaymentsCalendar({ payments, clientName }: Props) {
             </div>
             <div className="space-y-2.5 text-sm">
               <div className="flex justify-between gap-4">
-                <span className="text-muted">Client</span>
-                <span className="text-primary text-right">{clientName(selected.clientId)}</span>
+                <span className="text-muted">Account</span>
+                <span className="text-primary text-right">{accountLabel(selected.accountUsername)}</span>
               </div>
               <div className="flex justify-between gap-4">
                 <span className="text-muted">Amount</span>

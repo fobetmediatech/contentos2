@@ -12,7 +12,6 @@ import { ChatPage } from './pages/ChatPage'
 import { ReportPage } from './pages/ReportPage'
 import { MemoryPage } from './pages/MemoryPage'
 import { CalendarPage } from './pages/CalendarPage'
-import { ClientsPage } from './pages/ClientsPage'
 import { PaymentsPage } from './pages/PaymentsPage'
 import { SignInPage } from './pages/SignInPage'
 import { TrackingListPage } from './pages/TrackingListPage'
@@ -106,9 +105,9 @@ export default function App() {
               {/* Creator/content memory — browse everything the corpus has remembered */}
               <Route path="memory" element={<MemoryPage />} />
 
-              {/* Calendar feature — content scheduling, clients, finance-gated payments */}
+              {/* Calendar feature — content scheduling + finance-gated payments
+                  (accounts come from the Dashboard's tracked_accounts) */}
               <Route path="calendar" element={<CalendarPage />} />
-              <Route path="clients" element={<ClientsPage />} />
               <Route path="payments" element={<PaymentsPage />} />
 
               {/* Instagram account tracking — list + per-account detail */}

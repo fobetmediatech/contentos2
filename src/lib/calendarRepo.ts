@@ -1,72 +1,35 @@
 /**
  * Supabase data access for the Calendar + Payments feature.
  *
- * Thin CRUD over the `clients`, `scheduled_posts`, `client_payments`, and
- * `member_roles` tables (created in 20260617000000_calendar_payments.sql).
- * Maps snake_case rows ↔ camelCase domain types. RLS does the real access control:
- * clients/posts are team-shared; payments are finance-role-only.
+ * The account list comes from the Dashboard's `tracked_accounts` table (the single source
+ * of accounts/clients). Posts + payments reference an account by its `username`. Maps
+ * snake_case rows ↔ camelCase domain types. RLS does the real access control: posts are
+ * team-shared; payments are finance-role-only.
  *
- * Bookkeeping columns (created_by / entered_by) are server-defaulted from the Clerk
- * JWT (auth.jwt()->>'sub'), so the client never sends them.
+ * NOTE: this module only READS tracked_accounts (for the picker). The Dashboard owns
+ * adding/removing accounts — we never write to tracked_accounts here.
  */
 import { supabase } from './supabaseClient'
 import type {
-  Client, ClientInput, ClientStatus,
+  Account,
   ScheduledPost, ScheduledPostInput, ContentType, PostStatus,
   ClientPayment, ClientPaymentInput, PaymentStatus,
 } from '../domain/calendar'
 
 const ms = (t: string | null): number => (t ? new Date(t).getTime() : 0)
 
-// ---------- Clients ----------
+// ---------- Accounts (read-only, from the Dashboard's tracked_accounts) ----------
 
-function rowToClient(r: Record<string, unknown>): Client {
-  return {
-    id: r.id as string,
-    handle: (r.handle as string | null) ?? null,
-    name: (r.name as string) ?? '',
-    status: ((r.status as string) ?? 'active') as ClientStatus,
-    notes: (r.notes as string | null) ?? null,
-    createdAt: ms(r.created_at as string | null),
-  }
-}
-
-export async function listClients(): Promise<Client[]> {
+export async function listAccounts(): Promise<Account[]> {
   const { data, error } = await supabase
-    .from('clients')
-    .select('*')
-    .order('name', { ascending: true })
+    .from('tracked_accounts')
+    .select('username, full_name')
+    .order('username', { ascending: true })
   if (error) throw error
-  return (data ?? []).map(rowToClient)
-}
-
-export async function createClient(input: ClientInput): Promise<Client> {
-  const { data, error } = await supabase
-    .from('clients')
-    .insert({
-      name: input.name,
-      handle: input.handle ?? null,
-      status: input.status ?? 'active',
-      notes: input.notes ?? null,
-    })
-    .select()
-    .single()
-  if (error) throw error
-  return rowToClient(data as Record<string, unknown>)
-}
-
-export async function updateClient(id: string, patch: Partial<ClientInput>): Promise<void> {
-  const { error } = await supabase
-    .from('clients')
-    .update({ ...patch, updated_at: new Date().toISOString() })
-    .eq('id', id)
-  if (error) throw error
-}
-
-/** Delete a client. Cascades to its scheduled posts + payments (ON DELETE CASCADE). */
-export async function deleteClient(id: string): Promise<void> {
-  const { error } = await supabase.from('clients').delete().eq('id', id)
-  if (error) throw error
+  return (data ?? []).map((r) => ({
+    username: (r as Record<string, unknown>).username as string,
+    fullName: ((r as Record<string, unknown>).full_name as string | null) ?? null,
+  }))
 }
 
 // ---------- Scheduled posts ----------
@@ -74,7 +37,7 @@ export async function deleteClient(id: string): Promise<void> {
 function rowToPost(r: Record<string, unknown>): ScheduledPost {
   return {
     id: r.id as string,
-    clientId: r.client_id as string,
+    accountUsername: (r.account_username as string) ?? '',
     scheduledFor: ms(r.scheduled_for as string | null),
     contentType: ((r.content_type as string) ?? 'reel') as ContentType,
     title: (r.title as string | null) ?? null,
@@ -86,14 +49,14 @@ function rowToPost(r: Record<string, unknown>): ScheduledPost {
   }
 }
 
-/** List scheduled posts, optionally filtered by client and/or an [from,to) date window (epoch ms). */
+/** List scheduled posts, optionally filtered by account and/or an [from,to) date window (epoch ms). */
 export async function listScheduledPosts(opts?: {
-  clientId?: string
+  accountUsername?: string
   from?: number
   to?: number
 }): Promise<ScheduledPost[]> {
   let q = supabase.from('scheduled_posts').select('*').order('scheduled_for', { ascending: true })
-  if (opts?.clientId) q = q.eq('client_id', opts.clientId)
+  if (opts?.accountUsername) q = q.eq('account_username', opts.accountUsername)
   if (opts?.from != null) q = q.gte('scheduled_for', new Date(opts.from).toISOString())
   if (opts?.to != null) q = q.lt('scheduled_for', new Date(opts.to).toISOString())
   const { data, error } = await q
@@ -105,7 +68,7 @@ export async function createScheduledPost(input: ScheduledPostInput): Promise<Sc
   const { data, error } = await supabase
     .from('scheduled_posts')
     .insert({
-      client_id: input.clientId,
+      account_username: input.accountUsername,
       scheduled_for: new Date(input.scheduledFor).toISOString(),
       content_type: input.contentType ?? 'reel',
       title: input.title ?? null,
@@ -123,7 +86,7 @@ export async function createScheduledPost(input: ScheduledPostInput): Promise<Sc
 
 export async function updateScheduledPost(
   id: string,
-  patch: Partial<Omit<ScheduledPostInput, 'clientId'>>,
+  patch: Partial<Omit<ScheduledPostInput, 'accountUsername'>>,
 ): Promise<void> {
   const row: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (patch.scheduledFor != null) row.scheduled_for = new Date(patch.scheduledFor).toISOString()
@@ -148,7 +111,7 @@ export async function deleteScheduledPost(id: string): Promise<void> {
 function rowToPayment(r: Record<string, unknown>): ClientPayment {
   return {
     id: r.id as string,
-    clientId: r.client_id as string,
+    accountUsername: (r.account_username as string) ?? '',
     amount: Number(r.amount) || 0,
     currency: (r.currency as string) ?? 'INR',
     paidOn: (r.paid_on as string | null) ?? null,
@@ -159,9 +122,9 @@ function rowToPayment(r: Record<string, unknown>): ClientPayment {
   }
 }
 
-export async function listPayments(clientId?: string): Promise<ClientPayment[]> {
+export async function listPayments(accountUsername?: string): Promise<ClientPayment[]> {
   let q = supabase.from('client_payments').select('*').order('paid_on', { ascending: false, nullsFirst: false })
-  if (clientId) q = q.eq('client_id', clientId)
+  if (accountUsername) q = q.eq('account_username', accountUsername)
   const { data, error } = await q
   if (error) throw error
   return (data ?? []).map(rowToPayment)
@@ -171,7 +134,7 @@ export async function createPayment(input: ClientPaymentInput): Promise<ClientPa
   const { data, error } = await supabase
     .from('client_payments')
     .insert({
-      client_id: input.clientId,
+      account_username: input.accountUsername,
       amount: input.amount,
       currency: input.currency ?? 'INR',
       paid_on: input.paidOn ?? null,
@@ -206,8 +169,7 @@ export async function deletePayment(id: string): Promise<void> {
 
 /**
  * Whether the signed-in user has the finance role. Calls the Postgres is_finance()
- * helper (scoped to the caller's Clerk JWT), so the client never needs the user id.
- * Returns false on any error (fail-closed — payments stay hidden).
+ * helper (scoped to the caller's Clerk JWT). Returns false on any error (fail-closed).
  */
 export async function isFinance(): Promise<boolean> {
   const { data, error } = await supabase.rpc('is_finance')
