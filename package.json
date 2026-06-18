@@ -25,7 +25,10 @@
     "p-limit": "^6.2.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "^7.6.2",
+    "remark-gfm": "^4.0.1",
+    "undici": "5.28.4",
     "zod": "^4.4.3",
     "zustand": "^5.0.6"
   },

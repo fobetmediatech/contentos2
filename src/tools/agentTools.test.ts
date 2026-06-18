@@ -77,10 +77,11 @@ describe('buildGeminiHistory', () => {
 })
 
 describe('AGENT_TOOLS declarations', () => {
-  it('declares exactly the 5 agent tools, each with name/description/parameters', () => {
+  it('declares exactly the 6 agent tools, each with name/description/parameters', () => {
     const names = AGENT_TOOLS.map((t) => t.name).sort()
     expect(names).toEqual([
       'analyze_reels',
+      'analyze_single_reel',
       'answer_content',
       'ask_clarification',
       'discover_by_location',

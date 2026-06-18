@@ -87,3 +87,16 @@ export function buildHashtagScraperInput(
     resultsLimit,
   }
 }
+
+/**
+ * Build the input for analyzing ONE reel by direct URL (apify~instagram-reel-scraper).
+ *
+ * Same actor as buildReelVideoScraperInput but for a single permalink — returns the
+ * reel's metadata AND a stable api.apify.com downloaded-video URL (includeDownloadedVideo).
+ */
+export function buildSingleReelInput(reelUrl: string): Record<string, unknown> {
+  return {
+    username: [reelUrl],
+    includeDownloadedVideo: true,
+  }
+}

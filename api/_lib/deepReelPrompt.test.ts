@@ -23,3 +23,14 @@ describe('buildDeepReelPrompt (server copy) — caption injection safety', () =>
     expect(buildDeepReelPrompt(cap)).toContain(JSON.stringify(cap))
   })
 })
+
+describe('server buildDeepReelPrompt mirrors the client', () => {
+  const p = buildDeepReelPrompt('comment GUIDE for the checklist')
+  it('has the strengthened rules', () => {
+    expect(p).toMatch(/\[m:ss\]/)
+    expect(p).toMatch(/never fabricate a timestamp/i)
+    expect(p).toMatch(/compound/i)
+    expect(p).toMatch(/funnel/i)
+    expect(p).toMatch(/because/i)
+  })
+})

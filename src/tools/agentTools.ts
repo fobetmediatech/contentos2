@@ -19,12 +19,14 @@
 
 import { z } from 'zod'
 import type { GeminiFunctionDeclaration, GeminiToolResult, GeminiTurn } from '../ai/gemini'
+import { parseReelUrl } from '../lib/reelUrl'
 
 export type AgentToolName =
   | 'ask_clarification'
   | 'discover_competitors'
   | 'discover_by_location'
   | 'analyze_reels'
+  | 'analyze_single_reel'
   | 'answer_content'
 
 export type ToolValidation =
@@ -36,7 +38,7 @@ export type AgentAction =
   | { type: 'message'; text: string }
   | { type: 'ask'; question: string; options?: string[] }
   | { type: 'answer'; message: string }
-  | { type: 'dispatch'; name: 'discover_competitors' | 'discover_by_location' | 'analyze_reels'; args: Record<string, unknown> }
+  | { type: 'dispatch'; name: 'discover_competitors' | 'discover_by_location' | 'analyze_reels' | 'analyze_single_reel'; args: Record<string, unknown> }
   | { type: 'repair'; detail: string }
 
 /** Normalize a handle list: strip @, lowercase, trim, drop empties + over-length. */
@@ -149,6 +151,24 @@ const TOOL_REGISTRY: Record<AgentToolName, ToolRecord> = {
       })
       .refine((d) => d.handles.length > 0, { message: 'at least one @handle is required', path: ['handles'] }),
     toAction: (args) => ({ type: 'dispatch', name: 'analyze_reels', args }),
+  },
+
+  analyze_single_reel: {
+    description:
+      'Deep case-study analysis of ONE specific Instagram reel, given its URL (a /reel/, /reels/ or /p/ link). Returns the transcript plus a full hook/psychology breakdown. Use when the user pastes or names a single reel URL — NOT for analyzing a creator by @handle (use analyze_reels for that).',
+    parameters: {
+      type: 'object',
+      properties: { reelUrl: { type: 'string', description: 'The full Instagram reel URL to analyze.' } },
+      required: ['reelUrl'],
+    },
+    schema: z
+      .object({ reelUrl: z.string().min(1) })
+      .transform((d) => {
+        const parsed = parseReelUrl(d.reelUrl)
+        return parsed ? { reelUrl: parsed.canonicalUrl, shortCode: parsed.shortCode } : { reelUrl: '', shortCode: '' }
+      })
+      .refine((d) => d.shortCode.length > 0, { message: 'a valid Instagram reel URL is required', path: ['reelUrl'] }),
+    toAction: (args) => ({ type: 'dispatch', name: 'analyze_single_reel', args }),
   },
 
   answer_content: {
@@ -300,6 +320,7 @@ Routing:
 - discover_competitors: find the top accounts in a niche regardless of location, or accounts similar to named @handles. "top X in <city>" / "best X in <city>" is competitor (the city is a filter).
 - discover_by_location: ONLY when the goal is explicitly geographic ("creators based in <city>", "local <niche> in <city>").
 - analyze_reels: break down the hook patterns of specific named @handles.
+- analyze_single_reel: deep-analyze ONE specific reel when the user gives a reel URL (a link containing /reel/, /reels/ or /p/). Returns its transcript + a hook/psychology case study. Use this (not analyze_reels) whenever a single reel link is present.
 - answer_content: content/strategy/how-to questions or generating content (hooks, captions, ideas) — no scraping.
 
 Prefer acting when confident; ask only when genuinely ambiguous. When @handles are present, always resolve — never ask for a niche.`
