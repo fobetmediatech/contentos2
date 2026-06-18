@@ -10,6 +10,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Lock, Plus, Trash2 } from 'lucide-react'
 import { useIsFinance } from '../hooks/useIsFinance'
 import { listClients, listPayments, createPayment, updatePayment, deletePayment } from '../lib/calendarRepo'
+import { PaymentsCalendar } from '../components/PaymentsCalendar'
 import type { PaymentStatus } from '../domain/calendar'
 
 const STATUSES: PaymentStatus[] = ['due', 'paid', 'overdue']
@@ -31,6 +32,7 @@ export function PaymentsPage() {
   const qc = useQueryClient()
 
   const [clientFilter, setClientFilter] = useState('all')
+  const [view, setView] = useState<'list' | 'calendar'>('list')
   const [clientId, setClientId] = useState('')
   const [amount, setAmount] = useState('')
   const [currency, setCurrency] = useState('INR')
@@ -189,8 +191,25 @@ export function PaymentsPage() {
         {create.isError && <p className="text-danger text-xs mt-2">Couldn&apos;t add the payment — try again.</p>}
       </div>
 
-      {/* List */}
-      {payments.length === 0 ? (
+      {/* View toggle */}
+      <div className="flex items-center gap-1 mb-4">
+        <button
+          onClick={() => setView('list')}
+          className={`text-sm px-3 py-1.5 rounded-md transition-colors ${view === 'list' ? 'bg-surface-raised text-primary font-medium' : 'text-secondary hover:text-primary hover:bg-surface-raised'}`}
+        >
+          List
+        </button>
+        <button
+          onClick={() => setView('calendar')}
+          className={`text-sm px-3 py-1.5 rounded-md transition-colors ${view === 'calendar' ? 'bg-surface-raised text-primary font-medium' : 'text-secondary hover:text-primary hover:bg-surface-raised'}`}
+        >
+          Calendar
+        </button>
+      </div>
+
+      {view === 'calendar' ? (
+        <PaymentsCalendar payments={payments} clientName={clientName} />
+      ) : payments.length === 0 ? (
         <p className="text-muted text-sm">No payments logged yet.</p>
       ) : (
         <ul className="space-y-2">
