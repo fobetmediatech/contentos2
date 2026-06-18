@@ -3,6 +3,6 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "rewrites": [
-    { "source": "/((?!api/|@|src/|node_modules/|.*\\.).*)", "destination": "/" }
+    { "source": "/((?!api/|@|assets/|.*\\.).*)", "destination": "/index.html" }
   ]
 }

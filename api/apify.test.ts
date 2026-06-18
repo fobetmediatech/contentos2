@@ -39,15 +39,20 @@ const mockReq = (method: string, body?: unknown, headers: Record<string, string>
 const AUTHED = { authorization: 'Bearer tok_valid' }
 const START = { operation: 'start', actorId: 'apify~instagram-scraper', input: {} }
 
-/** fetch double that returns a stubbed upstream Response per call, from a status queue. */
-function fetchReturning(statuses: number[]) {
+/** fetch double that returns a stubbed upstream Response per call, from a status queue.
+ *  Each entry is either a status number, or [status, bodyText] to control the response body
+ *  (needed for 403 usage-limit detection, which inspects the body). */
+function fetchReturning(statuses: Array<number | [number, string]>) {
   let i = 0
   return vi.fn(async () => {
-    const status = statuses[i++] ?? 200
+    const entry = statuses[i++] ?? 200
+    const [status, bodyText] = Array.isArray(entry) ? entry : [entry, JSON.stringify({ status: entry })]
+    const text = async () => bodyText
     return {
       status,
       body: { cancel: vi.fn() },               // handler cancels the body before retrying
-      text: async () => JSON.stringify({ status }),
+      text,
+      clone: () => ({ text }),                 // isExhaustedKey reads a clone for 403 body checks
     } as unknown as Response
   })
 }
@@ -102,6 +107,30 @@ describe('/api/apify key failover', () => {
     await handler(mockReq('POST', START, AUTHED), res as never)
     expect(f).toHaveBeenCalledTimes(1)
     expect(res.statusCode).toBe(400)
+  })
+
+  it('rolls over on a 403 monthly-usage hard limit (free account tapped out)', async () => {
+    // Real free-account body: platform-feature-disabled — "Monthly usage hard limit exceeded".
+    const f = fetchReturning([
+      [403, JSON.stringify({ error: { type: 'platform-feature-disabled', message: 'Monthly usage hard limit exceeded' } })],
+      200,
+    ])
+    vi.stubGlobal('fetch', f)
+    const res = mockRes()
+    await handler(mockReq('POST', START, AUTHED), res as never)
+    expect(f).toHaveBeenCalledTimes(2)          // rolled past the tapped-out account
+    expect(res.statusCode).toBe(200)
+  })
+
+  it('does NOT roll over on a 403 that is NOT a usage limit (e.g. permission error)', async () => {
+    const f = fetchReturning([
+      [403, JSON.stringify({ error: { type: 'insufficient-permissions', message: 'no access to this resource' } })],
+    ])
+    vi.stubGlobal('fetch', f)
+    const res = mockRes()
+    await handler(mockReq('POST', START, AUTHED), res as never)
+    expect(f).toHaveBeenCalledTimes(1)          // genuine 403 passes straight back
+    expect(res.statusCode).toBe(403)
   })
 
   it('returns the last 429 once every key in the pool is exhausted', async () => {
