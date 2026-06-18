@@ -7,7 +7,7 @@
  * counted below the grid.
  */
 import { useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import type { ClientPayment, PaymentStatus } from '../domain/calendar'
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -48,6 +48,7 @@ export function PaymentsCalendar({ payments, clientName }: Props) {
     const n = new Date()
     return new Date(n.getFullYear(), n.getMonth(), 1)
   })
+  const [selected, setSelected] = useState<ClientPayment | null>(null)
   const cells = useMemo(() => buildGrid(month), [month])
 
   const byDay = useMemo(() => {
@@ -161,13 +162,14 @@ export function PaymentsCalendar({ payments, clientName }: Props) {
                 {d.getDate()}
               </span>
               {dayPays.map((p) => (
-                <span
+                <button
                   key={p.id}
+                  onClick={() => setSelected(p)}
                   title={`${clientName(p.clientId)} — ${p.currency} ${fmt(p.amount)} (${p.status})`}
-                  className={`text-[11px] leading-tight rounded px-1.5 py-1 truncate ${STATUS_CHIP[p.status]}`}
+                  className={`text-left text-[11px] leading-tight rounded px-1.5 py-1 truncate cursor-pointer ${STATUS_CHIP[p.status]}`}
                 >
                   {clientName(p.clientId)}: {p.currency} {fmt(p.amount)}
-                </span>
+                </button>
               ))}
             </div>
           )
@@ -179,6 +181,63 @@ export function PaymentsCalendar({ payments, clientName }: Props) {
           {undated} payment{undated !== 1 ? 's' : ''} with no date — not shown here; add a date in the list view to place
           {undated !== 1 ? ' them' : ' it'} on the calendar.
         </p>
+      )}
+
+      {/* Payment detail popup */}
+      {selected && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setSelected(null)}
+        >
+          <div
+            className="bg-surface border border-[rgba(245,237,214,0.12)] rounded-lg w-full max-w-sm p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-primary text-lg font-medium">Payment details</h2>
+              <button onClick={() => setSelected(null)} aria-label="Close" className="text-muted hover:text-primary">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="space-y-2.5 text-sm">
+              <div className="flex justify-between gap-4">
+                <span className="text-muted">Client</span>
+                <span className="text-primary text-right">{clientName(selected.clientId)}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-muted">Amount</span>
+                <span className="text-primary font-mono">
+                  {selected.currency} {fmt(selected.amount)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-muted">Status</span>
+                <span
+                  className={`text-[11px] font-mono uppercase tracking-wide rounded px-1.5 py-0.5 ${STATUS_CHIP[selected.status]}`}
+                >
+                  {selected.status}
+                </span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-muted">Date</span>
+                <span className="text-primary">{selected.paidOn ?? '—'}</span>
+              </div>
+              {selected.method && (
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted">Method</span>
+                  <span className="text-primary text-right">{selected.method}</span>
+                </div>
+              )}
+              <div className="pt-1">
+                <div className="text-muted mb-1">Note</div>
+                <div className="text-primary whitespace-pre-wrap break-words">
+                  {selected.note ? selected.note : <span className="text-muted">No note</span>}
+                </div>
+              </div>
+            </div>
+            <p className="text-muted text-xs mt-4">To edit or delete this payment, use the List view.</p>
+          </div>
+        </div>
       )}
     </div>
   )
