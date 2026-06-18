@@ -83,8 +83,8 @@ export function PaymentsPage() {
 
   const addPayment = () => {
     const amt = Number(amount)
-    if (!clientId || !Number.isFinite(amt) || amt <= 0 || create.isPending) return
-    create.mutate({ clientId, amount: amt, currency, paidOn: paidOn || null, status, note: note.trim() || null })
+    if (!clientId || !Number.isFinite(amt) || amt <= 0 || !note.trim() || create.isPending) return
+    create.mutate({ clientId, amount: amt, currency, paidOn: paidOn || null, status, note: note.trim() })
   }
 
   if (isLoading) {
@@ -176,13 +176,13 @@ export function PaymentsPage() {
           <input
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="Note (optional)"
+            placeholder="Note *"
             maxLength={200}
             className={`${inputCls} col-span-2 sm:col-span-5`}
           />
           <button
             onClick={addPayment}
-            disabled={!clientId || !amount || create.isPending}
+            disabled={!clientId || !amount || !note.trim() || create.isPending}
             className="flex items-center justify-center gap-1.5 bg-[#E07B3A] hover:bg-[#C4612A] disabled:opacity-50 text-white text-sm font-medium rounded-md px-4 py-2 transition-colors"
           >
             <Plus size={15} /> {create.isPending ? 'Adding…' : 'Add'}
