@@ -23,6 +23,7 @@ import { useKeysStore } from '../store/keysStore'
 import { useCompetitorAnalysis } from './useCompetitorAnalysis'
 import { useLocationDiscovery } from './useLocationDiscovery'
 import { useReelAnalysis } from './useReelAnalysis'
+import { useSingleReelAnalysis } from './useSingleReelAnalysis'
 import { callGeminiWithTools, callGeminiContent, GeminiError } from '../ai/gemini'
 import type { GeminiTurn } from '../ai/gemini'
 import type { ContentContext } from '../ai/prompts'
@@ -44,6 +45,7 @@ export function useAgentConversation() {
   const { analyze, answerClarification: answerAnalysisClarification } = useCompetitorAnalysis()
   const { discover } = useLocationDiscovery()
   const { startAnalysis: startReelAnalysis } = useReelAnalysis()
+  const { startSingleReel } = useSingleReelAnalysis()
 
   const [isThinking, setIsThinking] = useState(false)
   const thinkingRef = useRef(false) // ref mirror of isThinking, readable synchronously in sendMessage
@@ -254,6 +256,15 @@ export function useAgentConversation() {
         content: `Analyzing reels for ${handles.map((h: string) => `@${h}`).join(', ')}.`,
       })
       startReelAnalysis(handles, signal)
+      return
+    }
+
+    if (name === 'analyze_single_reel') {
+      const reelUrl = String(args.reelUrl ?? '')
+      // The hook (useSingleReelAnalysis) calls startRun internally (sets status + tags the
+      // conversation), so we only add the chat marker and fire it — never call startRun here.
+      addMessage({ role: 'assistant', type: 'single-reel', content: `Analyzing this reel: ${reelUrl}` })
+      startSingleReel(reelUrl, signal)
       return
     }
 

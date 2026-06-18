@@ -42,7 +42,7 @@ interface EvalCase {
   messages: HistoryMessage[]
   expect: {
     type: AgentAction['type']
-    dispatchName?: 'discover_competitors' | 'discover_by_location' | 'analyze_reels'
+    dispatchName?: 'discover_competitors' | 'discover_by_location' | 'analyze_reels' | 'analyze_single_reel'
   }
 }
 
@@ -90,6 +90,18 @@ const CASES: EvalCase[] = [
   {
     label: 'reels: hook patterns request',
     messages: [{ role: 'user', content: 'What hook patterns does @nikhilchadha use in his reels?' }],
+    expect: { type: 'dispatch', dispatchName: 'analyze_reels' },
+  },
+
+  // ── Single-reel analysis pipeline ──────────────────────────────────────────
+  {
+    label: 'single-reel: pasted reel URL routes to analyze_single_reel',
+    messages: [{ role: 'user', content: 'break down this reel https://www.instagram.com/reel/CxYz123/' }],
+    expect: { type: 'dispatch', dispatchName: 'analyze_single_reel' },
+  },
+  {
+    label: 'single-reel contrast: plain @handle reel-hook request stays analyze_reels (NOT single-reel)',
+    messages: [{ role: 'user', content: 'Analyse the reels of @garyvee' }],
     expect: { type: 'dispatch', dispatchName: 'analyze_reels' },
   },
 

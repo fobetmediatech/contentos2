@@ -19,7 +19,15 @@
  * poll/fetch/abort so the SAME account's key is reused (a different key 403s the run).
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { setGlobalDispatcher, Agent } from 'undici'
 import { requireClerkUser } from './_lib/auth.js'
+
+// Node's default autoSelectFamily ("Happy Eyeballs") connect logic stalls ~6s reaching
+// Apify's dual-A-record AWS host from some networks, intermittently exceeding undici's
+// default 10s connect timeout (UND_ERR_CONNECT_TIMEOUT). Disabling it makes the connect
+// pick a working IP directly (~0.3-1.2s), and widening the connect timeout to 30s lets a
+// slow connect finish instead of aborting. Harmless on Vercel (fast path, Apify is IPv4-only).
+setGlobalDispatcher(new Agent({ connect: { timeout: 30_000, autoSelectFamily: false } }))
 
 const APIFY_BASE = 'https://api.apify.com/v2'
 
@@ -48,6 +56,28 @@ function pickKey(keys: string[]): string {
 // problem, not the key's, so we pass them straight back.
 const RETRYABLE = new Set([429, 402])
 
+// A 403 is retryable ONLY when its body signals a per-account usage/hard-limit. The pool is
+// N separate FREE Apify accounts, and a tapped-out one returns
+// `403 platform-feature-disabled — "Monthly usage hard limit exceeded"` on START — functionally
+// identical to a 402, so the run must roll to a funded account instead of failing. A 403 WITHOUT
+// that signal (e.g. dataset `insufficient-permissions` from a mis-pinned key) is NOT key-level
+// and must pass straight back.
+const USAGE_LIMIT_RE = /usage|hard limit|feature-disabled|quota|exceeded/i
+
+/** Whether this upstream response means "this key/account is tapped out — try another." */
+async function isExhaustedKey(res: Response): Promise<boolean> {
+  if (RETRYABLE.has(res.status)) return true
+  if (res.status === 403) {
+    try {
+      // Read a CLONE so the original body stays consumable for the non-retry passthrough.
+      return USAGE_LIMIT_RE.test(await res.clone().text())
+    } catch {
+      return false
+    }
+  }
+  return false
+}
+
 /**
  * Run an upstream Apify request with key failover, used by `start` (and as a legacy
  * fallback for poll/fetch): shuffle the pool and, on a 429/402, roll to the next key
@@ -67,7 +97,7 @@ async function fetchWithFailover(
     const index = order[n]
     const { url, init } = build(keys[index])
     const res = await fetch(url, init)
-    if (RETRYABLE.has(res.status) && n < order.length - 1) {
+    if (n < order.length - 1 && (await isExhaustedKey(res))) {
       await res.body?.cancel()
       continue
     }

@@ -54,9 +54,10 @@ export interface ChatMessage {
   timestamp: number
   /**
    * Controls rendering: text = plain bubble, options = pill choices, error = red bubble,
-   * result = inline result cards, reel = position marker for the (live) reel-analysis block.
+   * result = inline result cards, reel = position marker for the (live) reel-analysis block,
+   * single-reel = position marker for the (live) single-reel case-study block.
    */
-  type?: 'text' | 'options' | 'error' | 'result' | 'reel'
+  type?: 'text' | 'options' | 'error' | 'result' | 'reel' | 'single-reel'
   /** Present when type === 'options' */
   options?: string[]
   /** Present when type === 'result' — the snapshotted pipeline result rendered inline. */
