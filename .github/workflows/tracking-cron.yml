@@ -1,0 +1,19 @@
+name: Tracking Cron
+
+on:
+  schedule:
+    # Runs every 6 hours — accounts are only fetched if next_fetch_at <= now()
+    - cron: '0 */6 * * *'
+  workflow_dispatch: # Manual trigger for testing
+
+jobs:
+  check-and-fetch:
+    name: Trigger due account fetches
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call tracking cron endpoint
+        run: |
+          curl -fsSL \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.TRACKING_CRON_SECRET }}" \
+            "${{ secrets.VITE_SUPABASE_URL }}/functions/v1/tracking-cron"

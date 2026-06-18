@@ -12,6 +12,8 @@ import { ChatPage } from './pages/ChatPage'
 import { ReportPage } from './pages/ReportPage'
 import { MemoryPage } from './pages/MemoryPage'
 import { SignInPage } from './pages/SignInPage'
+import { TrackingListPage } from './pages/TrackingListPage'
+import { TrackingAccountPage } from './pages/TrackingAccountPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -100,6 +102,10 @@ export default function App() {
 
               {/* Creator/content memory — browse everything the corpus has remembered */}
               <Route path="memory" element={<MemoryPage />} />
+
+              {/* Instagram account tracking — list + per-account detail */}
+              <Route path="tracking" element={<TrackingListPage />} />
+              <Route path="tracking/:username" element={<TrackingAccountPage />} />
 
               {/* Redirect all legacy / dead routes back to Chat (incl. the removed /settings —
                   keys are env-only now, configured via .env / Vercel env, no in-app entry) */}
