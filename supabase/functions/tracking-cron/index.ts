@@ -8,12 +8,14 @@
  * This is the SERVER-SIDE scrape path. It is deliberately separate from the
  * browser path in src/lib/trackingClient.ts (which runs on "Add" / "Fetch now"
  * through the Clerk-gated /api/apify proxy + browser keyRotator). The browser
- * keyRotator must NOT be ported here — this path uses its own APIFY_TOKEN.
+ * keyRotator (which reads browser/Zustand state) must NOT be ported here — this
+ * file implements its own self-contained round-robin + failover over APIFY_KEYS.
  *
  * Auth:   Authorization: Bearer <TRACKING_CRON_SECRET>
  * Secrets (set via `supabase secrets set`):
  *   - TRACKING_CRON_SECRET   shared secret matching the GitHub Action
- *   - APIFY_TOKEN            Apify API token (server-side only)
+ *   - APIFY_KEYS             comma-separated Apify API tokens (rotated + failed
+ *                            over). APIFY_TOKEN (single) is accepted as a fallback.
  * Auto-injected by Supabase: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
  *   (service role bypasses RLS — the cron has no Clerk JWT).
  */
@@ -24,6 +26,15 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const MAX_ACCOUNTS_PER_RUN = 10
 // Per-actor synchronous-run timeout (ms). Apify allows up to 300s; we stay well under.
 const ACTOR_TIMEOUT_MS = 90_000
+// HTTP statuses worth failing over to the next key (auth / quota / transient).
+// 4xx like 400/404 are NOT here — they won't change across keys, so we surface them.
+const ROTATE_STATUSES = new Set([401, 402, 403, 408, 429, 500, 502, 503, 504])
+
+/** Round-robin cursor over a pool of Apify tokens, shared across one invocation. */
+interface KeyRing {
+  keys: string[]
+  i: number
+}
 
 interface RawProfile {
   fullName?: string
@@ -63,31 +74,61 @@ interface TrackedAccount {
   scrape_interval_days: number
 }
 
-/** Run an Apify actor synchronously and return its dataset items. */
+/**
+ * Run an Apify actor synchronously, rotating through the key ring with failover.
+ * Each call advances the shared cursor (so load spreads across accounts/actors),
+ * and on a quota/auth/transient failure it retries with the next key. A response
+ * that is a JSON error object (e.g. "Monthly usage hard limit exceeded" returned
+ * with a 200) also triggers failover. Permanent client errors (400/404) surface
+ * immediately — trying other keys would just waste them.
+ */
 async function apifyRunSync<T>(
   actorId: string,
   input: Record<string, unknown>,
-  token: string,
+  ring: KeyRing,
 ): Promise<T[]> {
-  const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), ACTOR_TIMEOUT_MS)
-  try {
-    const res = await fetch(
-      `https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?token=${token}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(input),
-        signal: ctrl.signal,
-      },
-    )
-    if (!res.ok) {
-      throw new Error(`Apify ${actorId} failed: ${res.status} ${res.statusText}`)
+  let lastErr = 'no keys configured'
+  for (let attempt = 0; attempt < ring.keys.length; attempt++) {
+    const token = ring.keys[ring.i % ring.keys.length]
+    ring.i++ // advance round-robin for the next call/attempt
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), ACTOR_TIMEOUT_MS)
+    let permanent: string | null = null
+    try {
+      const res = await fetch(
+        `https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?token=${token}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(input),
+          signal: ctrl.signal,
+        },
+      )
+      if (res.ok) {
+        const data = await res.json()
+        if (Array.isArray(data)) return data as T[]
+        // e.g. { error: { type: "platform-feature-disabled", message: "Monthly usage hard limit exceeded" } }
+        lastErr =
+          (data && typeof data === 'object' && (data.error?.message as string)) ||
+          'non-array response'
+      } else if (ROTATE_STATUSES.has(res.status)) {
+        lastErr = `HTTP ${res.status}`
+      } else {
+        permanent = `HTTP ${res.status} ${res.statusText}`
+      }
+    } catch (e) {
+      lastErr =
+        e instanceof Error
+          ? e.name === 'AbortError'
+            ? `timeout after ${ACTOR_TIMEOUT_MS}ms`
+            : e.message
+          : String(e)
+    } finally {
+      clearTimeout(timer)
     }
-    return (await res.json()) as T[]
-  } finally {
-    clearTimeout(timer)
+    if (permanent) throw new Error(`Apify ${actorId} failed: ${permanent}`)
   }
+  throw new Error(`Apify ${actorId}: all ${ring.keys.length} key(s) failed (${lastErr})`)
 }
 
 function normalizeReel(raw: RawReel, username: string, fetchedAt: string) {
@@ -109,7 +150,7 @@ function normalizeReel(raw: RawReel, username: string, fetchedAt: string) {
 async function fetchOneAccount(
   supabase: ReturnType<typeof createClient>,
   account: TrackedAccount,
-  apifyToken: string,
+  ring: KeyRing,
 ) {
   const { username, scrape_window_days, scrape_interval_days } = account
   const fetchedAt = new Date().toISOString()
@@ -124,7 +165,7 @@ async function fetchOneAccount(
     const profileItems = await apifyRunSync<RawProfile>(
       'apify~instagram-profile-scraper',
       { usernames: [username], resultsType: 'details' },
-      apifyToken,
+      ring,
     )
     if (!profileItems.length) {
       throw new Error('Account not found, private, or returned no data')
@@ -141,7 +182,7 @@ async function fetchOneAccount(
         'apify~instagram-reel-scraper',
         // username must be a string ARRAY; date filter is `onlyPostsNewerThan`.
         { username: [username], resultsLimit: 50, onlyPostsNewerThan: fromDate },
-        apifyToken,
+        ring,
       )
       reelRows = reelItems
         .filter((r) => r.url ?? r.shortCode)
@@ -204,11 +245,15 @@ Deno.serve(async (req: Request) => {
     return new Response('Unauthorized', { status: 401 })
   }
 
-  const apifyToken = Deno.env.get('APIFY_TOKEN')
+  // Prefer the rotated pool (APIFY_KEYS); fall back to a single APIFY_TOKEN.
+  const apifyKeys = (Deno.env.get('APIFY_KEYS') ?? Deno.env.get('APIFY_TOKEN') ?? '')
+    .split(',')
+    .map((k) => k.trim())
+    .filter(Boolean)
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-  if (!apifyToken || !supabaseUrl || !serviceKey) {
-    return new Response('Server misconfigured: missing APIFY_TOKEN / Supabase env', {
+  if (!apifyKeys.length || !supabaseUrl || !serviceKey) {
+    return new Response('Server misconfigured: missing APIFY_KEYS / Supabase env', {
       status: 500,
     })
   }
@@ -232,11 +277,14 @@ Deno.serve(async (req: Request) => {
   }
 
   const accounts = (due ?? []) as TrackedAccount[]
+  // One shared ring across the whole invocation so rotation continues account to
+  // account (not just within a single account's two scrapes).
+  const ring: KeyRing = { keys: apifyKeys, i: 0 }
   // Sequential: two synchronous scrapes per account would otherwise contend for
   // both the Apify rate limit and the Edge wall-clock budget.
   const results = []
   for (const account of accounts) {
-    results.push(await fetchOneAccount(supabase, account, apifyToken))
+    results.push(await fetchOneAccount(supabase, account, ring))
   }
 
   return new Response(
