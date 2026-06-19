@@ -15,6 +15,7 @@ import {
   updateScheduledPost,
   deleteScheduledPost,
 } from '../lib/calendarRepo'
+import { AccountPicker } from '../components/AccountPicker'
 import type { ContentType, PostStatus, ScheduledPost } from '../domain/calendar'
 
 const CONTENT_TYPES: ContentType[] = ['reel', 'post', 'story', 'carousel']
@@ -164,9 +165,6 @@ export function CalendarPage() {
   const maxYear = Math.max(thisYear + 5, displayedYear)
   const years = Array.from({ length: maxYear - minYear + 1 }, (_, i) => minYear + i)
 
-  const accountOption = (a: { username: string; fullName: string | null }) =>
-    a.fullName ? `${a.fullName} (@${a.username})` : `@${a.username}`
-
   const renderModal = (d: Draft) => {
     const canSave = !!d.accountUsername && !Number.isNaN(d.scheduledFor)
     return (
@@ -185,19 +183,13 @@ export function CalendarPage() {
           <div className="space-y-3">
             <label className="block">
               <span className="text-xs text-muted">Account</span>
-              <select
+              <AccountPicker
+                accounts={accounts}
                 value={d.accountUsername}
+                onChange={(v) => setDraft({ ...d, accountUsername: v })}
                 disabled={!!editingId}
-                onChange={(e) => setDraft({ ...d, accountUsername: e.target.value })}
-                className={`${inputCls} disabled:opacity-60`}
-              >
-                <option value="">Select an account…</option>
-                {accounts.map((a) => (
-                  <option key={a.username} value={a.username}>
-                    {accountOption(a)}
-                  </option>
-                ))}
-              </select>
+                className="mt-1"
+              />
             </label>
 
             <div className="flex gap-3">
@@ -317,18 +309,13 @@ export function CalendarPage() {
           <h1 className="font-serif italic text-3xl text-primary">Calendar</h1>
           <p className="text-secondary text-sm mt-1">Plan which reel or post goes out — per account.</p>
         </div>
-        <select
+        <AccountPicker
+          accounts={accounts}
           value={accountFilter}
-          onChange={(e) => setAccountFilter(e.target.value)}
-          className="bg-[#3D3025] border border-[rgba(245,237,214,0.08)] rounded-md px-3 py-2 text-sm text-primary focus:outline-none focus:border-[#E07B3A]"
-        >
-          <option value="all">All accounts</option>
-          {accounts.map((a) => (
-            <option key={a.username} value={a.username}>
-              {accountOption(a)}
-            </option>
-          ))}
-        </select>
+          onChange={setAccountFilter}
+          includeAll
+          className="w-64"
+        />
       </header>
 
       {/* Month nav */}
