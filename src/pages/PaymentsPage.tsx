@@ -11,6 +11,7 @@ import { Lock, Plus, Trash2 } from 'lucide-react'
 import { useIsFinance } from '../hooks/useIsFinance'
 import { listAccounts, listPayments, createPayment, updatePayment, deletePayment } from '../lib/calendarRepo'
 import { PaymentsCalendar } from '../components/PaymentsCalendar'
+import { AccountPicker } from '../components/AccountPicker'
 import type { PaymentStatus } from '../domain/calendar'
 
 const STATUSES: PaymentStatus[] = ['due', 'paid', 'overdue']
@@ -42,8 +43,6 @@ export function PaymentsPage() {
 
   const { data: accounts = [] } = useQuery({ queryKey: ['accounts'], queryFn: listAccounts, enabled: isFinance })
   const accountLabel = (u: string) => accounts.find((a) => a.username === u)?.fullName || u
-  const accountOption = (a: { username: string; fullName: string | null }) =>
-    a.fullName ? `${a.fullName} (@${a.username})` : `@${a.username}`
 
   const { data: payments = [] } = useQuery({
     queryKey: ['client_payments', accountFilter],
@@ -116,14 +115,13 @@ export function PaymentsPage() {
           <h1 className="font-serif italic text-3xl text-primary">Payments</h1>
           <p className="text-secondary text-sm mt-1">Track what each account has paid. Finance only.</p>
         </div>
-        <select value={accountFilter} onChange={(e) => setAccountFilter(e.target.value)} className={inputCls}>
-          <option value="all">All accounts</option>
-          {accounts.map((a) => (
-            <option key={a.username} value={a.username}>
-              {accountOption(a)}
-            </option>
-          ))}
-        </select>
+        <AccountPicker
+          accounts={accounts}
+          value={accountFilter}
+          onChange={setAccountFilter}
+          includeAll
+          className="w-64"
+        />
       </header>
 
       {/* Totals */}
@@ -144,14 +142,13 @@ export function PaymentsPage() {
       {/* Add payment */}
       <div className="bg-surface border border-[rgba(245,237,214,0.08)] rounded-lg p-4 mb-6">
         <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
-          <select value={accountUsername} onChange={(e) => setAccountUsername(e.target.value)} className={`${inputCls} col-span-2`}>
-            <option value="">Account…</option>
-            {accounts.map((a) => (
-              <option key={a.username} value={a.username}>
-                {accountOption(a)}
-              </option>
-            ))}
-          </select>
+          <AccountPicker
+            accounts={accounts}
+            value={accountUsername}
+            onChange={setAccountUsername}
+            placeholder="Account…"
+            className="col-span-2"
+          />
           <input
             type="number"
             value={amount}
