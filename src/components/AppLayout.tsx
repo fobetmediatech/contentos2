@@ -1,9 +1,10 @@
 import { useEffect } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
-import { Brain, FileText, MessageSquare, BarChart2 } from 'lucide-react'
+import { Brain, FileText, MessageSquare, CalendarDays, Wallet, BarChart2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { UserButton } from '@clerk/react'
 import { useCorpusStore } from '../store/corpusStore'
+import { useIsFinance } from '../hooks/useIsFinance'
 
 /**
  * NAV_SECTIONS — single source of truth for app navigation (Phase 7 item 7.2).
@@ -17,10 +18,14 @@ interface NavSection {
   label: string
   icon: LucideIcon
   fullBleed?: boolean
+  /** Only shown to members with the finance role (Payments). */
+  financeOnly?: boolean
 }
 
 const NAV_SECTIONS: NavSection[] = [
   { path: '/', label: 'Chat', icon: MessageSquare, fullBleed: true },
+  { path: '/calendar', label: 'Calendar', icon: CalendarDays },
+  { path: '/payments', label: 'Payments', icon: Wallet, financeOnly: true },
   { path: '/memory', label: 'Memory', icon: Brain },
   { path: '/report', label: 'Report', icon: FileText },
   { path: '/tracking', label: 'Dashboard', icon: BarChart2 },
@@ -33,6 +38,9 @@ interface AppLayoutProps {
 export function AppLayout({ noPadding = false }: AppLayoutProps) {
   const location = useLocation()
   const corpusCount = useCorpusStore((s) => s.count)
+  const { isFinance } = useIsFinance()
+  // Payments (financeOnly) is hidden in the nav unless the user has the finance role.
+  const sections = NAV_SECTIONS.filter((s) => !s.financeOnly || isFinance)
 
   const navClass = (active: boolean) =>
     `flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md transition-colors ${
@@ -61,7 +69,7 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
 
           {/* Nav links — derived from NAV_SECTIONS */}
           <nav className="flex items-center gap-1">
-            {NAV_SECTIONS.map((s) => {
+            {sections.map((s) => {
               const Icon = s.icon
               const active = isActive(s)
               return (
