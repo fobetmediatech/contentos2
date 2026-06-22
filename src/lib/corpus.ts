@@ -83,6 +83,11 @@ export interface ContentRecord {
   kind: 'reel'
   url: string
   caption?: string
+  /** Reel thumbnail (Apify `displayUrl`). Instagram CDN URL — may expire; the gallery
+   *  degrades to a placeholder when it fails to load. Absent when the scrape had none. */
+  thumbnailUrl?: string
+  /** Full spoken transcript from the single-reel analyzer. Absent when not transcribed. */
+  transcript?: string
   videoViewCount: number
   likesCount: number
   commentsCount: number
@@ -115,6 +120,8 @@ export interface CorpusRepository {
   rememberContent(records: ContentRecord[]): Promise<void>
   /** A creator's analyzed content, most-recent first. */
   listContentFor(creatorUsername: string): Promise<ContentRecord[]>
+  /** All analyzed content across every creator, most-recent first (the reel gallery feed). */
+  listAllContent(opts?: { limit?: number }): Promise<ContentRecord[]>
   clear(): Promise<void>
 }
 
@@ -362,6 +369,10 @@ export function createMemoryCorpus(): CorpusRepository {
       return [...content.values()]
         .filter((r) => r.creatorUsername === creatorUsername)
         .sort((a, b) => b.analyzedAt - a.analyzedAt)
+    },
+    async listAllContent(opts) {
+      const all = [...content.values()].sort((a, b) => b.analyzedAt - a.analyzedAt)
+      return opts?.limit != null ? all.slice(0, opts.limit) : all
     },
     async clear() {
       store.clear()

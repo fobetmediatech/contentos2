@@ -56,6 +56,41 @@ describe('setFeedback', () => {
   })
 })
 
+describe('rememberContent', () => {
+  it('ensures each referenced creator exists (FK) before upserting content', async () => {
+    const corpus = createSupabaseCorpus()
+    await corpus.rememberContent([
+      { id: 'r1', creatorUsername: 'foodie', kind: 'reel', url: 'u1', videoViewCount: 1, likesCount: 1, commentsCount: 1, analyzedAt: 1 },
+      { id: 'r2', creatorUsername: 'foodie', kind: 'reel', url: 'u2', videoViewCount: 2, likesCount: 2, commentsCount: 2, analyzedAt: 2 },
+    ])
+    // corpus_content → corpus_creators FK: a stub creator upsert must precede the content upsert.
+    expect(mock.calls.from).toEqual(['corpus_creators', 'corpus_content'])
+    expect(mock.calls.upsert[0]).toEqual([{ username: 'foodie' }]) // distinct creators
+    expect((mock.calls.upsert[1] as Array<Record<string, unknown>>)[0]).toMatchObject({
+      id: 'r1',
+      creator_username: 'foodie',
+    })
+  })
+
+  it('is a no-op with no records', async () => {
+    const corpus = createSupabaseCorpus()
+    await corpus.rememberContent([])
+    expect(mock.calls.from).toHaveLength(0)
+  })
+})
+
+describe('listAllContent', () => {
+  it('selects payloads from corpus_content, newest first, honoring the limit', async () => {
+    mock = makeSupabaseMock({ select: [[{ payload: { id: 'r2', analyzedAt: 30 } }, { payload: { id: 'r1', analyzedAt: 10 } }]] })
+    const corpus = createSupabaseCorpus()
+    const all = await corpus.listAllContent({ limit: 50 })
+    expect(mock.calls.from).toContain('corpus_content')
+    expect(mock.calls.order[0]).toEqual(['analyzed_at', { ascending: false }])
+    expect(mock.calls.limit).toContain(50)
+    expect(all.map((r) => r.id)).toEqual(['r2', 'r1'])
+  })
+})
+
 describe('clear', () => {
   it('throws (destructive on shared data)', async () => {
     const corpus = createSupabaseCorpus()
