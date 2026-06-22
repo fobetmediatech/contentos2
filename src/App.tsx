@@ -11,6 +11,7 @@ import { AppLayout } from './components/AppLayout'
 import { ChatPage } from './pages/ChatPage'
 import { ReportPage } from './pages/ReportPage'
 import { MemoryPage } from './pages/MemoryPage'
+import { GalleryPage } from './pages/GalleryPage'
 import { CalendarPage } from './pages/CalendarPage'
 import { PaymentsPage } from './pages/PaymentsPage'
 import { SignInPage } from './pages/SignInPage'
@@ -104,6 +105,9 @@ export default function App() {
 
               {/* Creator/content memory — browse everything the corpus has remembered */}
               <Route path="memory" element={<MemoryPage />} />
+
+              {/* Reel gallery — every scraped reel with its thumbnail, metrics, caption, transcript */}
+              <Route path="gallery" element={<GalleryPage />} />
 
               {/* Calendar feature — content scheduling + finance-gated payments
                   (accounts come from the Dashboard's tracked_accounts) */}

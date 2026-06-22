@@ -200,6 +200,18 @@ describe('createMemoryCorpus — content', () => {
     expect(await c.listContentFor('nobody')).toEqual([])
   })
 
+  it('lists ALL content across creators, newest first, respecting limit', async () => {
+    const c = createMemoryCorpus()
+    await c.rememberContent([
+      content('r1', 'alice', { analyzedAt: 10 }),
+      content('r2', 'bob', { analyzedAt: 30 }),
+      content('r3', 'alice', { analyzedAt: 20 }),
+    ])
+    const all = await c.listAllContent()
+    expect(all.map((r) => r.id)).toEqual(['r2', 'r3', 'r1']) // analyzedAt desc, across creators
+    expect((await c.listAllContent({ limit: 2 })).map((r) => r.id)).toEqual(['r2', 'r3'])
+  })
+
   it('upserts content by id — re-analyzing the same reel overwrites', async () => {
     const c = createMemoryCorpus()
     await c.rememberContent([content('r1', 'alice', { hookArchetype: 'old' })])

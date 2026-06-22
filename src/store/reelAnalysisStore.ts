@@ -57,6 +57,9 @@ export interface CreatorAnalysisState {
   status: CreatorStatus
   reels: ReelData[]
   analyses: Record<string, ReelAnalysis>  // keyed by shortCode (quick caption-only path)
+  /** Full spoken transcripts per reel (keyed by shortCode), produced by the single-reel
+   *  analyzer enrichment pass. Optional — only populated once transcription completes. */
+  transcripts?: Record<string, string>
   error?: string
   // ----- Deep (multimodal) enrichment — Phase-1 reel intelligence -----
   // Optional: only the deep-report run populates these; the quick path leaves
@@ -200,7 +203,9 @@ export const useReelAnalysisStore = create<ReelAnalysisState>()(persist((set) =>
     deepReport: s.deepReport,
     deepReportStatus: s.deepReportStatus,
   }),
-  version: 1,
+  // v2: added optional CreatorAnalysisState.transcripts (single-reel-analyzer enrichment).
+  // Purely additive — old persisted runs deserialize cleanly with transcripts undefined.
+  version: 2,
   migrate: (state) => state,
   merge: (persisted, current) => {
     const p = (persisted ?? {}) as Partial<ReelAnalysisState>

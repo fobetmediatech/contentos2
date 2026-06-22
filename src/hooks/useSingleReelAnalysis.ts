@@ -14,10 +14,12 @@ import { useCallback } from 'react'
 import { useKeysStore } from '../store/keysStore'
 import { useSingleReelStore, type SingleReelResult } from '../store/singleReelStore'
 import { useConversationsStore } from '../store/conversationsStore'
+import { useCorpusStore } from '../store/corpusStore'
 import { scrapeSingleReel } from '../lib/singleReelClient'
 import { getCachedSingleReel, setCachedSingleReel } from '../lib/singleReelCache'
 import { parseReelUrl } from '../lib/reelUrl'
 import { getClerkSessionToken } from '../lib/clerkToken'
+import { devWarn } from '../lib/devLog'
 
 export function useSingleReelAnalysis() {
   const { apifyKeys } = useKeysStore()
@@ -82,14 +84,48 @@ export function useSingleReelAnalysis() {
         }
         if (signal?.aborted) return
         if (!res.ok) {
+          // DEV diagnostic: the user-facing string is intentionally generic, so surface the real
+          // server error ({ error: "Server not configured" | "Video fetch failed (...)" | ... }).
+          let detail = ''
+          try {
+            detail = await res.clone().text()
+          } catch {
+            /* ignore body read failure */
+          }
+          devWarn('[single-reel] /api/analyze-single-reel failed', res.status, detail)
           useSingleReelStore.getState().setError('Could not analyse that reel.')
           return
         }
         const json = (await res.json()) as { result: SingleReelResult }
         useSingleReelStore.getState().setResult(json.result)
         void setCachedSingleReel(shortCode, json.result)
+
+        // Persist into the shared corpus so this reel shows up in the gallery (transcript +
+        // caption + metrics + thumbnail, URL only). Best-effort — never blocks the result.
+        void useCorpusStore
+          .getState()
+          .rememberContent([
+            {
+              id: reel.shortCode,
+              creatorUsername: reel.ownerUsername,
+              kind: 'reel',
+              url: reel.url,
+              caption: reel.caption || undefined,
+              thumbnailUrl: reel.displayUrl || undefined,
+              transcript: json.result.transcript || undefined,
+              videoViewCount: reel.videoViewCount,
+              likesCount: reel.likesCount,
+              commentsCount: reel.commentsCount,
+              analyzedAt: Date.now(),
+            },
+          ])
+          .catch(() => {})
       } catch (err) {
         if (signal?.aborted || (err as Error)?.name === 'AbortError') return
+        // DEV diagnostic: this catches a scrape failure (ApifyError) or a network error BEFORE the
+        // analyzer responds — the most common cause when the @handle/competitor paths work but this
+        // one doesn't. The error carries the real reason (e.g. no downloadable video, 402 quota).
+        devWarn('[single-reel] scrape/network threw before analysis', err)
         useSingleReelStore.getState().setError('Could not analyse that reel.')
       }
     },

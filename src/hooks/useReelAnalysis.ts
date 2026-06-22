@@ -5,6 +5,9 @@ import { useConversationsStore } from '../store/conversationsStore'
 import { useKeysStore } from '../store/keysStore'
 import { scrapeTopReels, NoReelsError } from '../lib/reelScraper'
 import { scrapeReelVideos } from '../lib/reelVideoClient'
+import { transcribeReels, singleReelFnAvailable } from '../lib/reelTranscriber'
+import { harvestReelContent } from '../lib/corpusHarvest'
+import { useCorpusStore } from '../store/corpusStore'
 import { getCachedDeep, setCachedDeep } from '../lib/deepReelCache'
 import {
   analyzeReelsBatch,
@@ -54,6 +57,37 @@ async function deepFnAvailable(signal?: AbortSignal): Promise<boolean> {
   } catch {
     return true
   }
+}
+
+/**
+ * Background pass (module-scope so it never closes over hook state): transcribe every
+ * done-creator's reels via the single-reel analyzer, write the transcripts into the store,
+ * then re-harvest the corpus content so the gallery copy carries transcripts (upsert by reel
+ * id is idempotent — the ChatPage synthesis-done harvest already saved the reels + thumbnails;
+ * this adds the transcripts once they exist). Skipped silently when the analyzer isn't deployed
+ * (plain `vite dev`) and aborts cleanly when the run is superseded.
+ */
+async function enrichTranscripts(apifyKeys: string[], signal: AbortSignal) {
+  if (!(await singleReelFnAvailable(signal))) return
+  if (signal.aborted) return
+
+  const states = useReelAnalysisStore.getState().creatorStates
+  const done = Object.values(states).filter((s) => s.status === 'done' && s.reels.length > 0)
+  let any = false
+  for (const s of done) {
+    if (signal.aborted) return
+    const transcripts = await transcribeReels(s.handle, s.reels, apifyKeys, signal)
+    if (signal.aborted) return
+    if (Object.keys(transcripts).length > 0) {
+      useReelAnalysisStore.getState().setCreatorState(s.handle, { transcripts })
+      any = true
+    }
+  }
+  if (signal.aborted || !any) return
+
+  // Re-harvest with transcripts now attached (idempotent upsert by reel id).
+  const fresh = useReelAnalysisStore.getState().creatorStates
+  void useCorpusStore.getState().rememberContent(harvestReelContent(fresh, Date.now())).catch(() => {})
 }
 
 /**
@@ -189,6 +223,11 @@ export function useReelAnalysis() {
       if (controller.signal.aborted) return
       setSynthesisError('Could not synthesize niche patterns — try again.')
     }
+
+    // Transcript enrichment — non-blocking (NOT awaited): the visible hook results are already
+    // rendered above, so driving each reel through the single-reel analyzer happens in the
+    // background and only enriches the stored corpus/gallery copy. Best-effort + cached.
+    void enrichTranscripts(apifyKeys, controller.signal)
   }
 
   // ---- Deep (multimodal) report pipeline — Phase-1 enrichment ----

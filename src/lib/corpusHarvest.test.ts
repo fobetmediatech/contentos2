@@ -140,4 +140,33 @@ describe('harvestReelContent', () => {
     )
     expect(out).toEqual([])
   })
+
+  it('carries the reel thumbnail (displayUrl) and the transcript from state.transcripts', () => {
+    const out = harvestReelContent(
+      states({
+        alice: {
+          handle: 'alice',
+          status: 'done',
+          reels: [{ ...reel('r1'), displayUrl: 'https://cdn/thumb.jpg' }],
+          analyses: {},
+          transcripts: { r1: 'hello world transcript' },
+        },
+      }),
+      7,
+    )
+    expect(out[0]).toMatchObject({
+      id: 'r1',
+      thumbnailUrl: 'https://cdn/thumb.jpg',
+      transcript: 'hello world transcript',
+    })
+  })
+
+  it('omits thumbnailUrl when displayUrl is empty and transcript when none captured', () => {
+    const out = harvestReelContent(
+      states({ alice: { handle: 'alice', status: 'done', reels: [reel('r1')], analyses: {} } }),
+      7,
+    )
+    expect(out[0].thumbnailUrl).toBeUndefined()
+    expect(out[0].transcript).toBeUndefined()
+  })
 })

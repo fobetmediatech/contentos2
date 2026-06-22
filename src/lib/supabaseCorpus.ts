@@ -231,9 +231,23 @@ export function createSupabaseCorpus(): CorpusRepository {
 
     async rememberContent(records: ContentRecord[]) {
       if (records.length === 0) return
+      // corpus_content.creator_username is a FK to corpus_creators. Reels can be harvested for a
+      // creator we've never profile-scraped (a fresh @handle reel run, or a single reel pasted by
+      // URL), so ensure a stub creator row exists first — ignoreDuplicates so a real remembered
+      // profile is NEVER clobbered. Without this the content insert would silently FK-fail and the
+      // reel would never reach the gallery.
+      const usernames = Array.from(new Set(records.map((r) => r.creatorUsername).filter(Boolean)))
+      if (usernames.length > 0) {
+        const { error: cErr } = await supabase
+          .from('corpus_creators')
+          .upsert(usernames.map((username) => ({ username })), { ignoreDuplicates: true })
+        if (cErr) throw cErr
+      }
       const rows = records.map((r) => ({
         id: r.id,
-        creator_username: r.creatorUsername,
+        // Empty owner (rare single-reel scrape) → null so the nullable FK accepts it; the
+        // gallery still shows the reel from `payload`.
+        creator_username: r.creatorUsername || null,
         analyzed_at: new Date(r.analyzedAt).toISOString(),
         payload: r,
         updated_at: new Date().toISOString(),
@@ -248,6 +262,17 @@ export function createSupabaseCorpus(): CorpusRepository {
         .select('payload')
         .eq('creator_username', creatorUsername)
         .order('analyzed_at', { ascending: false })
+      if (error) throw error
+      return ((data ?? []) as { payload: ContentRecord }[]).map((r) => r.payload)
+    },
+
+    async listAllContent(opts?: { limit?: number }) {
+      let q = supabase
+        .from('corpus_content')
+        .select('payload')
+        .order('analyzed_at', { ascending: false })
+      if (opts?.limit != null) q = q.limit(opts.limit)
+      const { data, error } = await q
       if (error) throw error
       return ((data ?? []) as { payload: ContentRecord }[]).map((r) => r.payload)
     },
