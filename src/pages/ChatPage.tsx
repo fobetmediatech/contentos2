@@ -22,7 +22,7 @@ import { ChatMessage, ProgressBubble, TypingIndicator } from '../components/Chat
 import { ClarificationCard } from '../components/ClarificationCard'
 import { CompetitorResultMessage } from '../components/CompetitorResultMessage'
 import { DiscoveryResultMessage } from '../components/DiscoveryResultMessage'
-import { ConversationSwitcher } from '../components/ConversationSwitcher'
+import { ChatSidebar } from '../components/ChatSidebar'
 import { InlineReelResults } from '../components/InlineReelResults'
 import { ReelResultMessage } from '../components/ReelResultMessage'
 import { SingleReelResultMessage } from '../components/SingleReelResultMessage'
@@ -420,7 +420,15 @@ export function ChatPage() {
   // computed from the snapshotted payload.)
 
   return (
-    <div className="h-full flex flex-col bg-chai">
+    <div className="h-full flex flex-row bg-chai">
+      <ChatSidebar
+        conversations={conversationList}
+        activeId={activeConversationId}
+        onSwitch={handleSwitchConversation}
+        onNew={handleStartOver}
+        onDelete={handleDeleteConversation}
+      />
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
       {/* Selection warning toast */}
       {selectionWarning && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 bg-[#2C2118] border border-[#E07B3A]/40 rounded-xl text-sm text-[#E07B3A] shadow-lg pointer-events-none">
@@ -439,19 +447,6 @@ export function ChatPage() {
         </button>
       )}
       <div ref={scrollContainerRef} onScroll={handleScrollContainer} className="flex-1 overflow-y-auto">
-        {/* Conversation history switcher — appears once there's more than one chat or any
-            content, so a fresh single-chat welcome screen stays uncluttered. */}
-        {(conversationList.length > 1 || hasMessages) && (
-          <div className="px-4 pt-4 max-w-4xl mx-auto w-full">
-            <ConversationSwitcher
-              conversations={conversationList}
-              activeId={activeConversationId}
-              onSwitch={handleSwitchConversation}
-              onNew={handleStartOver}
-              onDelete={handleDeleteConversation}
-            />
-          </div>
-        )}
         {!hasMessages && !showInlineContent ? (
           // Welcome / empty state
           <div className="h-full flex flex-col items-center justify-center px-6 py-12">
@@ -691,6 +686,7 @@ export function ChatPage() {
         <p className="mt-1.5 text-[10px] font-mono text-muted">
           Enter to send · Shift+Enter for new line
         </p>
+      </div>
       </div>
     </div>
   )
