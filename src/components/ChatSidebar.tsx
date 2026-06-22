@@ -19,7 +19,7 @@ export function ChatSidebar({ conversations, activeId, onSwitch, onNew, onDelete
   })
 
   useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, String(open)) } catch {}
+    try { localStorage.setItem(STORAGE_KEY, String(open)) } catch { /* unavailable */ }
   }, [open])
 
   return (
