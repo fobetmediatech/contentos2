@@ -54,8 +54,7 @@ describe('InlineReelResults — single-handle case studies', () => {
     }
     render(<InlineReelResults handles={['nike']} creatorStates={creatorStates} {...base} />)
 
-    // Expand the creator section to reveal the per-reel cards.
-    fireEvent.click(screen.getByText(/reels analyzed/))
+    // Single-handle sections are expanded by default — the per-reel case study shows immediately.
     // Case-study markdown heading (the case-study card) — not the quick caption card.
     expect(screen.getByText('Why it worked')).toBeTruthy()
     expect(screen.getByText('Reel case study')).toBeTruthy()

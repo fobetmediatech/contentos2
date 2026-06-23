@@ -5,18 +5,10 @@ import { useConversationsStore } from '../store/conversationsStore'
 import { useKeysStore } from '../store/keysStore'
 import { scrapeTopReels, NoReelsError } from '../lib/reelScraper'
 import { scrapeReelVideos } from '../lib/reelVideoClient'
-import { transcribeReels } from '../lib/reelTranscriber'
-import { harvestReelContent } from '../lib/corpusHarvest'
-import { useCorpusStore } from '../store/corpusStore'
 import { getCachedSingleReel, setCachedSingleReel } from '../lib/singleReelCache'
+import { devWarn } from '../lib/devLog'
 import { analyzeReelHookmap, singleReelFnAvailable } from '../lib/reelHookmap'
-import {
-  analyzeReelsBatch,
-  synthesizeNiche,
-  buildPerCreatorSummary,
-  computeBenchmarks,
-  synthesizeCreatorHooks,
-} from '../lib/reelAnalyzer'
+import { synthesizeCreatorHooks } from '../lib/reelAnalyzer'
 import type { ReelCaseStatus } from '../store/reelAnalysisStore'
 
 // 2.3: module-scope controller shared across ALL mounted instances of useReelAnalysis
@@ -36,40 +28,10 @@ let mountCount = 0
 const hookmapLimiter = pLimit(3)
 
 /**
- * Background pass (module-scope so it never closes over hook state): transcribe every
- * done-creator's reels via the single-reel analyzer, write the transcripts into the store,
- * then re-harvest the corpus content so the gallery copy carries transcripts (upsert by reel
- * id is idempotent — the ChatPage synthesis-done harvest already saved the reels + thumbnails;
- * this adds the transcripts once they exist). Skipped silently when the analyzer isn't deployed
- * (plain `vite dev`) and aborts cleanly when the run is superseded.
- */
-async function enrichTranscripts(apifyKeys: string[], signal: AbortSignal) {
-  if (!(await singleReelFnAvailable(signal))) return
-  if (signal.aborted) return
-
-  const states = useReelAnalysisStore.getState().creatorStates
-  const done = Object.values(states).filter((s) => s.status === 'done' && s.reels.length > 0)
-  let any = false
-  for (const s of done) {
-    if (signal.aborted) return
-    const transcripts = await transcribeReels(s.handle, s.reels, apifyKeys, signal)
-    if (signal.aborted) return
-    if (Object.keys(transcripts).length > 0) {
-      useReelAnalysisStore.getState().setCreatorState(s.handle, { transcripts })
-      any = true
-    }
-  }
-  if (signal.aborted || !any) return
-
-  // Re-harvest with transcripts now attached (idempotent upsert by reel id).
-  const fresh = useReelAnalysisStore.getState().creatorStates
-  void useCorpusStore.getState().rememberContent(harvestReelContent(fresh, Date.now())).catch(() => {})
-}
-
-/**
- * Single-handle HookMap pipeline (module-scope so it never closes over hook state):
- * scrape top reels → cache-first analysis → store case studies. For single @handle runs only.
- * Phase 2.3 will wire synthesizeCreatorHooks here (currently does nothing; just returns).
+ * Per-creator HookMap pipeline (module-scope so it never closes over hook state): scrape top
+ * reels → cache-first deep analysis → store case studies. Runs for EVERY analyzed handle (a
+ * single profile, or each competitor selected from a result). The per-creator hook summary is
+ * synthesized by startAnalysis after this completes.
  */
 async function runCreatorHookmapPipeline(
   handle: string, apifyKeys: string[], signal: AbortSignal,
@@ -111,7 +73,14 @@ async function runCreatorHookmapPipeline(
   } catch (err) {
     if (signal.aborted) return
     if (err instanceof NoReelsError) store.setCreatorState(handle, { status: 'no-reels', error: 'No recent Reels found.' })
-    else store.setCreatorState(handle, { status: 'failed', error: 'Analysis failed — the account may be private, or try again.' })
+    else {
+      // DEV diagnostic: the user-facing string is intentionally generic. Surface the REAL reason —
+      // for an ApifyError this prints the code (QUOTA_EXCEEDED = all keys out of credit, RUN_FAILED =
+      // Instagram blocked the scrape, POLL_TIMEOUT = scrape exceeded the deadline, etc.).
+      const e = err as { name?: string; code?: string; status?: number; message?: string }
+      devWarn(`[hookmap] analysis failed for @${handle}:`, e?.code ?? e?.name, `status=${e?.status ?? '?'}`, e?.message, err)
+      store.setCreatorState(handle, { status: 'failed', error: 'Analysis failed — the account may be private, or try again.' })
+    }
   }
 }
 
@@ -142,7 +111,6 @@ export function useReelAnalysis() {
     setReelConversationId,
     setCreatorState,
     setHookSummary,
-    setSynthesis,
     setSynthesisError,
     setSynthesisStatus,
     reset,
@@ -163,32 +131,10 @@ export function useReelAnalysis() {
     }
   }, [])
 
-  async function runCreatorPipeline(handle: string, signal: AbortSignal) {
-    try {
-      const reels = await scrapeTopReels(handle, 10, apifyKeys, signal)
-      if (signal.aborted) return
-      setCreatorState(handle, { reels, status: 'analyzing' })
-
-      const analyses = await analyzeReelsBatch(reels, geminiKeys, signal)
-      if (signal.aborted) return
-      setCreatorState(handle, { analyses, status: 'done' })
-    } catch (err) {
-      if (signal.aborted) return
-      // SECURITY (H11): never surface the raw error message — map by type only.
-      if (err instanceof NoReelsError) {
-        setCreatorState(handle, { status: 'no-reels', error: 'No recent Reels found.' })
-      } else {
-        setCreatorState(handle, {
-          status: 'failed',
-          error: 'Analysis failed — the account may be private, or try again.',
-        })
-      }
-    }
-  }
-
   /**
-   * Run the full reel-analysis pipeline for a set of handles:
-   * cancel-prior → reset → seed states → scrape+analyze all (parallel) → synthesize.
+   * Run the deep HookMap reel analysis for a set of handles (a single profile, or several
+   * competitors selected from a result):
+   * cancel-prior → reset → seed → per-creator HookMap pipeline (parallel) → per-creator summary.
    */
   const startAnalysis = async (handles: string[], externalSignal?: AbortSignal) => {
     if (handles.length === 0) return
@@ -218,63 +164,57 @@ export function useReelAnalysis() {
       setCreatorState(handle, { handle, status: 'scraping', reels: [], analyses: {} }),
     )
 
-    if (handles.length === 1) {
-      if (!(await singleReelFnAvailable(controller.signal))) {
-        // I1: the seeded creator is still 'scraping' — drive it terminal so InlineReelResults
-        // doesn't render a perpetual spinner alongside the error banner.
-        setCreatorState(handles[0], { status: 'failed', error: "Reel analysis isn't available in this environment." })
-        setSynthesisError("Reel analysis isn't available in this environment.")
-        return
-      }
-      // C1: drive synthesisStatus running→done so the single-handle path arms+fires the
-      // ChatPage corpus-harvest effect, gets snapshotted, and persists across reload.
-      setSynthesisStatus('running')
-      await runCreatorHookmapPipeline(handles[0], apifyKeys, controller.signal)
-      if (controller.signal.aborted) return
-      const creator = useReelAnalysisStore.getState().creatorStates[handles[0]]
-      if (creator?.caseStudies && Object.keys(creator.caseStudies).length > 0) {
-        const summary = await synthesizeCreatorHooks(handles[0], creator.caseStudies, creator.reels, geminiKeys, controller.signal)
-        if (controller.signal.aborted) return
-        if (summary) setHookSummary(handles[0], summary)
-      }
-      // Corpus harvest (transcript+thumbnail) fires because this branch now drives
-      // synthesisStatus running→done: the ChatPage effect arms on 'running' and fires on 'done'.
-      // The run reached a terminal state (even if the creator ended 'no-reels'/'failed') → 'done'.
-      setSynthesisStatus('done')
+    // The deep HookMap analyzer is the only reel-analysis path now: it runs PER CREATOR for
+    // every selected handle (one profile, or several competitors picked from a result). Heads-up
+    // on cost — each creator is ~10 video analyses, so a large multi-select is slow/expensive.
+    if (!(await singleReelFnAvailable(controller.signal))) {
+      // Drive the seeded creators terminal so InlineReelResults doesn't show perpetual spinners.
+      handles.forEach((handle) =>
+        setCreatorState(handle, { status: 'failed', error: "Reel analysis isn't available in this environment." }),
+      )
+      setSynthesisError("Reel analysis isn't available in this environment.")
       return
     }
 
-    await Promise.allSettled(handles.map((handle) => runCreatorPipeline(handle, controller.signal)))
-    if (controller.signal.aborted) return
-
-    // Synthesis — explicit, after every creator reached a terminal state.
-    // Read fresh from the store to avoid a stale closure over creatorStates.
-    const states = useReelAnalysisStore.getState().creatorStates
-    const doneCreators = Object.values(states).filter((s) => s.status === 'done')
-    const doneSummaries = doneCreators.map((s) => buildPerCreatorSummary(s.handle, s.analyses, s.reels))
-
-    if (doneSummaries.length === 0) {
-      setSynthesisError('All creators failed — no reel data to synthesize. Try more active creators.')
-      return
-    }
-
-    // M5: benchmarks computed in code from the real reel metrics, not the LLM.
-    const benchmarks = computeBenchmarks(doneCreators.flatMap((s) => s.reels))
-
+    // Drive synthesisStatus running→done so the run arms+fires the ChatPage corpus-harvest effect,
+    // gets snapshotted into history, and persists across reload (the effect arms on 'running').
     setSynthesisStatus('running')
     try {
-      const output = await synthesizeNiche(doneSummaries, geminiKeys, benchmarks, controller.signal)
+      await Promise.allSettled(handles.map((handle) => runCreatorHookmapPipeline(handle, apifyKeys, controller.signal)))
       if (controller.signal.aborted) return
-      setSynthesis(output)
-    } catch {
-      if (controller.signal.aborted) return
-      setSynthesisError('Could not synthesize niche patterns — try again.')
-    }
 
-    // Transcript enrichment — non-blocking (NOT awaited): the visible hook results are already
-    // rendered above, so driving each reel through the single-reel analyzer happens in the
-    // background and only enriches the stored corpus/gallery copy. Best-effort + cached.
-    void enrichTranscripts(apifyKeys, controller.signal)
+      // Per-creator hook summary for each creator that produced case studies (read fresh from store).
+      const states = useReelAnalysisStore.getState().creatorStates
+      await Promise.allSettled(
+        handles.map(async (handle) => {
+          const c = states[handle]
+          if (!c?.caseStudies || Object.keys(c.caseStudies).length === 0) return
+          const summary = await synthesizeCreatorHooks(handle, c.caseStudies, c.reels, geminiKeys, controller.signal)
+          if (!controller.signal.aborted && summary) setHookSummary(handle, summary)
+        }),
+      )
+      if (controller.signal.aborted) return
+      // Terminal even if some/all creators ended 'no-reels'/'failed' — their per-creator states
+      // render the errors; the run itself reached a terminal state.
+      setSynthesisStatus('done')
+    } finally {
+      // If the run was interrupted (aborted while still 'running' — agent-loop supersede via the
+      // external signal, or the last hook instance unmounting), clear the stale state. Otherwise it
+      // freezes at synthesisStatus 'running' with activeHandles set, which keeps ChatPage's
+      // `isReelRunning` true forever and disables competitor selection until a FULL reload (only a
+      // reload re-runs the persist `merge` guard that discards interrupted runs). The
+      // `sharedAbortRef.current === controller` guard means we only reset OUR run: a newer run that
+      // superseded us has already pointed sharedAbortRef at its own controller (after abort()+reset()),
+      // so this guard is false and we never wipe the fresh run. A clean finish set 'done' above, so
+      // the status check is false there too.
+      if (
+        controller.signal.aborted &&
+        sharedAbortRef.current === controller &&
+        useReelAnalysisStore.getState().synthesisStatus === 'running'
+      ) {
+        reset()
+      }
+    }
   }
 
   return {

@@ -10,13 +10,15 @@ import { useNavigate } from 'react-router-dom'
 import { useReelAnalysisStore } from '../store/reelAnalysisStore'
 import type { CreatorAnalysisState } from '../store/reelAnalysisStore'
 import { HookSummaryCard } from '../components/HookSummaryCard'
+import { ReelCaseStudyCard } from '../components/ReelCaseStudyCard'
 
 export function ReportPage() {
   const navigate = useNavigate()
   const creatorStates = useReelAnalysisStore((s) => s.creatorStates)
-  const summary = firstHookSummary(creatorStates)
+  const creator = firstCreatorWithSummary(creatorStates)
+  const summary = creator?.hookSummary
 
-  if (!summary) {
+  if (!creator || !summary) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-16 text-center">
         <h1 className="text-2xl font-bold text-[#F5EDD6] mb-2">No report yet</h1>
@@ -44,14 +46,29 @@ export function ReportPage() {
           Print / Save as PDF
         </button>
       </div>
-      <div className="report-printable">
+      <div className="report-printable flex flex-col gap-6">
         <HookSummaryCard summary={summary} />
+
+        {/* Individual reel case studies — included in the page AND the PDF. */}
+        <section>
+          <h2 className="text-lg font-semibold text-[#F5EDD6] mb-3">Reel-by-reel breakdown</h2>
+          <div className="flex flex-col gap-4">
+            {creator.reels.map((reel) => (
+              <ReelCaseStudyCard
+                key={reel.shortCode}
+                reel={reel}
+                status={creator.caseStudyStatus?.[reel.shortCode] ?? 'done'}
+                result={creator.caseStudies?.[reel.shortCode]}
+              />
+            ))}
+          </div>
+        </section>
       </div>
     </div>
   )
 }
 
-function firstHookSummary(creatorStates: Record<string, CreatorAnalysisState>) {
-  for (const s of Object.values(creatorStates)) if (s.hookSummary) return s.hookSummary
+function firstCreatorWithSummary(creatorStates: Record<string, CreatorAnalysisState>) {
+  for (const s of Object.values(creatorStates)) if (s.hookSummary) return s
   return undefined
 }

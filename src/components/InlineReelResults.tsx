@@ -32,7 +32,8 @@ interface Props {
 export function InlineReelResults({ handles, creatorStates, synthesisStatus, synthesis, synthesisError, onSuggest }: Props) {
   return (
     <div className="w-full mt-2">
-      {synthesisStatus === 'running' && handles.length > 1 && <SynthesisLoadingCard />}
+      {/* Cross-creator niche synthesis only appears for OLDER snapshots captured under the quick
+          path (`synthesis` is null for HookMap runs); per-creator progress shows in each section. */}
       {synthesisStatus === 'done' && synthesis && <SynthesisCard synthesis={synthesis} onSuggest={onSuggest} />}
       {synthesisStatus === 'failed' && (
         <div className="mb-4 px-4 py-3 bg-[#2C1818] border border-danger/30 rounded-xl text-sm text-danger">
@@ -44,14 +45,6 @@ export function InlineReelResults({ handles, creatorStates, synthesisStatus, syn
         if (!state) return null
         return <CreatorSection key={handle} state={state} singleHandle={handles.length === 1} />
       })}
-    </div>
-  )
-}
-
-function SynthesisLoadingCard() {
-  return (
-    <div className="mb-6 px-5 py-5 bg-[#1E1A2E] border border-[#A78BFA]/20 rounded-xl animate-pulse">
-      <p className="text-sm text-[#A78BFA]">Synthesizing niche patterns…</p>
     </div>
   )
 }
@@ -128,7 +121,13 @@ function SynthesisCard({ synthesis, onSuggest }: { synthesis: SynthesisOutput; o
 }
 
 function CreatorSection({ state, singleHandle }: { state: CreatorAnalysisState; singleHandle: boolean }) {
-  const [expanded, setExpanded] = useState(false)
+  // A creator carries deep HookMap case studies whenever it was run through the HookMap pipeline.
+  const hasCaseStudies =
+    !!(state.caseStudies && Object.keys(state.caseStudies).length > 0) ||
+    !!(state.caseStudyStatus && Object.keys(state.caseStudyStatus).length > 0)
+  // A single creator is the headline result → expanded by default (incl. historical snapshots).
+  // A multi-creator comparison stays collapsed so the list of creators stays scannable.
+  const [expanded, setExpanded] = useState(singleHandle)
 
   const stepIndex = state.status === 'scraping' ? 1 : state.status === 'analyzing' ? 2 : 3
 
@@ -163,12 +162,14 @@ function CreatorSection({ state, singleHandle }: { state: CreatorAnalysisState; 
         onClick={() => setExpanded(e => !e)}
         className="flex items-center gap-2 mb-4 text-[#F5EDD6] font-medium hover:text-[#E07B3A] transition-colors"
       >
-        @{state.handle} — {Object.keys(state.analyses).length} reels analyzed
+        @{state.handle} — {(hasCaseStudies ? state.reels.length : Object.keys(state.analyses).length)} reels analyzed
         {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
       </button>
 
       {expanded && (
-        singleHandle ? (
+        hasCaseStudies ? (
+          // Deep HookMap analysis — case studies + a per-creator hook summary. Renders for every
+          // analyzed creator (single profile or each selected competitor).
           <div className="flex flex-col gap-4">
             {state.hookSummary && <HookSummaryCard summary={state.hookSummary} />}
             {state.reels.map(reel => (
@@ -181,6 +182,7 @@ function CreatorSection({ state, singleHandle }: { state: CreatorAnalysisState; 
             ))}
           </div>
         ) : (
+          // Fallback for older snapshots captured under the quick caption-only path.
           <div className="grid gap-3 grid-cols-2 xl:grid-cols-3">
             {state.reels.map(reel => (
               <ReelCard key={reel.shortCode} reel={reel} analysis={state.analyses[reel.shortCode]} />

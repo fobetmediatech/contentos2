@@ -495,7 +495,7 @@ export function ChatPage() {
                     onClearSelection={() => setSelectedHandles([])}
                     onAnalyzeReels={handleAnalyzeReels}
                     onStartOver={handleStartOver}
-                    reelActive={activeHandles.length > 0}
+                    reelActive={isReelRunning}
                   />
                 ) : message.type === 'result' && message.result?.kind === 'discovery' ? (
                   <DiscoveryResultMessage
@@ -506,7 +506,7 @@ export function ChatPage() {
                     onClearSelection={() => setSelectedHandles([])}
                     onAnalyzeReels={handleAnalyzeReels}
                     onStartOver={handleStartOver}
-                    reelActive={activeHandles.length > 0}
+                    reelActive={isReelRunning}
                   />
                 ) : message.type === 'result' && message.result?.kind === 'reel' ? (
                   // A superseded/finished reel run, snapshotted into this conversation. Renders

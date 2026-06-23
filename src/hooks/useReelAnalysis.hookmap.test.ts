@@ -30,6 +30,7 @@ vi.mock('../lib/reelAnalyzer', async (orig) => ({
 
 import { useReelAnalysis } from './useReelAnalysis'
 import { useReelAnalysisStore } from '../store/reelAnalysisStore'
+import { scrapeTopReels } from '../lib/reelScraper'
 
 beforeEach(() => useReelAnalysisStore.getState().reset())
 
@@ -65,5 +66,54 @@ describe('single-handle HookMap pipeline', () => {
       // CreatorHookSummary drives the UI via hookSummary — the niche synthesis object stays null.
       expect(s.synthesis).toBeNull()
     })
+  })
+
+  it('runs the HookMap analyzer per creator for MULTIPLE handles (selected competitors)', async () => {
+    const { result } = renderHook(() => useReelAnalysis())
+    await act(async () => { await result.current.startAnalysis(['alice', 'bob']) })
+    await waitFor(() => {
+      const states = useReelAnalysisStore.getState().creatorStates
+      // Both selected competitors get the deep case study (not the quick caption path).
+      expect(states['alice']?.caseStudyStatus?.r1).toBe('done')
+      expect(states['bob']?.caseStudyStatus?.r1).toBe('done')
+      expect(states['alice']?.caseStudies?.r1?.markdown).toBe('# r1')
+      expect(states['bob']?.caseStudies?.r1?.markdown).toBe('# r1')
+      expect(useReelAnalysisStore.getState().synthesisStatus).toBe('done')
+    })
+  })
+
+  // Regression: an interrupted run (the agent loop supersedes it, or navigating away aborts it)
+  // must NOT leave the store stuck at synthesisStatus 'running' with activeHandles set. That stale
+  // state survives SPA navigation (no reload, so the persist `merge` guard never re-runs to discard
+  // it) and makes ChatPage's `isReelRunning` true forever — which disables competitor selection.
+  it('clears the run when it is aborted mid-flight instead of leaving it stuck on "running"', async () => {
+    // Hold the scrape open so the run parks at synthesisStatus 'running' until we abort it.
+    let releaseScrape: (reels: unknown[]) => void = () => {}
+    vi.mocked(scrapeTopReels).mockImplementationOnce(
+      () => new Promise((resolve) => { releaseScrape = resolve as (r: unknown[]) => void }),
+    )
+
+    // Abort through the external-signal path (how the agent loop supersedes a reel run) — this
+    // doesn't depend on mount/unmount bookkeeping, so it isolates the abort behavior cleanly.
+    const external = new AbortController()
+    const { result } = renderHook(() => useReelAnalysis())
+    let started: Promise<void> | undefined
+    await act(async () => { started = result.current.startAnalysis(['alice'], external.signal) })
+
+    // The run is now parked on the hanging scrape.
+    await waitFor(() => expect(useReelAnalysisStore.getState().synthesisStatus).toBe('running'))
+    expect(useReelAnalysisStore.getState().activeHandles).toEqual(['alice'])
+
+    // Supersede / interrupt the run.
+    external.abort()
+    await act(async () => {
+      releaseScrape([])      // let the parked pipeline resume and hit its abort checks
+      await started
+    })
+
+    // The stale run must be cleared — not frozen at 'running' with handles still set, which would
+    // keep `isReelRunning` true and block competitor selection.
+    expect(useReelAnalysisStore.getState().synthesisStatus).not.toBe('running')
+    expect(useReelAnalysisStore.getState().activeHandles).toEqual([])
   })
 })

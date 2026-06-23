@@ -65,4 +65,24 @@ describe('ReportPage', () => {
     expect(screen.getByText(/Alice consistently uses bold claims/)).toBeTruthy()
     expect(screen.getByText('Bold claim')).toBeTruthy() // dominant hook pattern
   })
+
+  it('also includes the individual reel case studies (for the page + PDF)', () => {
+    useReelAnalysisStore.getState().setCreatorState('alice', {
+      handle: 'alice',
+      status: 'done',
+      reels: [{ shortCode: 'r1', url: 'https://www.instagram.com/reel/r1/', displayUrl: '', videoViewCount: 1000, likesCount: 100, commentsCount: 10, videoDuration: 9, caption: 'c', hashtags: [] }],
+      analyses: {},
+      caseStudyStatus: { r1: 'done' },
+      caseStudies: { r1: { transcript: 't', segments: [], videoAnalysis: {} as never, markdown: '## Why this reel worked' } },
+    })
+    useReelAnalysisStore.getState().setHookSummary('alice', summary)
+
+    render(
+      <MemoryRouter>
+        <ReportPage />
+      </MemoryRouter>,
+    )
+    expect(screen.getByText('Reel-by-reel breakdown')).toBeTruthy()
+    expect(screen.getByText('Why this reel worked')).toBeTruthy() // the per-reel case-study markdown
+  })
 })
