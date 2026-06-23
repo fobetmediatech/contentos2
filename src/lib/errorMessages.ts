@@ -70,6 +70,20 @@ export function sparseSeedMessage(handles: string[], refFound: boolean): string 
 export const ALL_DISMISSED_MESSAGE =
   "Every account found here is one you've dismissed before. Clear some dismissals in Memory, or try a different reference account."
 
+/**
+ * Shown on "Start over" when the conversation has already collected the full target of relevant
+ * (non-thumbs-downed) competitors — no re-scrape needed.
+ */
+export const alreadyCollectedMessage = (n: number): string =>
+  `You've collected ${n} relevant competitors. Thumbs-down any you want to replace, then Start over to find more.`
+
+/**
+ * Shown when a re-run finds no new candidates before reaching the target — Instagram's
+ * related-account graph for these handles is exhausted.
+ */
+export const poolExhaustedMessage = (relevant: number): string =>
+  `Found ${relevant} relevant so far — Instagram's related-account pool for these handles is exhausted. Try adding another reference handle.`
+
 const NETWORK_BLOCKED_MESSAGE =
   "Network blocked — could not reach Apify API. If you're using Brave browser, click the Brave shield icon in the address bar and turn off \"Block trackers & ads\" for localhost, then try again."
 
