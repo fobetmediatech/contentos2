@@ -20,6 +20,12 @@ export type CompetitorResultPayload = {
   niche: string
   profiles: NormalizedProfile[]
   didExpand: boolean
+  /** Input reference handles — lets "Start over" re-run the same search (optional: absent on legacy payloads). */
+  handles?: string[]
+  /** Niche context, reused on re-run. */
+  nicheContext?: string
+  /** First run's clarification answer, reused silently on "Start over" re-runs (no card re-shown). */
+  clarificationAnswer?: string
 }
 
 export type DiscoveryResultPayload = {
