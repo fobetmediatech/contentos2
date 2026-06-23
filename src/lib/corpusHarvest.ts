@@ -85,7 +85,7 @@ export function harvestReelContent(
         url: reel.url,
         caption: reel.caption,
         thumbnailUrl: reel.displayUrl || undefined,
-        transcript: state.transcripts?.[reel.shortCode],
+        transcript: state.transcripts?.[reel.shortCode] ?? state.caseStudies?.[reel.shortCode]?.transcript,
         videoViewCount: reel.videoViewCount,
         likesCount: reel.likesCount,
         commentsCount: reel.commentsCount,

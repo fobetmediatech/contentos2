@@ -55,4 +55,15 @@ describe('single-handle HookMap pipeline', () => {
       expect(c?.hookSummary?.narrative).toBe('test narrative')
     })
   })
+
+  it('drives synthesisStatus to "done" (with synthesis null) so harvest/snapshot/persist gates fire', async () => {
+    const { result } = renderHook(() => useReelAnalysis())
+    await act(async () => { await result.current.startAnalysis(['alice']) })
+    await waitFor(() => {
+      const s = useReelAnalysisStore.getState()
+      expect(s.synthesisStatus).toBe('done')
+      // CreatorHookSummary drives the UI via hookSummary — the niche synthesis object stays null.
+      expect(s.synthesis).toBeNull()
+    })
+  })
 })

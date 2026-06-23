@@ -184,6 +184,39 @@ describe('synthesizeCreatorHooks', () => {
     expect(summary).toBeNull()
   })
 
+  it('(f) genuine multi-round recursive reduce: 8 partials → 4 → 2 → 1, terminates with reelCount 8', async () => {
+    // Distinguish map vs reduce by the stable "REDUCE" marker in the reduce prompt, and count
+    // reduce calls so we prove this is a real multi-round recursion (not the singleton guard).
+    let mapCalls = 0
+    let reduceCalls = 0
+    mockGemini.mockImplementation(async (_keys, prompt: string) => {
+      if (typeof prompt === 'string' && prompt.includes('REDUCE')) reduceCalls += 1
+      else mapCalls += 1
+      return validRaw()
+    })
+
+    // 8 reels with long hook openings → each digest (~175 tokens) exceeds the budget so it gets
+    // its OWN chunk → 8 map calls → 8 partials (~78 tokens each). With budget 160, partials batch
+    // 2-per-batch: 8 → 4 → 2 → 1 over three genuine reduce rounds (4 + 2 + 1 = 7 reduce calls).
+    const longHook = 'x'.repeat(600)
+    const codes = ['aaa', 'bbb', 'ccc', 'ddd', 'eee', 'fff', 'ggg', 'hhh']
+    const reels = codes.map((c, i) => makeReel(c, (i + 1) * 1000, (i + 1) * 100, (i + 1) * 10))
+    const caseStudies = Object.fromEntries(
+      codes.map((c) => [c, { ...makeCaseStudy(c), segments: [{ start: 0, text: longHook }] }]),
+    )
+
+    const summary = await synthesizeCreatorHooks('@creator', caseStudies, reels, 'KEY', undefined, {
+      budget: 160,
+    })
+
+    expect(summary).not.toBeNull()
+    expect(summary!.reelCount).toBe(8)
+    expect(mapCalls).toBe(8)
+    // 4 (round 1) + 2 (round 2) + 1 (round 3) — proves real multi-round batched reduction.
+    expect(reduceCalls).toBe(7)
+    expect(mockGemini).toHaveBeenCalledTimes(15)
+  })
+
   it('returns null on abort signal', async () => {
     mockGemini.mockResolvedValue(validRaw())
     const controller = new AbortController()

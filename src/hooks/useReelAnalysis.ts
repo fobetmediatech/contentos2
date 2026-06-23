@@ -220,9 +220,15 @@ export function useReelAnalysis() {
 
     if (handles.length === 1) {
       if (!(await singleReelFnAvailable(controller.signal))) {
+        // I1: the seeded creator is still 'scraping' — drive it terminal so InlineReelResults
+        // doesn't render a perpetual spinner alongside the error banner.
+        setCreatorState(handles[0], { status: 'failed', error: "Reel analysis isn't available in this environment." })
         setSynthesisError("Reel analysis isn't available in this environment.")
         return
       }
+      // C1: drive synthesisStatus running→done so the single-handle path arms+fires the
+      // ChatPage corpus-harvest effect, gets snapshotted, and persists across reload.
+      setSynthesisStatus('running')
       await runCreatorHookmapPipeline(handles[0], apifyKeys, controller.signal)
       if (controller.signal.aborted) return
       const creator = useReelAnalysisStore.getState().creatorStates[handles[0]]
@@ -231,7 +237,10 @@ export function useReelAnalysis() {
         if (controller.signal.aborted) return
         if (summary) setHookSummary(handles[0], summary)
       }
-      // Corpus harvest (transcript+thumbnail) still fires via ChatPage synthesis effect / existing path.
+      // Corpus harvest (transcript+thumbnail) fires because this branch now drives
+      // synthesisStatus running→done: the ChatPage effect arms on 'running' and fires on 'done'.
+      // The run reached a terminal state (even if the creator ended 'no-reels'/'failed') → 'done'.
+      setSynthesisStatus('done')
       return
     }
 

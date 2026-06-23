@@ -32,7 +32,7 @@ interface Props {
 export function InlineReelResults({ handles, creatorStates, synthesisStatus, synthesis, synthesisError, onSuggest }: Props) {
   return (
     <div className="w-full mt-2">
-      {synthesisStatus === 'running' && <SynthesisLoadingCard />}
+      {synthesisStatus === 'running' && handles.length > 1 && <SynthesisLoadingCard />}
       {synthesisStatus === 'done' && synthesis && <SynthesisCard synthesis={synthesis} onSuggest={onSuggest} />}
       {synthesisStatus === 'failed' && (
         <div className="mb-4 px-4 py-3 bg-[#2C1818] border border-danger/30 rounded-xl text-sm text-danger">

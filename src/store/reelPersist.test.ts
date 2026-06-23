@@ -29,4 +29,12 @@ describe('isCleanReelRun', () => {
   it('is clean for an empty run (no creators, idle is not terminal → false)', () => {
     expect(isCleanReelRun({ synthesisStatus: 'idle', creatorStates: {} })).toBe(false)
   })
+
+  it('is clean for a single-handle HookMap run (synthesisStatus done, no niche synthesis object)', () => {
+    // Single-handle drives synthesisStatus → 'done' even though `synthesis` stays null and the
+    // creator carries a hookSummary instead of analyses. The gate keys off status, so it persists.
+    expect(
+      isCleanReelRun({ synthesisStatus: 'done', creatorStates: { alice: { status: 'done' } } }),
+    ).toBe(true)
+  })
 })

@@ -358,7 +358,9 @@ async function reducePartials(
 
   if (reduced.length === 0) return null
   // Progress guard: if nothing collapsed (all batches were singletons), force one final reduce
-  // over everything to avoid an infinite recursion under a pathologically tiny budget.
+  // over everything to avoid an infinite recursion under a pathologically tiny budget. This
+  // intentionally sends ALL partials in one final reduce (which may exceed budget) to GUARANTEE
+  // termination — correctness of termination wins over staying under budget in this edge case.
   if (reduced.length >= partials.length) {
     try {
       const raw = await callGeminiWithSchema<unknown>(
