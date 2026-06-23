@@ -220,7 +220,7 @@ export function useReelAnalysis() {
 
     if (handles.length === 1) {
       if (!(await singleReelFnAvailable(controller.signal))) {
-        setSynthesisError("Deep reel analysis isn't available in this environment.")
+        setSynthesisError("Reel analysis isn't available in this environment.")
         return
       }
       await runCreatorHookmapPipeline(handles[0], apifyKeys, controller.signal)
