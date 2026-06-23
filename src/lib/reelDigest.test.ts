@@ -30,4 +30,12 @@ describe('planDigestChunks', () => {
     expect(chunks.flat().map((d) => d.shortCode).sort()).toEqual(ds.map((d) => d.shortCode).sort())
     for (const c of chunks) expect(estimateTokens(c.map(digestText).join('\n'))).toBeLessThanOrEqual(estimateTokens(digestText(ds[0])) * 2 + 1)
   })
+  it('isolates an oversized single digest into its own chunk without dropping any reel', () => {
+    const big = buildReelDigest(result({ transcript: 'y'.repeat(50_000) }) as never, reel({ shortCode: 'big' }) as never)
+    const small = buildReelDigest(result() as never, reel({ shortCode: 'small' }) as never)
+    const chunks = planDigestChunks([big, small], 10) // tiny budget — big exceeds it
+    const all = chunks.flat().map((d) => d.shortCode).sort()
+    expect(all).toEqual(['big', 'small']) // nothing dropped
+    expect(chunks.some((c) => c.length === 1 && c[0].shortCode === 'big')).toBe(true) // big isolated
+  })
 })
