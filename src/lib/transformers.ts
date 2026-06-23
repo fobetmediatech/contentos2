@@ -95,9 +95,14 @@ export interface NormalizedProfile {
 // Filtering these out prevents "fyp" or "viral" from dominating the niche signal
 // and leaving Gemini with meaningful subject-matter tags only.
 const HASHTAG_STOPWORDS = new Set([
+  // Platform-behaviour noise
   'fyp', 'viral', 'reels', 'trending', 'explore',
   'instagood', 'love', 'follow', 'like', 'instagram',
   'explorepage', 'foryou', 'foryoupage', 'reelsinstagram',
+  // Commercial / collab tags — signal a brand relationship, not a content niche,
+  // and appear across every niche (real data: #ad and #collab poisoned the signal).
+  'ad', 'collab', 'collaboration', 'sponsored', 'gifted',
+  'pr', 'prcollab', 'paid', 'partnership', 'spon',
 ])
 
 // ----- ER outlier threshold -----
@@ -183,13 +188,18 @@ export function normalizeProfile(raw: ApifyProfileRaw): NormalizedProfile {
     for (const tag of (post.hashtags ?? [])) {
       if (typeof tag !== 'string') continue
       const t = tag.toLowerCase().replace(/^#/, '')
-      if (t && !HASHTAG_STOPWORDS.has(t)) {
-        hashtagFreq[t] = (hashtagFreq[t] ?? 0) + 1
-      }
+      // Drop stopwords, pure-numeric tags (challenge/day numbering like #6, #30),
+      // and ultra-short tags (<3 chars) — none carry niche meaning.
+      if (!t || t.length < 3 || /^\d+$/.test(t) || HASHTAG_STOPWORDS.has(t)) continue
+      hashtagFreq[t] = (hashtagFreq[t] ?? 0) + 1
     }
   }
-  const topHashtags = Object.entries(hashtagFreq)
-    .sort(([, a], [, b]) => b - a)
+  // Min-frequency floor: a hashtag used only once is noise, not a niche signal.
+  // Keep tags seen >=2 times; fall back to the full list only when too few survive
+  // (sparse-hashtag profiles) so the content-niche path is never starved.
+  const sortedHashtags = Object.entries(hashtagFreq).sort(([, a], [, b]) => b - a)
+  const recurringHashtags = sortedHashtags.filter(([, freq]) => freq >= 2)
+  const topHashtags = (recurringHashtags.length >= 3 ? recurringHashtags : sortedHashtags)
     .slice(0, 10)
     .map(([tag]) => tag)
 

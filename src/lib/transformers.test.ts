@@ -151,6 +151,59 @@ describe('normalizeProfile — non-string hashtag guard (diff patch)', () => {
   })
 })
 
+describe('normalizeProfile — hashtag noise filtering (relevance fix)', () => {
+  it('drops commercial/collab stopwords, numeric and ultra-short tags', () => {
+    const raw = makeRaw({
+      latestPosts: [
+        {
+          likesCount: 100,
+          commentsCount: 5,
+          timestamp: '2024-01-01',
+          // 'fitness' twice (recurring); the rest are noise that must be dropped
+          hashtags: ['fitness', 'fitness', 'ad', 'collab', 'sponsored', '6', '30', 'ab'],
+        } as never,
+      ],
+    })
+    const profile = normalizeProfile(raw)
+    expect(profile.topHashtags).toContain('fitness')
+    for (const noise of ['ad', 'collab', 'sponsored', '6', '30', 'ab']) {
+      expect(profile.topHashtags).not.toContain(noise)
+    }
+  })
+
+  it('applies a min-frequency floor: drops single-occurrence tags when >=3 recur', () => {
+    const raw = makeRaw({
+      latestPosts: [
+        {
+          likesCount: 10,
+          commentsCount: 1,
+          timestamp: '2024-01-01',
+          // marketing/branding/content recur (freq 2); 'fluke' appears once
+          hashtags: ['marketing', 'marketing', 'branding', 'branding', 'content', 'content', 'fluke'],
+        } as never,
+      ],
+    })
+    const profile = normalizeProfile(raw)
+    expect(profile.topHashtags).toEqual(expect.arrayContaining(['marketing', 'branding', 'content']))
+    expect(profile.topHashtags).not.toContain('fluke')
+  })
+
+  it('falls back to single-occurrence tags when fewer than 3 recur (sparse profile)', () => {
+    const raw = makeRaw({
+      latestPosts: [
+        {
+          likesCount: 10,
+          commentsCount: 1,
+          timestamp: '2024-01-01',
+          hashtags: ['yoga', 'pilates'], // both freq 1, none recur — must still survive
+        } as never,
+      ],
+    })
+    const profile = normalizeProfile(raw)
+    expect(profile.topHashtags).toEqual(expect.arrayContaining(['yoga', 'pilates']))
+  })
+})
+
 describe('normalizeProfile — lastPostDate ignores pinned-post ordering', () => {
   it('returns the newest timestamp even when latestPosts[0] is an old pinned post', () => {
     const raw = makeRaw({

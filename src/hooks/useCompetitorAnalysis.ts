@@ -171,7 +171,9 @@ export function useCompetitorAnalysis() {
         }
 
         // Apply hallucination filter (post-retry, so both paths are filtered)
-        const filteredCompetitors = output.competitors.filter((c) => knownHandles.has(c.username.toLowerCase()))
+        // Strip a leading @ before matching — Gemini occasionally returns "@handle"
+        // despite the "no @" instruction, which would silently drop a valid pick.
+        const filteredCompetitors = output.competitors.filter((c) => knownHandles.has(c.username.replace(/^@/, '').toLowerCase()))
         output = { ...output, competitors: filteredCompetitors }
 
         if (output.competitors.length === 0) {

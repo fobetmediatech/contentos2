@@ -176,6 +176,28 @@ describe('buildCompetitorPrompt — clarificationAnswer injection', () => {
   })
 })
 
+describe('buildCompetitorPrompt — count instruction (recall fix)', () => {
+  // inputProfile carries topHashtags, but hashtags are an INFERRED signal and must
+  // NOT relax the count. Only a human niche filter (context/answer) grants "up to".
+  it('uses "exactly" when only hashtag signals are present (no human niche filter)', () => {
+    const prompt = buildCompetitorPrompt([inputProfile], [makeProfile()])
+    expect(prompt).toContain('select exactly')
+    expect(prompt).not.toContain('select up to')
+  })
+
+  it('uses "up to" when an explicit nicheContext is provided', () => {
+    const prompt = buildCompetitorPrompt([inputProfile], [makeProfile()], 'fitness coaching niche')
+    expect(prompt).toContain('select up to')
+  })
+
+  it('still injects NICHE DERIVATION on hashtag-only runs (niche guard stays on)', () => {
+    // The count gate and the niche-derivation gate are decoupled: hashtag-only runs
+    // get "exactly" for the count but KEEP the niche-derivation chain-of-thought.
+    const prompt = buildCompetitorPrompt([inputProfile], [makeProfile()])
+    expect(prompt).toContain('NICHE DERIVATION')
+  })
+})
+
 describe('buildPreferenceBlock (Phase 3, 3b)', () => {
   it('returns empty string when there are no exemplars', () => {
     expect(buildPreferenceBlock({ saved: [], dismissed: [] })).toBe('')

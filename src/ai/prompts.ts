@@ -185,12 +185,17 @@ export function buildCompetitorPrompt(
     ? `\nUSER REFINEMENT (the strategist selected this direction after seeing the candidate pool):\n"${trimmedClarificationAnswer.replace(/"/g, '\\"')}"\nPrioritize candidates that match this direction. Deprioritize candidates that clearly belong to other sub-niches.\n`
     : ''
 
-  // Count instruction: use "up to" whenever any filtering signal is available
-  // (strategist context OR hashtag signals OR user refinement), so Gemini can
-  // legitimately exclude wrong-niche accounts. Without any signals, force "exactly"
-  // so Gemini doesn't return fewer accounts simply because it has no filter criterion.
+  // hasFilterSignal gates the NICHE DERIVATION chain-of-thought below. It includes
+  // hashtag signals (≈always present) so niche-guarding stays on for virtually every run.
   const hasFilterSignal = trimmedNicheContext.length > 0 || uniqueHashtags.length > 0 || trimmedClarificationAnswer.length > 0
-  const countInstruction = hasFilterSignal ? 'up to' : 'exactly'
+
+  // Count instruction is gated SEPARATELY on human-supplied filters only. Hashtags are an
+  // INFERRED niche signal, not a user instruction to return fewer — folding them into the
+  // count made "up to" permanent (hashtags are almost always present), which let Gemini
+  // silently under-return (the <10-results bug). "up to" now requires an explicit niche
+  // context or clarification answer; otherwise "exactly" forces Gemini to fill all 10 slots.
+  const hasExplicitNicheFilter = trimmedNicheContext.length > 0 || trimmedClarificationAnswer.length > 0
+  const countInstruction = hasExplicitNicheFilter ? 'up to' : 'exactly'
 
   // Injected when filter signals exist — forces Gemini to (1) derive the specific sub-niche
   // from the reference accounts, and (2) explicitly identify adjacent-but-NOT-target niches
