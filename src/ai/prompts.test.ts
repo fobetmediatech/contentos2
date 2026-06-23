@@ -198,6 +198,33 @@ describe('buildCompetitorPrompt — count instruction (recall fix)', () => {
   })
 })
 
+describe('buildCompetitorPrompt — v2 candidate signals + Trending hardening', () => {
+  it("includes the candidate's own hashtags and IG category in its line", () => {
+    const c = makeProfile({ username: 'nichecreator', topHashtags: ['marketing', 'startups'], businessCategoryName: 'Entrepreneur' })
+    const line = buildCompetitorPrompt([inputProfile], [c]).split('\n').find((l) => l.includes('@nichecreator')) ?? ''
+    expect(line).toContain('hashtags: #marketing #startups')
+    expect(line).toContain('category: Entrepreneur')
+  })
+
+  it('makes the niche gate absolute and decouples Trending fill pressure', () => {
+    const prompt = buildCompetitorPrompt([inputProfile], [makeProfile()])
+    expect(prompt).toContain('NICHE GATE IS ABSOLUTE')
+    expect(prompt).toContain('relevance beats quota')
+  })
+
+  it('requires niche-relevance first for Trending and supplies an ER benchmark + N/A rule', () => {
+    const prompt = buildCompetitorPrompt([inputProfile], [makeProfile()])
+    expect(prompt).toContain('NICHE-RELEVANT set ONLY')
+    expect(prompt).toContain('Typical ER by follower tier')
+    expect(prompt).toContain('do NOT place it in Trending')
+  })
+
+  it('gates the tie rules on the niche gate', () => {
+    const prompt = buildCompetitorPrompt([inputProfile], [makeProfile()])
+    expect(prompt).toContain('apply ONLY to candidates that already passed the niche gate')
+  })
+})
+
 describe('buildPreferenceBlock (Phase 3, 3b)', () => {
   it('returns empty string when there are no exemplars', () => {
     expect(buildPreferenceBlock({ saved: [], dismissed: [] })).toBe('')

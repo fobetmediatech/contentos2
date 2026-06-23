@@ -32,6 +32,7 @@ export interface ApifyProfileRaw {
   profilePicUrl: string
   verified: boolean
   isBusinessAccount: boolean
+  businessCategoryName?: string | null
   private: boolean
   latestPosts: ApifyPost[]
   relatedProfiles: ApifyRelatedProfile[]
@@ -60,6 +61,8 @@ export interface NormalizedProfile {
   profilePicUrl: string
   verified: boolean
   isBusinessAccount: boolean
+  /** Instagram's own business/creator category, e.g. "Digital creator", "Finance". undefined when absent. */
+  businessCategoryName?: string
 
   // Computed engagement metrics
   avgLikes: number
@@ -228,6 +231,9 @@ export function normalizeProfile(raw: ApifyProfileRaw): NormalizedProfile {
     profilePicUrl: sanitizeProfilePicUrl(raw.profilePicUrl),
     verified: raw.verified ?? false,
     isBusinessAccount: raw.isBusinessAccount ?? false,
+    businessCategoryName: typeof raw.businessCategoryName === 'string' && raw.businessCategoryName.trim()
+      ? raw.businessCategoryName.trim()
+      : undefined,
     avgLikes,
     avgComments,
     engagementRate,

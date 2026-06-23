@@ -80,7 +80,7 @@ export async function scrapeHashtagUsernames(
   hashtags: string[],
   apifyKeys: string[],
   signal?: AbortSignal,
-  perHashtag = 20,
+  perHashtag = 35,
 ): Promise<string[]> {
   if (hashtags.length === 0) return []
 
@@ -198,10 +198,11 @@ export async function discoverCompetitors(
   candidateHandles.forEach((h) => seenHandles.add(h.toLowerCase()))
 
   // Compute hashtag handles first (filtered against round1+round2 seen set).
-  // Cap at 20 (2 batches) — beyond this the timing cost exceeds the pool quality gain.
+  // Cap at 40 (4 batches) — the content-niche path is the highest-precision source and
+  // feeds the small on-niche accounts Trending needs, so we give it more reach than Round 3.
   const hashtagHandles = hashtagUsernames
     .filter((h) => !seenHandles.has(h))
-    .slice(0, 20)
+    .slice(0, 40)
 
   devLog(`[hashtag] ${hashtagHandles.length} net-new handles from content-niche expansion (${uniqueHashtags.slice(0, 5).join(', ')})`)
 

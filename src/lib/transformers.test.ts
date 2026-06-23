@@ -204,6 +204,18 @@ describe('normalizeProfile — hashtag noise filtering (relevance fix)', () => {
   })
 })
 
+describe('normalizeProfile — businessCategoryName mapping', () => {
+  it('maps a present businessCategoryName', () => {
+    expect(normalizeProfile(makeRaw({ businessCategoryName: 'Digital creator' })).businessCategoryName).toBe('Digital creator')
+  })
+
+  it('is undefined when absent, blank, or null', () => {
+    expect(normalizeProfile(makeRaw({})).businessCategoryName).toBeUndefined()
+    expect(normalizeProfile(makeRaw({ businessCategoryName: '   ' })).businessCategoryName).toBeUndefined()
+    expect(normalizeProfile(makeRaw({ businessCategoryName: null })).businessCategoryName).toBeUndefined()
+  })
+})
+
 describe('normalizeProfile — lastPostDate ignores pinned-post ordering', () => {
   it('returns the newest timestamp even when latestPosts[0] is an old pinned post', () => {
     const raw = makeRaw({
