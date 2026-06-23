@@ -176,6 +176,69 @@ describe('buildCompetitorPrompt — clarificationAnswer injection', () => {
   })
 })
 
+describe('buildCompetitorPrompt — count instruction (recall fix)', () => {
+  // inputProfile carries topHashtags, but hashtags are an INFERRED signal and must
+  // NOT relax the count. Only a human niche filter (context/answer) grants "up to".
+  it('uses "exactly" when only hashtag signals are present (no human niche filter)', () => {
+    const prompt = buildCompetitorPrompt([inputProfile], [makeProfile()])
+    expect(prompt).toContain('select exactly')
+    expect(prompt).not.toContain('select up to')
+  })
+
+  it('uses "up to" when an explicit nicheContext is provided', () => {
+    const prompt = buildCompetitorPrompt([inputProfile], [makeProfile()], 'fitness coaching niche')
+    expect(prompt).toContain('select up to')
+  })
+
+  it('still injects NICHE DERIVATION on hashtag-only runs (niche guard stays on)', () => {
+    // The count gate and the niche-derivation gate are decoupled: hashtag-only runs
+    // get "exactly" for the count but KEEP the niche-derivation chain-of-thought.
+    const prompt = buildCompetitorPrompt([inputProfile], [makeProfile()])
+    expect(prompt).toContain('NICHE DERIVATION')
+  })
+})
+
+describe('buildCompetitorPrompt — v2 candidate signals + Trending hardening', () => {
+  it("includes the candidate's own hashtags and IG category in its line", () => {
+    const c = makeProfile({ username: 'nichecreator', topHashtags: ['marketing', 'startups'], businessCategoryName: 'Entrepreneur' })
+    const line = buildCompetitorPrompt([inputProfile], [c]).split('\n').find((l) => l.includes('@nichecreator')) ?? ''
+    expect(line).toContain('hashtags: #marketing #startups')
+    expect(line).toContain('category: Entrepreneur')
+  })
+
+  it('makes the niche gate absolute and decouples Trending fill pressure', () => {
+    const prompt = buildCompetitorPrompt([inputProfile], [makeProfile()])
+    expect(prompt).toContain('NICHE GATE IS ABSOLUTE')
+    expect(prompt).toContain('relevance beats quota')
+  })
+
+  it('requires niche-relevance first for Trending and supplies an ER benchmark + N/A rule', () => {
+    const prompt = buildCompetitorPrompt([inputProfile], [makeProfile()])
+    expect(prompt).toContain('NICHE-RELEVANT set ONLY')
+    expect(prompt).toContain('Typical ER by follower tier')
+    expect(prompt).toContain('do NOT place it in Trending')
+  })
+
+  it('gates the tie rules on the niche gate', () => {
+    const prompt = buildCompetitorPrompt([inputProfile], [makeProfile()])
+    expect(prompt).toContain('apply ONLY to candidates that already passed the niche gate')
+  })
+
+  it('labels sub-10K accounts [MICRO] and bars them from Trending', () => {
+    const micro = makeProfile({ username: 'nanoacct', followersCount: 1_200 })
+    const prompt = buildCompetitorPrompt([inputProfile], [micro])
+    const line = prompt.split('\n').find((l) => l.includes('@nanoacct')) ?? ''
+    expect(line).toContain('[MICRO:')
+    expect(prompt).toContain('NOT eligible for Trending')
+  })
+
+  it('does not flag accounts at or above the 10K floor as [MICRO]', () => {
+    const ok = makeProfile({ username: 'midcreator', followersCount: 25_000 })
+    const line = buildCompetitorPrompt([inputProfile], [ok]).split('\n').find((l) => l.includes('@midcreator')) ?? ''
+    expect(line).not.toContain('[MICRO')
+  })
+})
+
 describe('buildPreferenceBlock (Phase 3, 3b)', () => {
   it('returns empty string when there are no exemplars', () => {
     expect(buildPreferenceBlock({ saved: [], dismissed: [] })).toBe('')

@@ -33,9 +33,9 @@ export const COMPETITOR_CATEGORIES: Record<string, CategoryDef> = {
   trending: {
     id: 'trending',
     label: 'Trending',
-    sectionLabel: 'Trending 5 — Growing Accounts',
+    sectionLabel: 'Trending 5 — Rising Niche Accounts',
     taxonomy:
-      'Accounts in their growth phase — ER significantly exceeds what is typical for their follower tier, signalling active momentum. Typically under 500K followers; accounts with 500K+ followers are established players (Top category) regardless of ER. Rising creators (under 100K) and fast-growing mid-tier accounts (100K–500K) with high relative engagement are the target.',
+      'Rising creators with real traction in the SAME niche as the reference accounts — roughly 10K–500K followers. Niche membership is REQUIRED first — engagement rate is only the tiebreaker WITHIN the niche, never a substitute for it. Among niche-relevant accounts, prioritise those whose ER outpaces what is typical for their follower tier, signalling active momentum. EXCLUDE nano/micro accounts under ~10K followers: their ER is inflated by a tiny follower count and they are not meaningful competitors. 500K+ accounts are established players (Top) regardless of ER. NEVER include an off-niche or nano account here just because its engagement is high.',
     badgeBg: 'bg-[rgba(224,123,58,0.12)]',
     badgeText: 'text-[#E07B3A]',
   },
