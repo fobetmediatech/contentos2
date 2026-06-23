@@ -13,6 +13,7 @@ import type {
 import type { DeepNicheReport } from '../ai/prompts/deepReelAnalysis'
 import { copyToClipboard, downloadMarkdown, formatDeepReportMarkdown } from '../shared/utils/export'
 import { ReelCaseStudyCard } from './ReelCaseStudyCard'
+import { HookSummaryCard } from './HookSummaryCard'
 
 const REEL_STEPS = ['Scraping reels', 'Analyzing hooks', 'Done']
 
@@ -254,6 +255,7 @@ function CreatorSection({ state, singleHandle }: { state: CreatorAnalysisState; 
       {expanded && (
         singleHandle ? (
           <div className="flex flex-col gap-4">
+            {state.hookSummary && <HookSummaryCard summary={state.hookSummary} />}
             {state.reels.map(reel => (
               <ReelCaseStudyCard
                 key={reel.shortCode}
