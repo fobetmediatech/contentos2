@@ -115,4 +115,41 @@ describe('scrapeReelVideos', () => {
     expect(out.size).toBe(1)
     expect(out.has('a')).toBe(true)
   })
+
+  const reelUrls = (n: number) => Array.from({ length: n }, (_, i) => `https://www.instagram.com/reel/r${i}/`)
+
+  it('chunks a large batch into multiple smaller runs and aggregates the videos', async () => {
+    // 6 reels with chunk size 4 -> 2 runs (so no single run has to download all 10).
+    mocks.fetchDataset
+      .mockResolvedValueOnce([
+        { shortCode: 'r0', downloadedVideo: 'u0' },
+        { shortCode: 'r1', downloadedVideo: 'u1' },
+        { shortCode: 'r2', downloadedVideo: 'u2' },
+        { shortCode: 'r3', downloadedVideo: 'u3' },
+      ])
+      .mockResolvedValueOnce([
+        { shortCode: 'r4', downloadedVideo: 'u4' },
+        { shortCode: 'r5', downloadedVideo: 'u5' },
+      ])
+    const out = await scrapeReelVideos(reelUrls(6), ['key-1'])
+    expect(mocks.startRun).toHaveBeenCalledTimes(2) // chunked, not one giant run
+    expect(out.size).toBe(6)
+    expect(out.get('r5')).toBe('u5')
+  })
+
+  it('returns the partial videos when ONE chunk times out (does not fail the whole creator)', async () => {
+    // 6 reels -> 2 chunks: first chunk succeeds, second times out.
+    mocks.pollRun
+      .mockResolvedValueOnce('d')
+      .mockRejectedValueOnce(new ApifyError('POLL_TIMEOUT', 'Run did not complete within 240s', 0))
+    mocks.fetchDataset.mockResolvedValueOnce([{ shortCode: 'r0', downloadedVideo: 'u0' }])
+    const out = await scrapeReelVideos(reelUrls(6), ['key-1'])
+    expect(out.size).toBe(1)
+    expect(out.get('r0')).toBe('u0') // the timed-out chunk's reels are simply absent (skipped downstream)
+  })
+
+  it('throws POLL_TIMEOUT only when every chunk times out (nothing resolved)', async () => {
+    mocks.pollRun.mockRejectedValue(new ApifyError('POLL_TIMEOUT', 'Run did not complete within 240s', 0))
+    await expect(scrapeReelVideos(reelUrls(6), ['key-1'])).rejects.toMatchObject({ code: 'POLL_TIMEOUT' })
+  })
 })

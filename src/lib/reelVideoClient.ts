@@ -15,11 +15,18 @@
  * that reel skipped). Direct reel URLs avoid the IG block that profile scrapes hit.
  */
 
-import { startRun, pollRun, fetchDataset, ApifyError, apifyRunLimiter, withKeyFailover } from './apifyCore'
+import { startRun, pollRun, fetchDataset, ApifyError, apifyRunLimiter, withKeyFailover, chunk } from './apifyCore'
 import { ACTORS, buildReelVideoScraperInput } from './actors'
 
-// Video download (10 reels) is slower than a list scrape — give it a wider poll budget.
+// Video download is slower than a list scrape — give each run a wide poll budget.
 const VIDEO_POLL_MS = 240_000
+
+// Resolve videos in SMALL chunks rather than one giant run. A single run for all ~10 reels
+// has to download every video before the run SUCCEEDS, which for some accounts blows past the
+// poll budget (POLL_TIMEOUT) and — because it's one all-or-nothing run — fails the whole
+// creator. Chunking keeps each run short (≤ this many videos) and makes a slow/timed-out chunk
+// cost only its own reels: the rest still resolve, and downstream those reels are just skipped.
+const VIDEO_CHUNK_SIZE = 4
 
 // ----- Raw item shape from apify~instagram-reel-scraper -----
 interface RawReelVideoItem {
@@ -65,20 +72,53 @@ export async function scrapeReelVideos(
 ): Promise<Map<string, string>> {
   if (reelUrls.length === 0) return new Map()
 
+  // Split into small chunks and resolve each as its own (limiter-gated) run. The shared
+  // apifyRunLimiter(3) still bounds total concurrency; chunks land on distinct keys.
+  const chunks = chunk(reelUrls, VIDEO_CHUNK_SIZE)
+  const results = await Promise.all(chunks.map((urls) => scrapeReelVideoChunk(urls, apifyKeys, signal)))
+  if (signal?.aborted) return new Map()
+
+  const videos = new Map<string, string>()
+  let firstError: ApifyError | null = null
+  let anyBlocked = false
+  for (const r of results) {
+    for (const [code, url] of r.videos) videos.set(code, url)
+    if (r.error && !firstError) firstError = r.error
+    if (r.blocked) anyBlocked = true
+  }
+
+  // As long as SOMETHING resolved, return the partial map — a slow/blocked chunk just loses its
+  // own reels (skipped downstream). Only surface a hard failure when nothing resolved at all.
+  if (videos.size > 0) return videos
+  if (firstError) throw firstError // POLL_TIMEOUT / RATE_LIMITED / RUN_FAILED from a chunk
+  if (anyBlocked) throw new ApifyError('RUN_FAILED', 'Reel video scrape was blocked — try again', 0)
+  return videos // empty: every chunk returned items but none had a downloadable video
+}
+
+/** Resolve one chunk's videos. Never throws except on abort — a timed-out/blocked/rate-limited
+ *  chunk resolves to an empty map with the reason recorded so the caller can decide. */
+async function scrapeReelVideoChunk(
+  reelUrls: string[],
+  apifyKeys: string[],
+  signal?: AbortSignal,
+): Promise<{ videos: Map<string, string>; blocked: boolean; error: ApifyError | null }> {
   return apifyRunLimiter(async () => {
     const input = buildReelVideoScraperInput(reelUrls)
-    // Per-run key failover: a tapped-out account (402) rolls over to a funded key.
-    const raw = await withKeyFailover(apifyKeys, async (apiKey) => {
-      const { runId, datasetId, keyIndex } = await startRun(ACTORS.REEL_VIDEO_SCRAPER, input, apiKey, signal)
-      await pollRun(runId, apiKey, signal, VIDEO_POLL_MS, keyIndex)
-      return fetchDataset<RawReelVideoItem>(datasetId, apiKey, signal, keyIndex)
-    })
-
-    const { videos, errors } = extractReelVideos(raw)
-    // Fully blocked (IG anti-bot): no videos AND every item errored -> creator failed.
-    if (videos.size === 0 && errors > 0) {
-      throw new ApifyError('RUN_FAILED', 'Reel video scrape was blocked — try again', 0)
+    try {
+      // Per-run key failover: a tapped-out account (402) rolls over to a funded key.
+      const raw = await withKeyFailover(apifyKeys, async (apiKey) => {
+        const { runId, datasetId, keyIndex } = await startRun(ACTORS.REEL_VIDEO_SCRAPER, input, apiKey, signal)
+        await pollRun(runId, apiKey, signal, VIDEO_POLL_MS, keyIndex)
+        return fetchDataset<RawReelVideoItem>(datasetId, apiKey, signal, keyIndex)
+      })
+      const { videos, errors } = extractReelVideos(raw)
+      return { videos, blocked: videos.size === 0 && errors > 0, error: null }
+    } catch (err) {
+      // Abort propagates (the whole run is being cancelled); any other ApifyError (POLL_TIMEOUT,
+      // RUN_FAILED, RATE_LIMITED) is contained so the other chunks still count.
+      if (err instanceof ApifyError && err.code === 'ABORTED') throw err
+      const error = err instanceof ApifyError ? err : new ApifyError('RUN_FAILED', 'Reel video chunk failed', 0)
+      return { videos: new Map<string, string>(), blocked: false, error }
     }
-    return videos
   })
 }

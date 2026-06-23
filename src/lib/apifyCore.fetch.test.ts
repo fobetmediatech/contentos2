@@ -263,6 +263,37 @@ describe('pollRun — terminal states', () => {
     expect(dsId).toBe('ds-1')
     expect(mockFn).toHaveBeenCalledTimes(2)
   })
+
+  it('uses an IDLE timeout — a still-answering run keeps polling past the idle budget (deadline resets)', async () => {
+    vi.useFakeTimers()
+    try {
+      const running = () => ({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ data: { id: 'run-1', status: 'RUNNING', defaultDatasetId: 'ds-1' } }),
+      })
+      const succeeded = {
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ data: { id: 'run-1', status: 'SUCCEEDED', defaultDatasetId: 'ds-1' } }),
+      }
+      const mockFn = vi.fn()
+        .mockResolvedValueOnce(running())
+        .mockResolvedValueOnce(running())
+        .mockResolvedValueOnce(running())
+        .mockResolvedValueOnce(succeeded)
+      vi.stubGlobal('fetch', mockFn)
+      // Idle budget 6s. The run answers RUNNING at ~0/2/5s then SUCCEEDS at ~9.5s — PAST the 6s
+      // budget but under the 12s hard ceiling. A non-resetting (old wall-clock) deadline would
+      // POLL_TIMEOUT before the SUCCEEDED poll; the idle-reset keeps it alive to finish.
+      const p = pollRun('run-1', 'k', undefined, 6000)
+      await vi.advanceTimersByTimeAsync(20_000)
+      await expect(p).resolves.toBe('ds-1')
+      expect(mockFn).toHaveBeenCalledTimes(4)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
 
 // ----- fetchDataset -----
