@@ -20,6 +20,7 @@ import {
   buildDeepPlaybook,
   buildDeepReportTable,
   synthesizeDeepReport,
+  synthesizeCreatorHooks,
 } from '../lib/reelAnalyzer'
 import type { DeepReelStatus, ReelCaseStatus } from '../store/reelAnalysisStore'
 
@@ -173,6 +174,7 @@ export function useReelAnalysis() {
     setReelConversationId,
     setCreatorState,
     setDeepReel,
+    setHookSummary,
     setSynthesis,
     setSynthesisError,
     setSynthesisStatus,
@@ -258,7 +260,12 @@ export function useReelAnalysis() {
       }
       await runCreatorHookmapPipeline(handles[0], apifyKeys, controller.signal)
       if (controller.signal.aborted) return
-      // Phase 2.3 wires synthesizeCreatorHooks here.
+      const creator = useReelAnalysisStore.getState().creatorStates[handles[0]]
+      if (creator?.caseStudies && Object.keys(creator.caseStudies).length > 0) {
+        const summary = await synthesizeCreatorHooks(handles[0], creator.caseStudies, creator.reels, geminiKeys, controller.signal)
+        if (controller.signal.aborted) return
+        if (summary) setHookSummary(handles[0], summary)
+      }
       // Corpus harvest (transcript+thumbnail) still fires via ChatPage synthesis effect / existing path.
       return
     }

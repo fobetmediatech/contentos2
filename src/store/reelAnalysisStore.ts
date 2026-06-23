@@ -11,6 +11,7 @@ import { supabaseStorage } from './supabaseStorage'
 import { isCleanReelRun } from './reelPersist'
 import type { DeepReelAnalysis, DeepNicheReport } from '../ai/prompts/deepReelAnalysis'
 import type { SingleReelResult } from './singleReelStore'
+import type { CreatorHookSummary } from '../ai/prompts/creatorHookSummary'
 
 // ----- Creator status -----
 
@@ -67,6 +68,7 @@ export interface CreatorAnalysisState {
   transcripts?: Record<string, string>
   caseStudies?: Record<string, SingleReelResult>       // keyed by shortCode (HookMap full result)
   caseStudyStatus?: Record<string, ReelCaseStatus>     // keyed by shortCode (progressive per reel)
+  hookSummary?: CreatorHookSummary                      // creator-level summary from case studies (profile HookMap)
   error?: string
   // ----- Deep (multimodal) enrichment — Phase-1 reel intelligence -----
   // Optional: only the deep-report run populates these; the quick path leaves
@@ -128,6 +130,8 @@ interface ReelAnalysisState {
     shortCode: string,
     partial: { status?: ReelCaseStatus; result?: SingleReelResult },
   ) => void
+  /** Merge a creator-level hook summary into a creator's state. */
+  setHookSummary: (handle: string, summary: CreatorHookSummary) => void
   setSynthesis: (output: SynthesisOutput) => void
   setSynthesisStatus: (status: ReelAnalysisState['synthesisStatus']) => void
   setSynthesisError: (msg: string) => void
@@ -201,6 +205,18 @@ export const useReelAnalysisStore = create<ReelAnalysisState>()(persist((set) =>
         creatorStates: {
           ...prev.creatorStates,
           [handle]: { ...creator, caseStudyStatus, caseStudies },
+        },
+      }
+    }),
+
+  setHookSummary: (handle, summary) =>
+    set((prev) => {
+      const creator = prev.creatorStates[handle]
+      if (!creator) return {} // never create a creator from a hook summary update — pipeline seeds it
+      return {
+        creatorStates: {
+          ...prev.creatorStates,
+          [handle]: { ...creator, hookSummary: summary },
         },
       }
     }),
