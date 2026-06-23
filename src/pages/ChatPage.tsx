@@ -330,8 +330,7 @@ export function ChatPage() {
   const snapshotCurrentReelRun = () => {
     const s = useReelAnalysisStore.getState()
     const terminal =
-      s.synthesisStatus === 'done' || s.synthesisStatus === 'failed' ||
-      s.deepReportStatus === 'done' || s.deepReportStatus === 'failed'
+      s.synthesisStatus === 'done' || s.synthesisStatus === 'failed'
     if (!s.reelConversationId || s.activeHandles.length === 0 || !terminal) return
     addMessageTo(s.reelConversationId, {
       role: 'assistant',
@@ -341,7 +340,6 @@ export function ChatPage() {
         handles: s.activeHandles,
         creatorStates: s.creatorStates,
         synthesis: s.synthesis,
-        deepReport: s.deepReport,
       }),
     })
   }

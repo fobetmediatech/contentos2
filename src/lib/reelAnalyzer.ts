@@ -3,7 +3,6 @@
  *
  * Main exports:
  *   analyzeReel       — quick caption-only classification via Gemini (hook archetype, retention)
- *   analyzeReelDeep   — DEEP multimodal analysis via the Vercel function (watches the video)
  *   synthesizeNiche   — synthesize cross-creator niche insights from per-creator summaries
  *
  * Plus a helper:
@@ -11,9 +10,7 @@
  */
 
 import { callGeminiWithSchema } from '../ai/gemini'
-import { getClerkSessionToken } from './clerkToken'
 import { buildReelAnalysisPrompt, REEL_ANALYSIS_SCHEMA, buildReelAnalysisBatchPrompt, REEL_ANALYSIS_BATCH_SCHEMA, buildSynthesisPrompt, SYNTHESIS_SCHEMA } from '../ai/prompts/reelAnalysis'
-import { buildDeepReportPrompt, DEEP_REPORT_SCHEMA } from '../ai/prompts/deepReelAnalysis'
 import {
   buildMapPrompt,
   buildReducePrompt,
@@ -33,80 +30,11 @@ import { devWarn } from './devLog'
 import type { SingleReelResult } from '../store/singleReelStore'
 import { getCachedQuick, setCachedQuick } from './quickReelCache'
 import type {
-  DeepReelAnalysis,
-  DeepCreatorPlaybook,
-  DeepReportSynthesis,
-  DeepReportComparisonRow,
-  DeepReportExemplar,
-  DeepNicheReport,
-} from '../ai/prompts/deepReelAnalysis'
-import type {
   ReelData,
   ReelAnalysis,
   PerCreatorSummary,
   SynthesisOutput,
-  StoredDeepReelAnalysis,
 } from '../store/reelAnalysisStore'
-
-/** Same-origin Vercel function that does the multimodal video analysis (server-side). */
-const ANALYZE_REEL_FN = '/api/analyze-reel-video'
-
-/** Thrown when the deep-analysis function call fails; carries the HTTP status. */
-export class DeepAnalysisError extends Error {
-  status: number
-  constructor(message: string, status: number) {
-    super(message)
-    this.name = 'DeepAnalysisError'
-    this.status = status
-  }
-}
-
-/**
- * Deep, video-grounded analysis of a single reel.
- *
- * POSTs the STABLE downloadedVideo URL (resolved client-side by reelVideoClient)
- * to the Vercel function, which fetches the bytes + runs Gemini multimodal and
- * returns a DeepReelAnalysis. commentsLikesRatio is computed here (client-side,
- * deterministic), matching the quick-path convention.
- *
- * Throws DeepAnalysisError on failure so the orchestrator can mark the reel failed
- * (never surfaces raw server text to the UI).
- */
-export async function analyzeReelDeep(
-  reel: ReelData,
-  downloadedVideoUrl: string,
-  signal?: AbortSignal,
-): Promise<StoredDeepReelAnalysis> {
-  // Auth: the function verifies the Clerk session JWT server-side. The old
-  // VITE_REEL_FN_SECRET shared-secret header was removed — a static secret in
-  // the public bundle gates nothing.
-  const reqBody = JSON.stringify({ downloadedVideoUrl, shortCode: reel.shortCode, caption: reel.caption })
-  const post = async (): Promise<Response> => {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    const token = await getClerkSessionToken()
-    if (token) headers['Authorization'] = `Bearer ${token}`
-    return fetch(ANALYZE_REEL_FN, { method: 'POST', headers, body: reqBody, signal })
-  }
-
-  let res: Response
-  try {
-    res = await post()
-    // A 401 here under the deep report's concurrent burst is almost always a transient token
-    // miss — retry ONCE with a freshly fetched (coalesced) token before failing the reel.
-    if (res.status === 401) res = await post()
-  } catch (err) {
-    if (signal?.aborted || (err as { name?: string })?.name === 'AbortError') {
-      throw new DeepAnalysisError('Aborted', 0)
-    }
-    throw new DeepAnalysisError('Deep analysis request failed', 0)
-  }
-
-  if (!res.ok) throw new DeepAnalysisError('Deep analysis failed', res.status)
-
-  const body = (await res.json()) as { analysis: DeepReelAnalysis }
-  const commentsLikesRatio = reel.commentsCount / Math.max(1, reel.likesCount)
-  return { ...body.analysis, commentsLikesRatio }
-}
 
 // ---------------------------------------------------------------------------
 // analyzeReel
@@ -547,146 +475,6 @@ export function computeBenchmarks(reels: ReelData[]): SynthesisOutput['benchmark
     medianViews: computeMedian(reels.map((r) => r.videoViewCount)),
     likesViewsRatio: totalViews > 0 ? totalLikes / totalViews : 0,
     commentsLikesRatio: totalLikes > 0 ? totalComments / totalLikes : 0,
-  }
-}
-
-// ---------------------------------------------------------------------------
-// buildDeepPlaybook (Phase 2)
-// ---------------------------------------------------------------------------
-
-/**
- * Build a per-creator deep playbook from the video-grounded DeepReelAnalysis set.
- *
- * Pure / code-computed (no LLM): archetype distribution, dominant + secondary archetype,
- * mean hook score, median views, a consistency score (how concentrated the archetype mix
- * is), and the standout exemplar (highest hookScore, views as tiebreak) whose
- * replicationTemplate becomes the creator's signature template.
- *
- * @param deepAnalyses  shortCode -> StoredDeepReelAnalysis (only `done` reels)
- * @param reels         the creator's reels (for view counts, keyed by shortCode)
- */
-export function buildDeepPlaybook(
-  handle: string,
-  deepAnalyses: Record<string, StoredDeepReelAnalysis>,
-  reels: ReelData[],
-): DeepCreatorPlaybook {
-  const entries = Object.entries(deepAnalyses)
-  const reelCount = entries.length
-  const viewsByShort = new Map(reels.map((r) => [r.shortCode, r.videoViewCount]))
-
-  // Archetype frequency, sorted desc.
-  const freq: Record<string, number> = {}
-  for (const [, a] of entries) freq[a.hookArchetype] = (freq[a.hookArchetype] ?? 0) + 1
-  const archetypeDistribution = Object.entries(freq)
-    .map(([archetype, count]) => ({ archetype, count }))
-    .sort((x, y) => y.count - x.count)
-
-  const dominantArchetype = archetypeDistribution[0]?.archetype ?? ''
-  const secondaryArchetype =
-    archetypeDistribution.length >= 2 && archetypeDistribution[1].archetype !== dominantArchetype
-      ? archetypeDistribution[1].archetype
-      : undefined
-
-  const avgHookScore = reelCount > 0 ? entries.reduce((s, [, a]) => s + a.hookScore, 0) / reelCount : 0
-  const consistencyScore = reelCount > 0 ? (archetypeDistribution[0]?.count ?? 0) / reelCount : 0
-  const medianViews = computeMedian(entries.map(([sc]) => viewsByShort.get(sc) ?? 0))
-
-  // Standout exemplar: highest hookScore, views as tiebreak.
-  let topExemplar: DeepCreatorPlaybook['topExemplar'] = null
-  let bestRank = -1
-  for (const [shortCode, a] of entries) {
-    const views = viewsByShort.get(shortCode) ?? 0
-    const rank = a.hookScore * 1e12 + views
-    if (rank > bestRank) {
-      bestRank = rank
-      topExemplar = {
-        shortCode,
-        hookArchetype: a.hookArchetype,
-        hookScore: a.hookScore,
-        spokenHookVerbatim: a.spokenHookVerbatim,
-        visualOpening: a.visualOpening,
-        views,
-      }
-    }
-  }
-  const signatureTemplate = topExemplar ? deepAnalyses[topExemplar.shortCode].replicationTemplate : ''
-
-  return {
-    handle,
-    reelCount,
-    archetypeDistribution,
-    dominantArchetype,
-    secondaryArchetype,
-    avgHookScore,
-    medianViews,
-    consistencyScore,
-    signatureTemplate,
-    topExemplar,
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Cross-profile niche report (Phase 2)
-// ---------------------------------------------------------------------------
-
-type DeepReportTable = Pick<DeepNicheReport, 'archetypeDistribution' | 'comparison' | 'topExemplars'>
-
-/**
- * Code-computed half of the niche report: cross-creator archetype distribution, a
- * comparison row per creator, and the top exemplar reels across all creators (sorted
- * by hookScore, views as tiebreak). Deterministic — no LLM (mirrors computeBenchmarks).
- */
-export function buildDeepReportTable(playbooks: DeepCreatorPlaybook[]): DeepReportTable {
-  const freq: Record<string, number> = {}
-  for (const p of playbooks) {
-    for (const d of p.archetypeDistribution) freq[d.archetype] = (freq[d.archetype] ?? 0) + d.count
-  }
-  const archetypeDistribution = Object.entries(freq)
-    .map(([archetype, count]) => ({ archetype, count }))
-    .sort((a, b) => b.count - a.count)
-
-  const comparison: DeepReportComparisonRow[] = playbooks.map((p) => ({
-    handle: p.handle,
-    reelCount: p.reelCount,
-    avgHookScore: Number(p.avgHookScore.toFixed(1)),
-    medianViews: p.medianViews,
-    dominantArchetype: p.dominantArchetype,
-  }))
-
-  const topExemplars: DeepReportExemplar[] = []
-  for (const p of playbooks) {
-    if (p.topExemplar) topExemplars.push({ handle: p.handle, ...p.topExemplar })
-  }
-  topExemplars.sort((a, b) => b.hookScore * 1e12 + b.views - (a.hookScore * 1e12 + a.views))
-
-  return { archetypeDistribution, comparison, topExemplars }
-}
-
-/**
- * Gemini-synthesized half of the niche report: who's winning + why, the niche's winning
- * formula, gaps, and actionable replicate/avoid/test. Coerces/guards the LLM output
- * (mirrors synthesizeNiche) so a missing/mistyped field can't crash the report.
- */
-export async function synthesizeDeepReport(
-  playbooks: DeepCreatorPlaybook[],
-  geminiKey: string | string[],
-  signal?: AbortSignal,
-): Promise<DeepReportSynthesis> {
-  const raw = await callGeminiWithSchema<Partial<DeepReportSynthesis>>(
-    geminiKey,
-    buildDeepReportPrompt(playbooks),
-    DEEP_REPORT_SCHEMA,
-    { temperature: 0.4, thinkingBudget: 0, signal },
-  )
-  const str = (v: unknown): string => (typeof v === 'string' ? v : '')
-  const arr = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])
-  return {
-    whoIsWinning: str(raw.whoIsWinning),
-    nicheFormula: str(raw.nicheFormula),
-    gaps: arr(raw.gaps),
-    replicate: arr(raw.replicate),
-    avoid: arr(raw.avoid),
-    test: arr(raw.test),
   }
 }
 
