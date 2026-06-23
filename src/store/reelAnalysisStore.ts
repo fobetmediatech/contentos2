@@ -10,6 +10,7 @@ import { persist } from 'zustand/middleware'
 import { supabaseStorage } from './supabaseStorage'
 import { isCleanReelRun } from './reelPersist'
 import type { DeepReelAnalysis, DeepNicheReport } from '../ai/prompts/deepReelAnalysis'
+import type { SingleReelResult } from './singleReelStore'
 
 // ----- Creator status -----
 
@@ -20,6 +21,10 @@ export type CreatorStatus = 'idle' | 'scraping' | 'analyzing' | 'done' | 'no-ree
 // its own lifecycle independent of the creator-level status (R2: partial results
 // never block on one failure).
 export type DeepReelStatus = 'pending' | 'fetching' | 'analyzing' | 'done' | 'failed' | 'skipped'
+
+// ----- Case-study (HookMap deep analysis) per-reel status -----
+// Profile HookMap: single-reel case-study analysis for profile-level deep reports
+export type ReelCaseStatus = 'pending' | 'analyzing' | 'done' | 'skipped' | 'failed'
 
 /** A DeepReelAnalysis with the client-computed commentsLikesRatio attached. */
 export interface StoredDeepReelAnalysis extends DeepReelAnalysis {
@@ -60,6 +65,8 @@ export interface CreatorAnalysisState {
   /** Full spoken transcripts per reel (keyed by shortCode), produced by the single-reel
    *  analyzer enrichment pass. Optional — only populated once transcription completes. */
   transcripts?: Record<string, string>
+  caseStudies?: Record<string, SingleReelResult>       // keyed by shortCode (HookMap full result)
+  caseStudyStatus?: Record<string, ReelCaseStatus>     // keyed by shortCode (progressive per reel)
   error?: string
   // ----- Deep (multimodal) enrichment — Phase-1 reel intelligence -----
   // Optional: only the deep-report run populates these; the quick path leaves
@@ -114,6 +121,12 @@ interface ReelAnalysisState {
     handle: string,
     shortCode: string,
     partial: { status?: DeepReelStatus; analysis?: StoredDeepReelAnalysis },
+  ) => void
+  /** Merge a single reel's case-study status and/or result into a creator's case-study maps. */
+  setReelCaseStudy: (
+    handle: string,
+    shortCode: string,
+    partial: { status?: ReelCaseStatus; result?: SingleReelResult },
   ) => void
   setSynthesis: (output: SynthesisOutput) => void
   setSynthesisStatus: (status: ReelAnalysisState['synthesisStatus']) => void
@@ -176,6 +189,22 @@ export const useReelAnalysisStore = create<ReelAnalysisState>()(persist((set) =>
       }
     }),
 
+  setReelCaseStudy: (handle, shortCode, partial) =>
+    set((prev) => {
+      const creator = prev.creatorStates[handle]
+      if (!creator) return {} // never create a creator from a case-study update — pipeline seeds it
+      const caseStudyStatus = { ...creator.caseStudyStatus }
+      const caseStudies = { ...creator.caseStudies }
+      if (partial.status) caseStudyStatus[shortCode] = partial.status
+      if (partial.result) caseStudies[shortCode] = partial.result
+      return {
+        creatorStates: {
+          ...prev.creatorStates,
+          [handle]: { ...creator, caseStudyStatus, caseStudies },
+        },
+      }
+    }),
+
   setSynthesis: (output) => set({ synthesis: output, synthesisStatus: 'done' }),
 
   setSynthesisStatus: (status) => set({ synthesisStatus: status }),
@@ -203,9 +232,10 @@ export const useReelAnalysisStore = create<ReelAnalysisState>()(persist((set) =>
     deepReport: s.deepReport,
     deepReportStatus: s.deepReportStatus,
   }),
+  // v3: added optional CreatorAnalysisState.caseStudies and caseStudyStatus (profile HookMap case-study).
   // v2: added optional CreatorAnalysisState.transcripts (single-reel-analyzer enrichment).
-  // Purely additive — old persisted runs deserialize cleanly with transcripts undefined.
-  version: 2,
+  // Purely additive — old persisted runs deserialize cleanly with new fields undefined.
+  version: 3,
   migrate: (state) => state,
   merge: (persisted, current) => {
     const p = (persisted ?? {}) as Partial<ReelAnalysisState>
