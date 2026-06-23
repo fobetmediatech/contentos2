@@ -5,10 +5,12 @@ import { useConversationsStore } from '../store/conversationsStore'
 import { useKeysStore } from '../store/keysStore'
 import { scrapeTopReels, NoReelsError } from '../lib/reelScraper'
 import { scrapeReelVideos } from '../lib/reelVideoClient'
-import { transcribeReels, singleReelFnAvailable } from '../lib/reelTranscriber'
+import { transcribeReels } from '../lib/reelTranscriber'
 import { harvestReelContent } from '../lib/corpusHarvest'
 import { useCorpusStore } from '../store/corpusStore'
 import { getCachedDeep, setCachedDeep } from '../lib/deepReelCache'
+import { getCachedSingleReel, setCachedSingleReel } from '../lib/singleReelCache'
+import { analyzeReelHookmap, singleReelFnAvailable } from '../lib/reelHookmap'
 import {
   analyzeReelsBatch,
   analyzeReelDeep,
@@ -19,7 +21,7 @@ import {
   buildDeepReportTable,
   synthesizeDeepReport,
 } from '../lib/reelAnalyzer'
-import type { DeepReelStatus } from '../store/reelAnalysisStore'
+import type { DeepReelStatus, ReelCaseStatus } from '../store/reelAnalysisStore'
 
 // 2.3: module-scope controller shared across ALL mounted instances of useReelAnalysis
 // (ChatPage + useAgentConversation both mount this hook; per-instance refs meant one
@@ -36,6 +38,9 @@ let mountCount = 0
 // Deep (multimodal) fn-call concurrency. Conservative: the Vercel function uses a
 // SINGLE Gemini key (no server-side rotation), so this caps concurrent Gemini uploads.
 const deepLimiter = pLimit(3)
+
+// HookMap (single-reel case-study) fn-call concurrency. Conservative: same reasoning as deepLimiter.
+const hookmapLimiter = pLimit(3)
 
 /**
  * Preflight: the deep-analysis serverless function (/api/analyze-reel-video) is only served
@@ -88,6 +93,55 @@ async function enrichTranscripts(apifyKeys: string[], signal: AbortSignal) {
   // Re-harvest with transcripts now attached (idempotent upsert by reel id).
   const fresh = useReelAnalysisStore.getState().creatorStates
   void useCorpusStore.getState().rememberContent(harvestReelContent(fresh, Date.now())).catch(() => {})
+}
+
+/**
+ * Single-handle HookMap pipeline (module-scope so it never closes over hook state):
+ * scrape top reels → cache-first analysis → store case studies. For single @handle runs only.
+ * Phase 2.3 will wire synthesizeCreatorHooks here (currently does nothing; just returns).
+ */
+async function runCreatorHookmapPipeline(
+  handle: string, apifyKeys: string[], signal: AbortSignal,
+) {
+  const store = useReelAnalysisStore.getState()
+  try {
+    const reels = await scrapeTopReels(handle, 10, apifyKeys, signal)
+    if (signal.aborted) return
+    const seeded: Record<string, ReelCaseStatus> = {}
+    for (const r of reels) seeded[r.shortCode] = 'pending'
+    store.setCreatorState(handle, { reels, status: 'analyzing', caseStudyStatus: seeded, caseStudies: {} })
+
+    // cache-first; only uncached reels need a video URL + a network analysis
+    const uncached: typeof reels = []
+    for (const r of reels) {
+      const cached = await getCachedSingleReel(r.shortCode)
+      if (cached) store.setReelCaseStudy(handle, r.shortCode, { status: 'done', result: cached })
+      else uncached.push(r)
+    }
+    if (signal.aborted) return
+
+    if (uncached.length > 0) {
+      const videos = await scrapeReelVideos(uncached.map((r) => r.url), apifyKeys, signal)
+      if (signal.aborted) return
+      await Promise.all(uncached.map((reel) => hookmapLimiter(async () => {
+        if (signal.aborted) return
+        const videoUrl = videos.get(reel.shortCode)
+        if (!videoUrl) { store.setReelCaseStudy(handle, reel.shortCode, { status: 'skipped' }); return }
+        store.setReelCaseStudy(handle, reel.shortCode, { status: 'analyzing' })
+        const result = await analyzeReelHookmap(handle, reel, videoUrl, signal)
+        if (signal.aborted) return
+        if (!result) { store.setReelCaseStudy(handle, reel.shortCode, { status: 'failed' }); return }
+        store.setReelCaseStudy(handle, reel.shortCode, { status: 'done', result })
+        void setCachedSingleReel(reel.shortCode, result)
+      })))
+    }
+    if (signal.aborted) return
+    store.setCreatorState(handle, { status: 'done' })
+  } catch (err) {
+    if (signal.aborted) return
+    if (err instanceof NoReelsError) store.setCreatorState(handle, { status: 'no-reels', error: 'No recent Reels found.' })
+    else store.setCreatorState(handle, { status: 'failed', error: 'Analysis failed — the account may be private, or try again.' })
+  }
 }
 
 /**
@@ -196,6 +250,18 @@ export function useReelAnalysis() {
     handles.forEach((handle) =>
       setCreatorState(handle, { handle, status: 'scraping', reels: [], analyses: {} }),
     )
+
+    if (handles.length === 1) {
+      if (!(await singleReelFnAvailable(controller.signal))) {
+        setSynthesisError("Deep reel analysis isn't available in this environment.")
+        return
+      }
+      await runCreatorHookmapPipeline(handles[0], apifyKeys, controller.signal)
+      if (controller.signal.aborted) return
+      // Phase 2.3 wires synthesizeCreatorHooks here.
+      // Corpus harvest (transcript+thumbnail) still fires via ChatPage synthesis effect / existing path.
+      return
+    }
 
     await Promise.allSettled(handles.map((handle) => runCreatorPipeline(handle, controller.signal)))
     if (controller.signal.aborted) return
