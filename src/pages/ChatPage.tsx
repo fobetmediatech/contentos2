@@ -108,7 +108,7 @@ export function ChatPage() {
   // Phase 1 graduated: the turn-based agent loop is THE conversation engine (the old
   // useConversation wizard is retired). Input stays live; a new message steers (latest-wins).
   const agentConv = useAgentConversation()
-  const { answerClarification, isPending: clarificationPending } = useCompetitorAnalysis()
+  const { analyze, answerClarification, isPending: clarificationPending } = useCompetitorAnalysis()
   const { startAnalysis: startReelAnalysis, activeHandles, creatorStates, synthesisStatus, synthesis, synthesisError, reset: resetReel } = useReelAnalysis()
   // Which conversation the current reel run belongs to — gates the live block to that chat and
   // routes its snapshot there on supersede (results-as-messages parity with competitor/discovery).
@@ -563,7 +563,7 @@ export function ChatPage() {
                     onToggleSelect={handleToggleSelect}
                     onClearSelection={() => setSelectedHandles([])}
                     onAnalyzeReels={handleAnalyzeReels}
-                    onStartOver={handleStartOver}
+                    onStartOver={() => void handleCompetitorStartOver(message.result as CompetitorResultPayload)}
                     reelActive={isReelRunning}
                   />
                 ) : message.type === 'result' && message.result?.kind === 'discovery' ? (
