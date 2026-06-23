@@ -109,7 +109,7 @@ export function ChatPage() {
   // useConversation wizard is retired). Input stays live; a new message steers (latest-wins).
   const agentConv = useAgentConversation()
   const { analyze, answerClarification, isPending: clarificationPending } = useCompetitorAnalysis()
-  const { startAnalysis: startReelAnalysis, startDeepReport, activeHandles, creatorStates, synthesisStatus, synthesis, synthesisError, deepReport, deepReportStatus, reset: resetReel } = useReelAnalysis()
+  const { startAnalysis: startReelAnalysis, activeHandles, creatorStates, synthesisStatus, synthesis, synthesisError, reset: resetReel } = useReelAnalysis()
   // Which conversation the current reel run belongs to — gates the live block to that chat and
   // routes its snapshot there on supersede (results-as-messages parity with competitor/discovery).
   const reelConversationId = useReelAnalysisStore((s) => s.reelConversationId)
@@ -368,8 +368,7 @@ export function ChatPage() {
   const snapshotCurrentReelRun = () => {
     const s = useReelAnalysisStore.getState()
     const terminal =
-      s.synthesisStatus === 'done' || s.synthesisStatus === 'failed' ||
-      s.deepReportStatus === 'done' || s.deepReportStatus === 'failed'
+      s.synthesisStatus === 'done' || s.synthesisStatus === 'failed'
     if (!s.reelConversationId || s.activeHandles.length === 0 || !terminal) return
     addMessageTo(s.reelConversationId, {
       role: 'assistant',
@@ -379,7 +378,6 @@ export function ChatPage() {
         handles: s.activeHandles,
         creatorStates: s.creatorStates,
         synthesis: s.synthesis,
-        deepReport: s.deepReport,
       }),
     })
   }
@@ -566,7 +564,7 @@ export function ChatPage() {
                     onClearSelection={() => setSelectedHandles([])}
                     onAnalyzeReels={handleAnalyzeReels}
                     onStartOver={() => void handleCompetitorStartOver(message.result as CompetitorResultPayload)}
-                    reelActive={activeHandles.length > 0}
+                    reelActive={isReelRunning}
                   />
                 ) : message.type === 'result' && message.result?.kind === 'discovery' ? (
                   <DiscoveryResultMessage
@@ -577,7 +575,7 @@ export function ChatPage() {
                     onClearSelection={() => setSelectedHandles([])}
                     onAnalyzeReels={handleAnalyzeReels}
                     onStartOver={handleStartOver}
-                    reelActive={activeHandles.length > 0}
+                    reelActive={isReelRunning}
                   />
                 ) : message.type === 'result' && message.result?.kind === 'reel' ? (
                   // A superseded/finished reel run, snapshotted into this conversation. Renders
@@ -589,7 +587,6 @@ export function ChatPage() {
                       setInputText(text)
                       textareaRef.current?.focus()
                     }}
-                    onDeepReport={(handles) => void startDeepReport(handles)}
                     onStartOver={handleStartOver}
                   />
                 ) : message.type === 'reel' ? (
@@ -619,9 +616,6 @@ export function ChatPage() {
                           setInputText(text)
                           textareaRef.current?.focus()
                         }}
-                        onDeepReport={(handles) => void startDeepReport(handles)}
-                        deepReport={deepReport}
-                        deepReportStatus={deepReportStatus}
                       />
 
                       {isReelDone && (

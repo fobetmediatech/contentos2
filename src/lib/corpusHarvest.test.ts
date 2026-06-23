@@ -161,6 +161,30 @@ describe('harvestReelContent', () => {
     })
   })
 
+  it('falls back to the case-study transcript when state.transcripts has no entry (single-handle HookMap path)', () => {
+    const out = harvestReelContent(
+      states({
+        alice: {
+          handle: 'alice',
+          status: 'done',
+          reels: [{ ...reel('r1'), displayUrl: 'https://cdn/thumb.jpg' }],
+          analyses: {},
+          // No `transcripts` map — the HookMap path stores transcripts on caseStudies.
+          caseStudies: { r1: { transcript: 'case study transcript', segments: [], videoAnalysis: {}, markdown: '# r1' } },
+        },
+      }),
+      7,
+    )
+    expect(out).toHaveLength(1)
+    expect(out[0]).toMatchObject({
+      id: 'r1',
+      caption: 'cap',
+      thumbnailUrl: 'https://cdn/thumb.jpg',
+      videoViewCount: 1000,
+      transcript: 'case study transcript',
+    })
+  })
+
   it('omits thumbnailUrl when displayUrl is empty and transcript when none captured', () => {
     const out = harvestReelContent(
       states({ alice: { handle: 'alice', status: 'done', reels: [reel('r1')], analyses: {} } }),

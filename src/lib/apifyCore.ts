@@ -159,7 +159,14 @@ export async function pollRun(
   maxPollMs?: number,
   keyIndex?: number,
 ): Promise<string> {
-  const deadline = Date.now() + (maxPollMs ?? MAX_POLL_MS)
+  // IDLE (inactivity) timeout, not a hard wall-clock budget. Each successful poll means the run
+  // is alive and we're still connected, so it pushes `deadline` forward — a long-but-progressing
+  // run (e.g. a reel-video download) is never killed mid-flight just for taking a while. The wait
+  // ends only on a STALL (no successful poll for `idleBudget`) or the absolute safety ceiling
+  // (2× the budget — so a genuinely stuck run still can't hang forever).
+  const idleBudget = maxPollMs ?? MAX_POLL_MS
+  const hardCeiling = Date.now() + idleBudget * 2
+  let deadline = Date.now() + idleBudget
   // Echo the starting account back so the proxy reuses it (omitted when absent → legacy path).
   const pin = keyIndex != null ? { keyIndex } : {}
 
@@ -184,7 +191,7 @@ export async function pollRun(
   let transientFailures = 0
   let pollInterval = POLL_INTERVAL_INIT_MS
 
-  while (Date.now() < deadline) {
+  while (Date.now() < deadline && Date.now() < hardCeiling) {
     if (signal?.aborted) {
       // Mid-poll abort: signal fired during an ongoing scrape — tell Apify to stop.
       abortApifyRun()
@@ -222,6 +229,10 @@ export async function pollRun(
     }
 
     transientFailures = 0 // reset on a successful response
+    // A live response — the run is still answering and the connection holds — so push the idle
+    // deadline forward. As long as polls keep landing, the run gets to finish (bounded only by
+    // hardCeiling); the timeout fires only when responses actually stop.
+    deadline = Date.now() + idleBudget
     const json = (await res.json()) as ApifyRunResponse
     const { status } = json.data
     const datasetId = json.data.defaultDatasetId
@@ -237,7 +248,7 @@ export async function pollRun(
   }
 
   abortApifyRun()
-  throw new ApifyError('POLL_TIMEOUT', `Run ${runId} did not complete within ${(maxPollMs ?? MAX_POLL_MS) / 1000}s`, 0)
+  throw new ApifyError('POLL_TIMEOUT', `Run ${runId} stalled — no progress for ${idleBudget / 1000}s`, 0)
 }
 
 /**

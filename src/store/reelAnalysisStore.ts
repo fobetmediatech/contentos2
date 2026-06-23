@@ -9,22 +9,16 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { supabaseStorage } from './supabaseStorage'
 import { isCleanReelRun } from './reelPersist'
-import type { DeepReelAnalysis, DeepNicheReport } from '../ai/prompts/deepReelAnalysis'
+import type { SingleReelResult } from './singleReelStore'
+import type { CreatorHookSummary } from '../ai/prompts/creatorHookSummary'
 
 // ----- Creator status -----
 
 export type CreatorStatus = 'idle' | 'scraping' | 'analyzing' | 'done' | 'no-reels' | 'failed'
 
-// ----- Deep (multimodal) per-reel status -----
-// Phase-1 reel-intelligence: the enrichment runs per reel, so each reel carries
-// its own lifecycle independent of the creator-level status (R2: partial results
-// never block on one failure).
-export type DeepReelStatus = 'pending' | 'fetching' | 'analyzing' | 'done' | 'failed' | 'skipped'
-
-/** A DeepReelAnalysis with the client-computed commentsLikesRatio attached. */
-export interface StoredDeepReelAnalysis extends DeepReelAnalysis {
-  commentsLikesRatio: number
-}
+// ----- Case-study (HookMap deep analysis) per-reel status -----
+// Profile HookMap: single-reel case-study analysis for profile-level deep reports
+export type ReelCaseStatus = 'pending' | 'analyzing' | 'done' | 'skipped' | 'failed'
 
 // ----- Data types -----
 
@@ -60,12 +54,10 @@ export interface CreatorAnalysisState {
   /** Full spoken transcripts per reel (keyed by shortCode), produced by the single-reel
    *  analyzer enrichment pass. Optional — only populated once transcription completes. */
   transcripts?: Record<string, string>
+  caseStudies?: Record<string, SingleReelResult>       // keyed by shortCode (HookMap full result)
+  caseStudyStatus?: Record<string, ReelCaseStatus>     // keyed by shortCode (progressive per reel)
+  hookSummary?: CreatorHookSummary                      // creator-level summary from case studies (profile HookMap)
   error?: string
-  // ----- Deep (multimodal) enrichment — Phase-1 reel intelligence -----
-  // Optional: only the deep-report run populates these; the quick path leaves
-  // them undefined. Both reset wholesale (reset() sets creatorStates: {}).
-  deepStatus?: Record<string, DeepReelStatus>          // keyed by shortCode
-  deepAnalyses?: Record<string, StoredDeepReelAnalysis> // keyed by shortCode
 }
 
 export interface SynthesisOutput {
@@ -100,26 +92,22 @@ interface ReelAnalysisState {
   synthesisStatus: 'idle' | 'running' | 'done' | 'failed'
   synthesis: SynthesisOutput | null
   synthesisError: string | null
-  // Cross-profile deep niche report (Phase 2) — produced after a deep run finishes.
-  deepReport: DeepNicheReport | null
-  // 'unavailable' = the deep-analysis serverless function isn't deployed (e.g. plain `vite dev`)
-  deepReportStatus: 'idle' | 'running' | 'done' | 'failed' | 'unavailable'
   // actions
   setSelectedHandles: (handles: string[]) => void
   setActiveHandles: (handles: string[]) => void
   setReelConversationId: (id: string | null) => void
   setCreatorState: (handle: string, partial: Partial<CreatorAnalysisState>) => void
-  /** Merge a single reel's deep status and/or analysis into a creator's deep maps. */
-  setDeepReel: (
+  /** Merge a single reel's case-study status and/or result into a creator's case-study maps. */
+  setReelCaseStudy: (
     handle: string,
     shortCode: string,
-    partial: { status?: DeepReelStatus; analysis?: StoredDeepReelAnalysis },
+    partial: { status?: ReelCaseStatus; result?: SingleReelResult },
   ) => void
+  /** Merge a creator-level hook summary into a creator's state. */
+  setHookSummary: (handle: string, summary: CreatorHookSummary) => void
   setSynthesis: (output: SynthesisOutput) => void
   setSynthesisStatus: (status: ReelAnalysisState['synthesisStatus']) => void
   setSynthesisError: (msg: string) => void
-  setDeepReport: (report: DeepNicheReport) => void
-  setDeepReportStatus: (status: ReelAnalysisState['deepReportStatus']) => void
   reset: () => void
 }
 
@@ -133,9 +121,6 @@ const initialState = {
   synthesisStatus: 'idle' as ReelAnalysisState['synthesisStatus'],
   synthesis: null as SynthesisOutput | null,
   synthesisError: null as string | null,
-  // Phase 2: included in initialState so reset() clears them (zustand-initialstate learning).
-  deepReport: null as DeepNicheReport | null,
-  deepReportStatus: 'idle' as ReelAnalysisState['deepReportStatus'],
 }
 
 // ----- Store -----
@@ -160,18 +145,30 @@ export const useReelAnalysisStore = create<ReelAnalysisState>()(persist((set) =>
       },
     })),
 
-  setDeepReel: (handle, shortCode, partial) =>
+  setReelCaseStudy: (handle, shortCode, partial) =>
     set((prev) => {
       const creator = prev.creatorStates[handle]
-      if (!creator) return {} // never create a creator from a deep update — orchestrator seeds it first
-      const deepStatus = { ...creator.deepStatus }
-      const deepAnalyses = { ...creator.deepAnalyses }
-      if (partial.status) deepStatus[shortCode] = partial.status
-      if (partial.analysis) deepAnalyses[shortCode] = partial.analysis
+      if (!creator) return {} // never create a creator from a case-study update — pipeline seeds it
+      const caseStudyStatus = { ...creator.caseStudyStatus }
+      const caseStudies = { ...creator.caseStudies }
+      if (partial.status) caseStudyStatus[shortCode] = partial.status
+      if (partial.result) caseStudies[shortCode] = partial.result
       return {
         creatorStates: {
           ...prev.creatorStates,
-          [handle]: { ...creator, deepStatus, deepAnalyses },
+          [handle]: { ...creator, caseStudyStatus, caseStudies },
+        },
+      }
+    }),
+
+  setHookSummary: (handle, summary) =>
+    set((prev) => {
+      const creator = prev.creatorStates[handle]
+      if (!creator) return {} // never create a creator from a hook summary update — pipeline seeds it
+      return {
+        creatorStates: {
+          ...prev.creatorStates,
+          [handle]: { ...creator, hookSummary: summary },
         },
       }
     }),
@@ -181,10 +178,6 @@ export const useReelAnalysisStore = create<ReelAnalysisState>()(persist((set) =>
   setSynthesisStatus: (status) => set({ synthesisStatus: status }),
 
   setSynthesisError: (msg) => set({ synthesisError: msg, synthesisStatus: 'failed' }),
-
-  setDeepReport: (report) => set({ deepReport: report, deepReportStatus: 'done' }),
-
-  setDeepReportStatus: (status) => set({ deepReportStatus: status }),
 
   reset: () => set(initialState),
 }), {
@@ -200,26 +193,39 @@ export const useReelAnalysisStore = create<ReelAnalysisState>()(persist((set) =>
     creatorStates: s.creatorStates,
     synthesis: s.synthesis,
     synthesisStatus: s.synthesisStatus,
-    deepReport: s.deepReport,
-    deepReportStatus: s.deepReportStatus,
   }),
+  // v4: removed the deep-report feature — strip legacy deep keys from persisted state
+  //     (top-level deepReport/deepReportStatus + per-creator deepStatus/deepAnalyses).
+  // v3: added optional CreatorAnalysisState.caseStudies and caseStudyStatus (profile HookMap case-study).
   // v2: added optional CreatorAnalysisState.transcripts (single-reel-analyzer enrichment).
-  // Purely additive — old persisted runs deserialize cleanly with transcripts undefined.
-  version: 2,
-  migrate: (state) => state,
+  // Purely additive — old persisted runs deserialize cleanly with new fields undefined.
+  version: 4,
+  migrate: (state) => {
+    // Strip any legacy deep-report keys left in older persisted snapshots so they don't
+    // resurface as `undefined`-shaped junk or feed the (now-removed) merge clamp.
+    const s = (state ?? {}) as Record<string, unknown> & {
+      creatorStates?: Record<string, Record<string, unknown>>
+    }
+    delete s.deepReport
+    delete s.deepReportStatus
+    if (s.creatorStates) {
+      for (const creator of Object.values(s.creatorStates)) {
+        delete creator.deepStatus
+        delete creator.deepAnalyses
+      }
+    }
+    return s
+  },
   merge: (persisted, current) => {
     const p = (persisted ?? {}) as Partial<ReelAnalysisState>
     const creatorStates = (p.creatorStates ?? {}) as Record<string, { status: string }>
-    if (!isCleanReelRun({ synthesisStatus: p.synthesisStatus ?? 'idle', deepReportStatus: p.deepReportStatus ?? 'idle', creatorStates })) {
+    if (!isCleanReelRun({ synthesisStatus: p.synthesisStatus ?? 'idle', creatorStates })) {
       return current // interrupted run → discard, come back to a clean slate
     }
-    // 2.11: clamp any non-terminal status to 'failed' so a reload never restores a
-    // forever-spinner (e.g. synthesisStatus='done' + deepReportStatus='running' passes
-    // isCleanReelRun but would restore a stuck deep-report spinner).
+    // 2.11: clamp any non-terminal synthesis status to 'failed' so a reload never restores
+    // a forever-spinner.
     const SYNTH_TERMINAL = new Set(['done', 'failed', 'idle'])
-    const DEEP_TERMINAL = new Set(['done', 'failed', 'unavailable', 'idle'])
     const synthesisStatus = SYNTH_TERMINAL.has(p.synthesisStatus ?? '') ? (p.synthesisStatus as ReelAnalysisState['synthesisStatus']) : 'failed'
-    const deepReportStatus = DEEP_TERMINAL.has(p.deepReportStatus ?? '') ? (p.deepReportStatus as ReelAnalysisState['deepReportStatus']) : 'failed'
-    return { ...current, ...p, synthesisStatus: synthesisStatus ?? 'idle', deepReportStatus: deepReportStatus ?? 'idle' }
+    return { ...current, ...p, synthesisStatus: synthesisStatus ?? 'idle' }
   },
 }))

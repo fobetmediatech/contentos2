@@ -11,7 +11,6 @@
 import type { NormalizedProfile } from '../lib/transformers'
 import type { CompetitorAnalysisResult, DiscoveryResult } from '../ai/prompts'
 import type { CreatorAnalysisState, SynthesisOutput } from '../store/reelAnalysisStore'
-import type { DeepNicheReport } from '../ai/prompts/deepReelAnalysis'
 
 export type CompetitorResultPayload = {
   kind: 'competitor'
@@ -39,15 +38,14 @@ export type DiscoveryResultPayload = {
 
 /**
  * A finished reel/hook run, snapshotted into the conversation it ran in.
- * `creatorStates` is trimmed (thumbnails + deep maps dropped); the deep report
- * re-runs on demand via startDeepReport(handles).
+ * `creatorStates` is trimmed (reel thumbnails dropped); the bounded HookMap case-study
+ * text is kept.
  */
 export type ReelResultPayload = {
   kind: 'reel'
   handles: string[]
   creatorStates: Record<string, CreatorAnalysisState>
   synthesis: SynthesisOutput | null
-  deepReport: DeepNicheReport | null
 }
 
 export type ResultPayload = CompetitorResultPayload | DiscoveryResultPayload | ReelResultPayload

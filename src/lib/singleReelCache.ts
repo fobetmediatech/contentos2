@@ -6,8 +6,7 @@
  * then free (skips the Apify scrape + both Gemini calls). No-ops when IndexedDB is
  * unavailable (Node tests / SSR) — callers always fall back to a live run.
  *
- * Uses its own DB ('reel-intel-single'), separate from deepReelCache's 'reel-intel',
- * so the two caches never collide on schema/version.
+ * Uses its own IndexedDB DB ('reel-intel-single') for cached single-reel results.
  */
 
 import { openDB, type IDBPDatabase } from 'idb'
