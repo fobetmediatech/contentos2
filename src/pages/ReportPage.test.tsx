@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * ReportPage tests — empty state (no report) + populated state (renders the report
+ * ReportPage tests — empty state (no summary) + populated state (renders the hook summary
  * + Print button), reading from the real store.
  */
 
@@ -21,25 +21,26 @@ import { render, screen, cleanup } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { ReportPage } from './ReportPage'
 import { useReelAnalysisStore } from '../store/reelAnalysisStore'
-import type { DeepNicheReport } from '../ai/prompts/deepReelAnalysis'
+import type { CreatorHookSummary } from '../ai/prompts/creatorHookSummary'
 
-const report: DeepNicheReport = {
-  whoIsWinning: 'nike wins with bold claims',
-  nicheFormula: 'open with a bold claim',
-  gaps: ['underused: questions'],
-  replicate: ['cold-open'],
-  avoid: ['slow intros'],
-  test: ['1s pattern interrupt'],
-  archetypeDistribution: [{ archetype: 'Bold claim', count: 5 }],
-  comparison: [{ handle: 'nike', reelCount: 8, avgHookScore: 7.5, medianViews: 12000, dominantArchetype: 'Bold claim' }],
-  topExemplars: [{ handle: 'nike', shortCode: 'x', hookArchetype: 'Bold claim', hookScore: 9, spokenHookVerbatim: 'stop', visualOpening: 'zoom', views: 50000 }],
+const summary: CreatorHookSummary = {
+  handle: 'alice',
+  reelCount: 10,
+  dominantHooks: [
+    { pattern: 'Bold claim', count: 5, example: 'This will shock you' },
+  ],
+  recurringOpenings: ['This will shock you', 'Never do this'],
+  whatConsistentlyWorks: ['Opening with urgency', 'Visual hooks in first frame'],
+  replicableTemplates: ['[Shocking claim] + [proof]', '[Question] → [answer]'],
+  narrative: 'Alice consistently uses bold claims paired with visual shock to stop the scroll. Her opener sets expectations for value.',
+  benchmarks: { medianViews: 50000, medianLikes: 2000, commentsLikesRatio: 0.15 },
 }
 
 beforeEach(() => useReelAnalysisStore.getState().reset())
 afterEach(cleanup)
 
 describe('ReportPage', () => {
-  it('shows an empty state when there is no report', () => {
+  it('shows an empty state when there is no hook summary', () => {
     render(
       <MemoryRouter>
         <ReportPage />
@@ -49,16 +50,19 @@ describe('ReportPage', () => {
     expect(screen.getByText(/Go to chat/)).toBeTruthy()
   })
 
-  it('renders the report + Print button when a report exists', () => {
-    useReelAnalysisStore.getState().setDeepReport(report)
+  it('renders the hook summary + Print button when a summary exists', () => {
+    // Seed the store with a creator that has a hookSummary
+    useReelAnalysisStore.getState().setCreatorState('alice', { handle: 'alice', status: 'done', reels: [], analyses: {} })
+    useReelAnalysisStore.getState().setHookSummary('alice', summary)
+
     render(
       <MemoryRouter>
         <ReportPage />
       </MemoryRouter>,
     )
-    expect(screen.getByText('Niche Report')).toBeTruthy()
+    expect(screen.getByText('Reel Hook Report')).toBeTruthy()
     expect(screen.getByText(/Print \/ Save as PDF/)).toBeTruthy()
-    expect(screen.getByText(/nike wins with bold claims/)).toBeTruthy()
-    expect(screen.getByText('@nike')).toBeTruthy() // comparison table row from DeepReportCard
+    expect(screen.getByText(/Alice consistently uses bold claims/)).toBeTruthy()
+    expect(screen.getByText('Bold claim')).toBeTruthy() // dominant hook pattern
   })
 })
