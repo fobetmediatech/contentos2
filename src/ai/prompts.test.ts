@@ -223,6 +223,20 @@ describe('buildCompetitorPrompt — v2 candidate signals + Trending hardening', 
     const prompt = buildCompetitorPrompt([inputProfile], [makeProfile()])
     expect(prompt).toContain('apply ONLY to candidates that already passed the niche gate')
   })
+
+  it('labels sub-10K accounts [MICRO] and bars them from Trending', () => {
+    const micro = makeProfile({ username: 'nanoacct', followersCount: 1_200 })
+    const prompt = buildCompetitorPrompt([inputProfile], [micro])
+    const line = prompt.split('\n').find((l) => l.includes('@nanoacct')) ?? ''
+    expect(line).toContain('[MICRO:')
+    expect(prompt).toContain('NOT eligible for Trending')
+  })
+
+  it('does not flag accounts at or above the 10K floor as [MICRO]', () => {
+    const ok = makeProfile({ username: 'midcreator', followersCount: 25_000 })
+    const line = buildCompetitorPrompt([inputProfile], [ok]).split('\n').find((l) => l.includes('@midcreator')) ?? ''
+    expect(line).not.toContain('[MICRO')
+  })
 })
 
 describe('buildPreferenceBlock (Phase 3, 3b)', () => {

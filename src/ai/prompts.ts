@@ -117,6 +117,11 @@ export interface AnalysisOutput {
  * @param clarificationAnswer   User's answer from the mid-run clarification card (optional).
  *                              When present and non-empty, injected as USER REFINEMENT to direct ranking.
  */
+// Trending floor: accounts below this are nano-accounts whose ER is inflated by a tiny follower
+// denominator (a 1K account with 100 likes = 10% ER) — not meaningful competitors. Mirrors the
+// 500K Top ceiling as a hard, reliable numeric gate. Tunable in one place.
+const MIN_TRENDING_FOLLOWERS = 10_000
+
 export function buildCompetitorPrompt(
   inputProfiles: NormalizedProfile[],
   candidates: NormalizedProfile[],
@@ -144,6 +149,11 @@ export function buildCompetitorPrompt(
       const establishedLabel = p.followersCount > 500_000
         ? ' [ESTABLISHED: 500K+ followers — assign to Top category]'
         : ''
+      // Bottom-end gate (mirrors establishedLabel): nano-accounts have mathematically inflated ER,
+      // so flag them so Gemini doesn't pull them into Trending on ER alone.
+      const microLabel = p.followersCount < MIN_TRENDING_FOLLOWERS
+        ? ` [MICRO: under ${MIN_TRENDING_FOLLOWERS / 1000}K followers — ER inflated by small follower count, NOT eligible for Trending]`
+        : ''
       // Source label: tells Gemini how this candidate was discovered.
       // CONTENT-NICHE accounts were found by scraping posts using the reference accounts'
       // own hashtags — they are the highest-confidence niche matches.
@@ -167,7 +177,7 @@ export function buildCompetitorPrompt(
       const candidateHashtags = p.topHashtags.length > 0
         ? ` | hashtags: ${p.topHashtags.slice(0, 5).map((h) => `#${h}`).join(' ')}`
         : ''
-      return `@${p.username} | followers: ${p.followersCount.toLocaleString()} | ER: ${er}% | posts: ${p.postsCount} | verified: ${p.verified}${categoryLabel} | bio: "${p.biography.replace(/[\n\r]/g, ' ').replace(/"/g, '\\"').slice(0, 120)}"${candidateHashtags}${establishedLabel}${sourceLabel}${corpusLabel}`
+      return `@${p.username} | followers: ${p.followersCount.toLocaleString()} | ER: ${er}% | posts: ${p.postsCount} | verified: ${p.verified}${categoryLabel} | bio: "${p.biography.replace(/[\n\r]/g, ' ').replace(/"/g, '\\"').slice(0, 120)}"${candidateHashtags}${establishedLabel}${microLabel}${sourceLabel}${corpusLabel}`
     })
     .join('\n')
 
@@ -260,7 +270,7 @@ SELECTION CRITERIA:
 - NICHE GATE IS ABSOLUTE FOR BOTH TIERS: an account that fails the niche-relevance check or the ADJACENT NICHE GUARD above is NOT eligible for Top OR Trending. High engagement does NOT buy an exception. Apply this gate BEFORE the tier and tie rules below.
 - GOAL: Fill Top 5 as completely as possible. For TRENDING, relevance beats quota — returning 3–4 genuinely on-niche Trending accounts is BETTER than padding to 5 with borderline or audience-adjacent picks. An empty Trending slot is better than an off-niche filler. Never add an account to Trending just to reach 5.
 - For Top 5: prioritize follower count, brand authority, posting consistency, and verified status. Accounts with the [ESTABLISHED: 500K+ followers] label MUST be assigned to Top, not Trending.
-- For Trending 5: from the NICHE-RELEVANT set ONLY, prioritize engagement rate (ER %) relative to follower tier — growth-phase accounts whose ER exceeds the typical range for their tier. Typical ER by follower tier (baseline): under 10K ≈ 5–15%, 10K–100K ≈ 2–6%, 100K–500K ≈ 1–3%, 500K+ ≈ 0.5–1.5%. A Trending pick should exceed the upper end of its tier's range. When a candidate shows "ER: N/A%" there is NO engagement signal — do NOT place it in Trending on follower count or bio alone (only as a last resort, and only if Trending would otherwise have fewer than 3 on-niche entries).
+- For Trending 5: from the NICHE-RELEVANT set ONLY, prioritize engagement rate (ER %) relative to follower tier — growth-phase accounts whose ER exceeds the typical range for their tier. Trending accounts MUST have at least 10K followers: any candidate carrying the [MICRO: under 10K followers] label is NOT eligible for Trending, no matter how high its ER looks — its ER is inflated by a tiny follower count and it is not a meaningful competitor. Typical ER by follower tier (baseline): 10K–50K ≈ 3–8%, 50K–100K ≈ 2–5%, 100K–500K ≈ 1–3%, 500K+ ≈ 0.5–1.5%. A Trending pick should exceed the upper end of its tier's range. When a candidate shows "ER: N/A%" there is NO engagement signal — do NOT place it in Trending on follower count or bio alone (only as a last resort, and only if Trending would otherwise have fewer than 3 on-niche entries).
 - Tie rules (apply ONLY to candidates that already passed the niche gate): when a candidate could qualify for either category, prefer Trending if it has under 500K followers; if it fits both, assign it to whichever category has fewer entries. NEVER use a tie rule to admit a borderline-niche account.
 
 OUTPUT FORMAT (respond with valid JSON only, no markdown):
