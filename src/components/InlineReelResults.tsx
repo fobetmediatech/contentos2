@@ -12,6 +12,7 @@ import type {
 } from '../store/reelAnalysisStore'
 import type { DeepNicheReport } from '../ai/prompts/deepReelAnalysis'
 import { copyToClipboard, downloadMarkdown, formatDeepReportMarkdown } from '../shared/utils/export'
+import { ReelCaseStudyCard } from './ReelCaseStudyCard'
 
 const REEL_STEPS = ['Scraping reels', 'Analyzing hooks', 'Done']
 
@@ -98,7 +99,7 @@ export function InlineReelResults({ handles, creatorStates, synthesisStatus, syn
       {handles.map(handle => {
         const state = creatorStates[handle]
         if (!state) return null
-        return <CreatorSection key={handle} state={state} />
+        return <CreatorSection key={handle} state={state} singleHandle={handles.length === 1} />
       })}
     </div>
   )
@@ -183,7 +184,7 @@ function SynthesisCard({ synthesis, onSuggest }: { synthesis: SynthesisOutput; o
   )
 }
 
-function CreatorSection({ state }: { state: CreatorAnalysisState }) {
+function CreatorSection({ state, singleHandle }: { state: CreatorAnalysisState; singleHandle: boolean }) {
   const [expanded, setExpanded] = useState(false)
 
   const stepIndex = state.status === 'scraping' ? 1 : state.status === 'analyzing' ? 2 : 3
@@ -251,11 +252,24 @@ function CreatorSection({ state }: { state: CreatorAnalysisState }) {
       </button>
 
       {expanded && (
-        <div className="grid gap-3 grid-cols-2 xl:grid-cols-3">
-          {state.reels.map(reel => (
-            <ReelCard key={reel.shortCode} reel={reel} analysis={state.analyses[reel.shortCode]} />
-          ))}
-        </div>
+        singleHandle ? (
+          <div className="flex flex-col gap-4">
+            {state.reels.map(reel => (
+              <ReelCaseStudyCard
+                key={reel.shortCode}
+                reel={reel}
+                status={state.caseStudyStatus?.[reel.shortCode] ?? 'pending'}
+                result={state.caseStudies?.[reel.shortCode]}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="grid gap-3 grid-cols-2 xl:grid-cols-3">
+            {state.reels.map(reel => (
+              <ReelCard key={reel.shortCode} reel={reel} analysis={state.analyses[reel.shortCode]} />
+            ))}
+          </div>
+        )
       )}
     </div>
   )

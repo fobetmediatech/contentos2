@@ -111,6 +111,52 @@ describe('InlineReelResults — deep report', () => {
   })
 })
 
+describe('InlineReelResults — single-handle case studies', () => {
+  it('renders per-reel case-study cards for a single-handle run', () => {
+    const creatorStates: Record<string, CreatorAnalysisState> = {
+      nike: {
+        handle: 'nike',
+        status: 'done',
+        reels: [reel('a')],
+        analyses: {},
+        caseStudyStatus: { a: 'done' },
+        caseStudies: {
+          a: {
+            transcript: 'hello there',
+            segments: [{ start: 0, text: 'hello there' }],
+            videoAnalysis: {} as never,
+            markdown: '## Why it worked',
+          },
+        },
+      },
+    }
+    render(<InlineReelResults handles={['nike']} creatorStates={creatorStates} {...base} />)
+
+    // Expand the creator section to reveal the per-reel cards.
+    fireEvent.click(screen.getByText(/reels analyzed/))
+    // Case-study markdown heading (the case-study card) — not the quick caption card.
+    expect(screen.getByText('Why it worked')).toBeTruthy()
+    expect(screen.getByText('Reel case study')).toBeTruthy()
+  })
+
+  it('still renders the quick ReelCards for a two-handle run', () => {
+    const analyses: Record<string, ReelAnalysis> = {
+      a: { hookArchetype: 'Curiosity gap', commentsLikesRatio: 0.1, retentionMechanism: 'r', psychologyTrigger: 'p', replicationTemplate: 't' },
+    }
+    const creatorStates: Record<string, CreatorAnalysisState> = {
+      nike: { handle: 'nike', status: 'done', reels: [reel('a')], analyses },
+      adidas: { handle: 'adidas', status: 'done', reels: [reel('b')], analyses: {} },
+    }
+    render(<InlineReelResults handles={['nike', 'adidas']} creatorStates={creatorStates} {...base} />)
+
+    // Expand both creator sections.
+    screen.getAllByText(/reels analyzed/).forEach((el) => fireEvent.click(el))
+    // Quick card surfaces the hook archetype chip; no case-study heading.
+    expect(screen.getByText('Curiosity gap')).toBeTruthy()
+    expect(screen.queryByText('Reel case study')).toBeNull()
+  })
+})
+
 const report = (): DeepNicheReport => ({
   whoIsWinning: 'nike dominates with bold-claim hooks',
   nicheFormula: 'Open with a contrarian claim, pay it off in 3 seconds',
