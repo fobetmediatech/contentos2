@@ -343,7 +343,7 @@ export async function analyzeCompetitors(
     geminiKey,
     prompt,
     COMPETITOR_SCHEMA,
-    { temperature: 0.3, maxOutputTokens: 16384, thinkingBudget: 0, signal },
+    { temperature: 0.3, maxOutputTokens: 16384, signal },
   )
   return validateAnalysisOutput(parsed)
 }
@@ -374,7 +374,7 @@ export async function analyzeDiscovery(
     geminiKey,
     prompt,
     DISCOVERY_SCHEMA,
-    { temperature: 0.3, maxOutputTokens: 16384, thinkingBudget: 0, signal },
+    { temperature: 0.3, maxOutputTokens: 16384, signal },
   )
   return coerceDiscoveryOutput(parsed)
 }
