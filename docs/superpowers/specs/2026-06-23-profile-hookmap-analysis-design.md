@@ -70,10 +70,32 @@ hookSummary?: CreatorHookSummary
   re-run on demand.
 
 ### 3. Summary synthesis — `src/lib/reelAnalyzer.ts` + `src/ai/prompts/`
-New `synthesizeCreatorHooks(handle, caseStudies, reels): Promise<CreatorHookSummary>` — one Gemini
-call over the per-reel case studies (hooks, transcript openings, `videoAnalysis`, metrics).
+New `synthesizeCreatorHooks(handle, caseStudies, reels): Promise<CreatorHookSummary>`.
 `CreatorHookSummary` (draft): `dominantHooks[]`, `recurringOpenings[]`, `whatConsistentlyWorks[]`,
 `replicableTemplates[]`, `narrative`, `benchmarks` (median views, etc., computed in code).
+
+**Context-safety / chunking (required).** Ten full case studies (each with transcript + segments +
+`videoAnalysis` + markdown) can exceed Gemini's input window, so synthesis is **token-budgeted with a
+map-reduce fallback** — it must never throw a context-overflow:
+
+1. **Digest first (primary control).** Reduce each case study to a compact per-reel digest before
+   synthesis — keep the hook fields, the opening line / first transcript segment(s), key
+   `videoAnalysis` signals, and metrics; **drop the full markdown and trim the transcript** to a bounded
+   prefix. A pure `buildReelDigest(caseStudy, reel)` helper (unit-testable, no Gemini).
+2. **Budget check.** Estimate input tokens with a cheap heuristic (`ceil(chars / 4)`) against a
+   conservative `SUMMARY_INPUT_TOKEN_BUDGET` constant (well under the model's real window, leaving room
+   for the prompt + output). If all digests fit → **single call**.
+3. **Map-reduce when over budget.** Split the digests into ordered chunks that each fit the budget →
+   summarize each chunk into a **partial** `CreatorHookSummary` (map) → combine the partials in a final
+   **reduce** call. If the concatenated partials still exceed the budget (pathologically many reels),
+   reduce **recursively** (combine partials in budgeted batches) until one summary remains.
+4. **Resilience.** A failed map chunk is dropped (best-effort, logged via `devWarn`) rather than failing
+   the whole summary; if every chunk fails, surface a clear "couldn't summarize" state. All calls thread
+   the run's `AbortSignal`.
+
+Keep the chunking orchestration (`buildReelDigest`, token estimate, chunk planner, map/reduce loop)
+**pure and separately unit-testable** from the Gemini call, so the budget math and chunk boundaries are
+verified without the network.
 
 ### 4. UI — `src/components/`
 - New `ReelCaseStudyCard` (or extend `InlineReelResults`): per reel, progressive
@@ -126,6 +148,10 @@ Gemini calls (extraction + case study); we now surface both outputs (transcript 
 - Pipeline: single-handle branch, progressive per-reel status, cache-first, per-reel failure isolation,
   abort handling, `singleReelFnAvailable` gate; multi-handle still uses the quick path.
 - `synthesizeCreatorHooks`: prompt builder + parse (mocked Gemini), code-computed benchmarks.
+- **Chunking (pure):** `buildReelDigest` trims/bounds correctly; token estimate; the chunk planner
+  packs digests under budget; single-call vs map-reduce path chosen at the right threshold; recursive
+  reduce terminates; a failed map chunk is skipped without failing the whole summary. Verified without
+  the network (Gemini call mocked).
 - UI: per-reel case-study render (pending/done/failed), `HookSummaryCard`, repurposed `ReportPage`.
 - Removal: no dangling references; deleted/updated deep tests; agent golden-set green.
 - Full suite + `bun run build` (app + api) + `bun run lint` green before each phase lands.
