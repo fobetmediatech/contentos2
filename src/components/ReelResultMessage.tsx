@@ -6,11 +6,6 @@
  * kind:'reel' message in the conversation it ran in, and this component renders it statically —
  * immune to the live store moving on. It reuses InlineReelResults so a snapshot is visually
  * identical to the live block.
- *
- * The deep-report CTA still works on a snapshot: `startDeepReport(handles)` is self-contained
- * (it re-scrapes from scratch), so the parent can wire it straight through. The snapshot itself
- * carries no per-reel deep maps (trimmed by buildReelResultPayload) — if the original run had a
- * deep report, its cross-profile summary is preserved and rendered at the top.
  */
 
 import { Bot, Video } from 'lucide-react'
@@ -21,13 +16,11 @@ interface Props {
   payload: ReelResultPayload
   /** Prefill the chat input (the "remix for my niche" handoff). */
   onSuggest: (text: string) => void
-  /** Re-run the DEEP multimodal report for these handles (self-contained — re-scrapes). */
-  onDeepReport: (handles: string[]) => void
   onStartOver: () => void
 }
 
-export function ReelResultMessage({ payload, onSuggest, onDeepReport, onStartOver }: Props) {
-  const { handles, creatorStates, synthesis, deepReport } = payload
+export function ReelResultMessage({ payload, onSuggest, onStartOver }: Props) {
+  const { handles, creatorStates, synthesis } = payload
 
   return (
     <>
@@ -57,8 +50,7 @@ export function ReelResultMessage({ payload, onSuggest, onDeepReport, onStartOve
 
       {/* The reel results, rendered from the snapshot. synthesisStatus is derived: 'done' when a
           synthesis was captured, else 'idle' (show just the per-creator cards — never a scary
-          "synthesis failed" box on a historical snapshot). The deep-report CTA appears because the
-          snapshot drops per-reel deep maps (anyDeep === false inside InlineReelResults). */}
+          "synthesis failed" box on a historical snapshot). */}
       <InlineReelResults
         handles={handles}
         creatorStates={creatorStates}
@@ -66,9 +58,6 @@ export function ReelResultMessage({ payload, onSuggest, onDeepReport, onStartOve
         synthesis={synthesis}
         synthesisError={null}
         onSuggest={onSuggest}
-        onDeepReport={onDeepReport}
-        deepReport={deepReport}
-        deepReportStatus={deepReport ? 'done' : 'idle'}
       />
     </>
   )

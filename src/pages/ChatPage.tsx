@@ -104,7 +104,7 @@ export function ChatPage() {
   // useConversation wizard is retired). Input stays live; a new message steers (latest-wins).
   const agentConv = useAgentConversation()
   const { answerClarification, isPending: clarificationPending } = useCompetitorAnalysis()
-  const { startAnalysis: startReelAnalysis, startDeepReport, activeHandles, creatorStates, synthesisStatus, synthesis, synthesisError, deepReport, deepReportStatus, reset: resetReel } = useReelAnalysis()
+  const { startAnalysis: startReelAnalysis, activeHandles, creatorStates, synthesisStatus, synthesis, synthesisError, reset: resetReel } = useReelAnalysis()
   // Which conversation the current reel run belongs to — gates the live block to that chat and
   // routes its snapshot there on supersede (results-as-messages parity with competitor/discovery).
   const reelConversationId = useReelAnalysisStore((s) => s.reelConversationId)
@@ -520,7 +520,6 @@ export function ChatPage() {
                       setInputText(text)
                       textareaRef.current?.focus()
                     }}
-                    onDeepReport={(handles) => void startDeepReport(handles)}
                     onStartOver={handleStartOver}
                   />
                 ) : message.type === 'reel' ? (
@@ -550,9 +549,6 @@ export function ChatPage() {
                           setInputText(text)
                           textareaRef.current?.focus()
                         }}
-                        onDeepReport={(handles) => void startDeepReport(handles)}
-                        deepReport={deepReport}
-                        deepReportStatus={deepReportStatus}
                       />
 
                       {isReelDone && (
