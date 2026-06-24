@@ -138,7 +138,14 @@ export const DiscoveryCard = memo(function DiscoveryCard({ result, profile, coho
         {/* Handle + meta */}
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="font-semibold text-[#F5EDD6] text-sm">@{result.username}</span>
+            <a
+              href={`https://www.instagram.com/${result.username}/`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+              className="font-semibold text-[#F5EDD6] text-sm hover:text-[#E07B3A] hover:underline transition-colors"
+            >@{result.username}</a>
             {profile?.verified && (
               <BadgeCheck size={14} className="text-[#C4A882] flex-shrink-0" />
             )}

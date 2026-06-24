@@ -27,8 +27,8 @@ export const COMPETITOR_CATEGORIES: Record<string, CategoryDef> = {
     sectionLabel: 'Top 5 — Established Authority',
     taxonomy:
       'Established authority accounts with large follower bases (typically 100K+), high absolute engagement numbers, consistent posting history, and strong brand recognition in the niche. These are the dominant players.',
-    badgeBg: 'bg-[rgba(59,130,246,0.12)]',
-    badgeText: 'text-[#60A5FA]',
+    badgeBg: 'bg-[rgba(224,123,58,0.10)]',
+    badgeText: 'text-[#F4A97B]',
   },
   trending: {
     id: 'trending',
@@ -58,8 +58,8 @@ export const DISCOVERY_CATEGORIES: Record<string, CategoryDef> = {
     sectionLabel: 'Established Authority',
     taxonomy:
       'Established authority in this city+niche: large follower base (typically 100K+), consistent posting, and strong community trust. These are the dominant voices in the local scene.',
-    badgeBg: 'bg-[rgba(59,130,246,0.12)]',
-    badgeText: 'text-[#60A5FA]',
+    badgeBg: 'bg-[rgba(224,123,58,0.10)]',
+    badgeText: 'text-[#F4A97B]',
   },
   trending: {
     id: 'trending',
