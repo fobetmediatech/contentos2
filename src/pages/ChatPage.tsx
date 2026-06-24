@@ -462,6 +462,15 @@ export function ChatPage() {
     startReelAnalysis(handles)  // sets activeHandles in the reel store
   }
 
+  // Pipeline-targeted retry: re-fire the reel pipeline for the SAME handles directly (no agent
+  // loop / re-routing), reusing the existing reel marker. Used by the failed-state Retry button.
+  const handleRetryReels = () => {
+    const handles = [...activeHandles]
+    if (handles.length === 0) return
+    setReelConversationId(activeConversationId) // re-bind in case the store reset cleared it
+    startReelAnalysis(handles)
+  }
+
   // Derived booleans
   const hasMessages = conversationMessages.length > 0
   // Only the most recent reel marker renders the live block (the store holds one run); older
@@ -639,12 +648,22 @@ export function ChatPage() {
                       />
 
                       {isReelDone && (
-                        <button
-                          onClick={handleStartOver}
-                          className="self-start px-4 py-2 text-sm text-secondary border border-[rgba(245,237,214,0.10)] rounded-xl hover:bg-surface-raised transition-colors"
-                        >
-                          Start over
-                        </button>
+                        <div className="self-start flex items-center gap-2">
+                          {synthesisStatus === 'failed' && (
+                            <button
+                              onClick={handleRetryReels}
+                              className="px-4 py-2 text-sm font-semibold text-white bg-[#E07B3A] rounded-xl hover:bg-[#C4612A] transition-colors"
+                            >
+                              Retry analysis
+                            </button>
+                          )}
+                          <button
+                            onClick={handleStartOver}
+                            className="px-4 py-2 text-sm text-secondary border border-[rgba(245,237,214,0.10)] rounded-xl hover:bg-surface-raised transition-colors"
+                          >
+                            Start over
+                          </button>
+                        </div>
                       )}
                     </Fragment>
                   ) : null

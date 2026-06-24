@@ -37,7 +37,7 @@ export function InlineReelResults({ handles, creatorStates, synthesisStatus, syn
       {synthesisStatus === 'done' && synthesis && <SynthesisCard synthesis={synthesis} onSuggest={onSuggest} />}
       {synthesisStatus === 'failed' && (
         <div className="mb-4 px-4 py-3 bg-[#2C1818] border border-danger/30 rounded-xl text-sm text-danger">
-          Synthesis failed: {synthesisError ?? 'Unknown error'}
+          Reel analysis failed{synthesisError ? `: ${synthesisError}` : ' — please retry.'}
         </div>
       )}
       {handles.map(handle => {
