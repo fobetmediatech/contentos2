@@ -8,7 +8,7 @@
 
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Brain, BadgeCheck, ChevronDown, ChevronUp, History } from 'lucide-react'
+import { Brain, BadgeCheck, ChevronDown, ChevronUp, History, Search } from 'lucide-react'
 import { useCorpusStore } from '../store/corpusStore'
 import { corpus } from '../lib/corpusIdb'
 import { sortCreators, creatorContexts } from '../lib/corpus'
@@ -41,11 +41,23 @@ export function MemoryPage() {
   const creators = useCorpusStore((s) => s.creators)
   const [sort, setSort] = useState<CorpusSort>('lastSeenAt')
   const [verdict, setVerdict] = useState<VerdictFilter>('all')
+  const [query, setQuery] = useState('')
   const list = useMemo(() => sortCreators(Object.values(creators), sort), [creators, sort])
   const filtered = useMemo(
     () => (verdict === 'all' ? list : list.filter((r) => r.feedback === verdict)),
     [list, verdict],
   )
+  // Client-side text search over the loaded records (username / full name / where-seen contexts).
+  const searched = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return filtered
+    return filtered.filter(
+      (r) =>
+        r.username.toLowerCase().includes(q) ||
+        (r.fullName ?? '').toLowerCase().includes(q) ||
+        creatorContexts(r).join(' ').toLowerCase().includes(q),
+    )
+  }, [filtered, query])
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -66,6 +78,19 @@ export function MemoryPage() {
         </div>
       ) : (
         <>
+          {/* Text search over the loaded corpus */}
+          <div className="relative mb-3">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7A6A54] pointer-events-none" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search remembered creators…"
+              aria-label="Search creators"
+              className="w-full pl-9 pr-3 py-2 text-sm bg-[#2C2218] text-[#F5EDD6] border border-[rgba(245,237,214,0.08)] rounded-xl focus:outline-none focus:border-[#E07B3A] placeholder:text-[#7A6A54] transition-colors"
+            />
+          </div>
+
           <div className="flex items-center gap-1.5 mb-3 flex-wrap">
             {SORTS.map((s) => (
               <button
@@ -99,11 +124,13 @@ export function MemoryPage() {
             ))}
           </div>
 
-          {filtered.length === 0 ? (
-            <p className="text-sm text-[#7A6A54] py-8 text-center">No {verdict} creators yet.</p>
+          {searched.length === 0 ? (
+            <p className="text-sm text-[#7A6A54] py-8 text-center">
+              {query.trim() ? 'No creators match your search.' : `No ${verdict} creators yet.`}
+            </p>
           ) : (
             <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
-              {filtered.map((r) => (
+              {searched.map((r) => (
                 <MemoryCreatorCard key={r.username} record={r} />
               ))}
             </div>
