@@ -482,6 +482,13 @@ export function ChatPage() {
   const analysisElapsed = useElapsedTime(isAnalysisRunning)
   const discoveryElapsed = useElapsedTime(isDiscoveryRunning)
   const reelElapsed = useElapsedTime(isReelRunning)
+
+  // When the pipeline pauses for a clarification, pull the card into view even if the user
+  // scrolled up — otherwise the run silently stalls awaiting an answer they can't see.
+  // (scrollIntoView fires scroll events that refresh isNearBottom via the onScroll handler.)
+  useEffect(() => {
+    if (isAnalysisClarifying) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [isAnalysisClarifying])
   const showRunPlaceholder = agentConv.isThinking || isAnalysisRunning || isDiscoveryRunning || isReelRunning
   const lastUserMessage = useMemo(
     () => [...conversationMessages].reverse().find((m) => m.role === 'user')?.content,
@@ -512,10 +519,14 @@ export function ChatPage() {
       {!isNearBottom && (
         <button
           onClick={scrollToBottom}
-          className="fixed bottom-24 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[#2C2118] border border-[#E07B3A]/40 rounded-full text-[#E07B3A] hover:bg-[#3D2E1E] transition-colors shadow-lg"
+          className={`fixed bottom-24 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full transition-colors shadow-lg ${
+            isAnalysisClarifying
+              ? 'bg-[#E07B3A] text-white hover:bg-[#C4612A] animate-pulse'
+              : 'bg-[#2C2118] border border-[#E07B3A]/40 text-[#E07B3A] hover:bg-[#3D2E1E]'
+          }`}
         >
           <ChevronDown size={12} />
-          Jump to latest
+          {isAnalysisClarifying ? 'Action needed — choose a direction' : 'Jump to latest'}
         </button>
       )}
       <div ref={scrollContainerRef} onScroll={handleScrollContainer} className="flex-1 overflow-y-auto">
