@@ -2,8 +2,8 @@
  * PaymentsCalendar — a month-grid visual of payments by their date (paid_on).
  *
  * Each day shows its payments as chips colored by status (due = amber, paid = green,
- * overdue = red); click a chip for full details incl. the note. Accounts are labeled
- * via the accountLabel() lookup passed in. Read-only overview — editing stays in the
+ * overdue = red); click a chip for full details incl. the note. Clients are labeled
+ * via the clientLabel() lookup passed in. Read-only overview — editing stays in the
  * list view. Payments with no date are counted below the grid.
  */
 import { useMemo, useState } from 'react'
@@ -40,10 +40,10 @@ function buildGrid(month: Date): Date[] {
 
 interface Props {
   payments: ClientPayment[]
-  accountLabel: (username: string) => string
+  clientLabel: (id: string) => string
 }
 
-export function PaymentsCalendar({ payments, accountLabel }: Props) {
+export function PaymentsCalendar({ payments, clientLabel }: Props) {
   const [month, setMonth] = useState(() => {
     const n = new Date()
     return new Date(n.getFullYear(), n.getMonth(), 1)
@@ -165,10 +165,10 @@ export function PaymentsCalendar({ payments, accountLabel }: Props) {
                 <button
                   key={p.id}
                   onClick={() => setSelected(p)}
-                  title={`${accountLabel(p.accountUsername)} — ${p.currency} ${fmt(p.amount)} (${p.status})`}
+                  title={`${clientLabel(p.paymentClientId)} — ${p.currency} ${fmt(p.amount)} (${p.status})`}
                   className={`text-left text-[11px] leading-tight rounded px-1.5 py-1 truncate cursor-pointer ${STATUS_CHIP[p.status]}`}
                 >
-                  {accountLabel(p.accountUsername)}: {p.currency} {fmt(p.amount)}
+                  {clientLabel(p.paymentClientId)}: {p.currency} {fmt(p.amount)}
                 </button>
               ))}
             </div>
@@ -201,8 +201,8 @@ export function PaymentsCalendar({ payments, accountLabel }: Props) {
             </div>
             <div className="space-y-2.5 text-sm">
               <div className="flex justify-between gap-4">
-                <span className="text-muted">Account</span>
-                <span className="text-primary text-right">{accountLabel(selected.accountUsername)}</span>
+                <span className="text-muted">Client</span>
+                <span className="text-primary text-right">{clientLabel(selected.paymentClientId)}</span>
               </div>
               <div className="flex justify-between gap-4">
                 <span className="text-muted">Amount</span>

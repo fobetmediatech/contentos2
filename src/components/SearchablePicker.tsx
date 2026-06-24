@@ -1,27 +1,31 @@
 /**
- * AccountPicker — a searchable account dropdown (combobox) for Calendar + Payments.
+ * SearchablePicker — a generic searchable dropdown (combobox).
  *
- * Replaces the plain <select> account pickers so a long client list stays usable: type to
- * filter by full name or @username, arrow-key + click to choose. Accounts come from the
- * Dashboard's tracked_accounts (see domain/calendar.ts). Self-contained, no extra deps;
- * styled to the Chai Dark system (surface-elevated dropdown, saffron highlight).
+ * Type to filter a list by its visible label, arrow-key + click to choose. Used by the
+ * Calendar (accounts from the Dashboard) and Payments (its own clients) — the caller maps
+ * its rows to { value, label } items, so this component stays domain-agnostic. Self-contained,
+ * no deps; styled to the Chai Dark system (surface-elevated dropdown, saffron highlight).
  *
  * Two modes:
- *  - select mode (default): value is a username or '' (nothing chosen).
- *  - filter mode (includeAll): adds a leading "All accounts" row; value can be 'all'.
+ *  - select mode (default): value is an item's value, or '' (nothing chosen).
+ *  - filter mode (includeAll): adds a leading "all" row; value can be 'all'.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, Search, Check } from 'lucide-react'
-import type { Account } from '../domain/calendar'
 
 const ALL = 'all'
 
-interface AccountPickerProps {
-  accounts: Account[]
-  /** Selected username, '' for none, or 'all' when includeAll is set. */
+export interface PickerItem {
+  value: string
+  label: string
+}
+
+interface SearchablePickerProps {
+  items: PickerItem[]
+  /** Selected item value, '' for none, or 'all' when includeAll is set. */
   value: string
   onChange: (value: string) => void
-  /** Show a leading "All accounts" row (filter mode). */
+  /** Show a leading "all" row (filter mode). */
   includeAll?: boolean
   allLabel?: string
   /** Shown on the trigger when nothing is selected (select mode). */
@@ -31,18 +35,16 @@ interface AccountPickerProps {
   className?: string
 }
 
-const optionLabel = (a: Account) => (a.fullName ? `${a.fullName} (@${a.username})` : `@${a.username}`)
-
-export function AccountPicker({
-  accounts,
+export function SearchablePicker({
+  items,
   value,
   onChange,
   includeAll = false,
-  allLabel = 'All accounts',
-  placeholder = 'Select an account…',
+  allLabel = 'All',
+  placeholder = 'Select…',
   disabled = false,
   className = '',
-}: AccountPickerProps) {
+}: SearchablePickerProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [highlight, setHighlight] = useState(0)
@@ -51,22 +53,16 @@ export function AccountPicker({
 
   const selectedLabel = useMemo(() => {
     if (includeAll && value === ALL) return allLabel
-    const a = accounts.find((x) => x.username === value)
-    return a ? optionLabel(a) : ''
-  }, [accounts, value, includeAll, allLabel])
+    return items.find((i) => i.value === value)?.label ?? ''
+  }, [items, value, includeAll, allLabel])
 
-  // Flat row list (optional "All" row + filtered accounts) — drives render + keyboard nav.
+  // Flat row list (optional "all" row + filtered items) — drives render + keyboard nav.
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase()
-    const matched = q
-      ? accounts.filter(
-          (a) => a.username.toLowerCase().includes(q) || (a.fullName ?? '').toLowerCase().includes(q),
-        )
-      : accounts
-    const base = matched.map((a) => ({ value: a.username, label: optionLabel(a) }))
+    const matched = q ? items.filter((i) => i.label.toLowerCase().includes(q)) : items
     const showAll = includeAll && (!q || allLabel.toLowerCase().includes(q))
-    return showAll ? [{ value: ALL, label: allLabel }, ...base] : base
-  }, [accounts, query, includeAll, allLabel])
+    return showAll ? [{ value: ALL, label: allLabel }, ...matched] : matched
+  }, [items, query, includeAll, allLabel])
 
   // Close on outside click.
   useEffect(() => {
@@ -139,13 +135,13 @@ export function AccountPicker({
                 setHighlight(0)
               }}
               onKeyDown={onKeyDown}
-              placeholder="Search accounts…"
+              placeholder="Search…"
               className="w-full bg-transparent text-sm text-primary placeholder:text-muted focus:outline-none"
             />
           </div>
           <ul className="max-h-60 overflow-y-auto py-1" role="listbox">
             {rows.length === 0 ? (
-              <li className="px-3 py-2 text-sm text-muted">No accounts found</li>
+              <li className="px-3 py-2 text-sm text-muted">No matches</li>
             ) : (
               rows.map((r, i) => {
                 const active = r.value === value

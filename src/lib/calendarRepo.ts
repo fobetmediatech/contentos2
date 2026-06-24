@@ -13,6 +13,7 @@ import { supabase } from './supabaseClient'
 import type {
   Account,
   ScheduledPost, ScheduledPostInput, ContentType, PostStatus,
+  PaymentClient, PaymentClientInput,
   ClientPayment, ClientPaymentInput, PaymentStatus,
 } from '../domain/calendar'
 
@@ -106,12 +107,77 @@ export async function deleteScheduledPost(id: string): Promise<void> {
   if (error) throw error
 }
 
+// ---------- Payment clients (Payments' own standalone DB; finance-only via RLS) ----------
+
+function rowToPaymentClient(r: Record<string, unknown>): PaymentClient {
+  return {
+    id: r.id as string,
+    name: (r.name as string) ?? '',
+    contactPerson: (r.contact_person as string | null) ?? null,
+    email: (r.email as string | null) ?? null,
+    phone: (r.phone as string | null) ?? null,
+    taxId: (r.tax_id as string | null) ?? null,
+    currency: (r.currency as string) ?? 'INR',
+    instagramHandle: (r.instagram_handle as string | null) ?? null,
+    notes: (r.notes as string | null) ?? null,
+    createdAt: ms(r.created_at as string | null),
+  }
+}
+
+export async function listPaymentClients(): Promise<PaymentClient[]> {
+  const { data, error } = await supabase
+    .from('payment_clients')
+    .select('*')
+    .order('name', { ascending: true })
+  if (error) throw error
+  return (data ?? []).map(rowToPaymentClient)
+}
+
+export async function createPaymentClient(input: PaymentClientInput): Promise<PaymentClient> {
+  const { data, error } = await supabase
+    .from('payment_clients')
+    .insert({
+      name: input.name,
+      contact_person: input.contactPerson ?? null,
+      email: input.email ?? null,
+      phone: input.phone ?? null,
+      tax_id: input.taxId ?? null,
+      currency: input.currency ?? 'INR',
+      instagram_handle: input.instagramHandle ?? null,
+      notes: input.notes ?? null,
+    })
+    .select()
+    .single()
+  if (error) throw error
+  return rowToPaymentClient(data as Record<string, unknown>)
+}
+
+export async function updatePaymentClient(id: string, patch: Partial<PaymentClientInput>): Promise<void> {
+  const row: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  if (patch.name !== undefined) row.name = patch.name
+  if (patch.contactPerson !== undefined) row.contact_person = patch.contactPerson
+  if (patch.email !== undefined) row.email = patch.email
+  if (patch.phone !== undefined) row.phone = patch.phone
+  if (patch.taxId !== undefined) row.tax_id = patch.taxId
+  if (patch.currency !== undefined) row.currency = patch.currency
+  if (patch.instagramHandle !== undefined) row.instagram_handle = patch.instagramHandle
+  if (patch.notes !== undefined) row.notes = patch.notes
+  const { error } = await supabase.from('payment_clients').update(row).eq('id', id)
+  if (error) throw error
+}
+
+/** Deletes a client. Their payments cascade-delete (FK on delete cascade). */
+export async function deletePaymentClient(id: string): Promise<void> {
+  const { error } = await supabase.from('payment_clients').delete().eq('id', id)
+  if (error) throw error
+}
+
 // ---------- Payments (finance-only via RLS) ----------
 
 function rowToPayment(r: Record<string, unknown>): ClientPayment {
   return {
     id: r.id as string,
-    accountUsername: (r.account_username as string) ?? '',
+    paymentClientId: (r.payment_client_id as string) ?? '',
     amount: Number(r.amount) || 0,
     currency: (r.currency as string) ?? 'INR',
     paidOn: (r.paid_on as string | null) ?? null,
@@ -122,9 +188,9 @@ function rowToPayment(r: Record<string, unknown>): ClientPayment {
   }
 }
 
-export async function listPayments(accountUsername?: string): Promise<ClientPayment[]> {
+export async function listPayments(paymentClientId?: string): Promise<ClientPayment[]> {
   let q = supabase.from('client_payments').select('*').order('paid_on', { ascending: false, nullsFirst: false })
-  if (accountUsername) q = q.eq('account_username', accountUsername)
+  if (paymentClientId) q = q.eq('payment_client_id', paymentClientId)
   const { data, error } = await q
   if (error) throw error
   return (data ?? []).map(rowToPayment)
@@ -134,7 +200,7 @@ export async function createPayment(input: ClientPaymentInput): Promise<ClientPa
   const { data, error } = await supabase
     .from('client_payments')
     .insert({
-      account_username: input.accountUsername,
+      payment_client_id: input.paymentClientId,
       amount: input.amount,
       currency: input.currency ?? 'INR',
       paid_on: input.paidOn ?? null,

@@ -15,7 +15,7 @@ import {
   updateScheduledPost,
   deleteScheduledPost,
 } from '../lib/calendarRepo'
-import { AccountPicker } from '../components/AccountPicker'
+import { SearchablePicker } from '../components/SearchablePicker'
 import type { ContentType, PostStatus, ScheduledPost } from '../domain/calendar'
 
 const CONTENT_TYPES: ContentType[] = ['reel', 'post', 'story', 'carousel']
@@ -81,6 +81,10 @@ export function CalendarPage() {
 
   const { data: accounts = [] } = useQuery({ queryKey: ['accounts'], queryFn: listAccounts })
   const accountLabel = (u: string) => accounts.find((a) => a.username === u)?.fullName || u
+  const accountItems = useMemo(
+    () => accounts.map((a) => ({ value: a.username, label: a.fullName ? `${a.fullName} (@${a.username})` : `@${a.username}` })),
+    [accounts],
+  )
 
   const { data: posts = [] } = useQuery({
     queryKey: ['scheduled_posts', accountFilter, from],
@@ -183,10 +187,11 @@ export function CalendarPage() {
           <div className="space-y-3">
             <label className="block">
               <span className="text-xs text-muted">Account</span>
-              <AccountPicker
-                accounts={accounts}
+              <SearchablePicker
+                items={accountItems}
                 value={d.accountUsername}
                 onChange={(v) => setDraft({ ...d, accountUsername: v })}
+                placeholder="Select an account…"
                 disabled={!!editingId}
                 className="mt-1"
               />
@@ -309,11 +314,12 @@ export function CalendarPage() {
           <h1 className="font-serif italic text-3xl text-primary">Calendar</h1>
           <p className="text-secondary text-sm mt-1">Plan which reel or post goes out — per account.</p>
         </div>
-        <AccountPicker
-          accounts={accounts}
+        <SearchablePicker
+          items={accountItems}
           value={accountFilter}
           onChange={setAccountFilter}
           includeAll
+          allLabel="All accounts"
           className="w-64"
         />
       </header>

@@ -1,17 +1,20 @@
 /**
- * PaymentsPage — manual payment tracking per account, FINANCE ROLE ONLY.
+ * PaymentsPage — manual payment tracking per client, FINANCE ROLE ONLY.
  *
- * Gated by useIsFinance() for UX; Supabase RLS is the real enforcement. Accounts come
- * from the Dashboard's tracked_accounts. Log a payment, mark it due/paid/overdue, see
- * running totals, and view them on a calendar.
+ * Gated by useIsFinance() for UX; Supabase RLS is the real enforcement. Clients come from
+ * the Payments section's OWN standalone database (payment_clients) — managed here via the
+ * Clients modal, independent of the Dashboard. Log a payment, mark it due/paid/overdue,
+ * see running totals, and view them on a calendar.
  */
 import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Lock, Plus, Trash2 } from 'lucide-react'
+import { Lock, Plus, Trash2, Users } from 'lucide-react'
 import { useIsFinance } from '../hooks/useIsFinance'
-import { listAccounts, listPayments, createPayment, updatePayment, deletePayment } from '../lib/calendarRepo'
+import { listPaymentClients, listPayments, createPayment, updatePayment, deletePayment } from '../lib/calendarRepo'
 import { PaymentsCalendar } from '../components/PaymentsCalendar'
-import { AccountPicker } from '../components/AccountPicker'
+import { PaymentClientsManager } from '../components/PaymentClientsManager'
+import { SearchablePicker } from '../components/SearchablePicker'
+import { fetchRatesToInr, FALLBACK_RATES_TO_INR, toInr } from '../lib/fxRates'
 import type { PaymentStatus } from '../domain/calendar'
 
 const STATUSES: PaymentStatus[] = ['due', 'paid', 'overdue']
@@ -32,23 +35,36 @@ export function PaymentsPage() {
   const { isFinance, isLoading } = useIsFinance()
   const qc = useQueryClient()
 
-  const [accountFilter, setAccountFilter] = useState('all')
+  const [clientFilter, setClientFilter] = useState('all')
   const [view, setView] = useState<'list' | 'calendar'>('list')
-  const [accountUsername, setAccountUsername] = useState('')
+  const [showClients, setShowClients] = useState(false)
+  const [paymentClientId, setPaymentClientId] = useState('')
   const [amount, setAmount] = useState('')
   const [currency, setCurrency] = useState('INR')
   const [paidOn, setPaidOn] = useState('')
   const [status, setStatus] = useState<PaymentStatus>('due')
   const [note, setNote] = useState('')
 
-  const { data: accounts = [] } = useQuery({ queryKey: ['accounts'], queryFn: listAccounts, enabled: isFinance })
-  const accountLabel = (u: string) => accounts.find((a) => a.username === u)?.fullName || u
+  const { data: clients = [] } = useQuery({ queryKey: ['payment_clients'], queryFn: listPaymentClients, enabled: isFinance })
+  const clientLabel = (id: string) => clients.find((c) => c.id === id)?.name || id
+  const clientItems = useMemo(() => clients.map((c) => ({ value: c.id, label: c.name })), [clients])
 
   const { data: payments = [] } = useQuery({
-    queryKey: ['client_payments', accountFilter],
-    queryFn: () => listPayments(accountFilter === 'all' ? undefined : accountFilter),
+    queryKey: ['client_payments', clientFilter],
+    queryFn: () => listPayments(clientFilter === 'all' ? undefined : clientFilter),
     enabled: isFinance,
   })
+
+  // Live FX rates for the consolidated INR total. Cached ~12h; falls back to a built-in
+  // table if the service is unreachable so the total never breaks.
+  const { data: liveRates } = useQuery({
+    queryKey: ['fx-rates'],
+    queryFn: () => fetchRatesToInr(),
+    enabled: isFinance,
+    staleTime: 12 * 60 * 60 * 1000,
+    retry: 1,
+  })
+  const rateMap = liveRates ?? FALLBACK_RATES_TO_INR
 
   const invalidate = () => void qc.invalidateQueries({ queryKey: ['client_payments'] })
 
@@ -56,7 +72,7 @@ export function PaymentsPage() {
     mutationFn: createPayment,
     onSuccess: () => {
       invalidate()
-      setAccountUsername('')
+      setPaymentClientId('')
       setAmount('')
       setPaidOn('')
       setStatus('due')
@@ -77,15 +93,22 @@ export function PaymentsPage() {
     }
     for (const p of payments) {
       t[p.status].count += 1
-      t[p.status].sum += p.amount
+      t[p.status].sum += toInr(p.amount, p.currency, rateMap)
     }
     return t
-  }, [payments])
+  }, [payments, rateMap])
+
+  // Picking a client defaults the currency to that client's billing currency.
+  const pickClient = (id: string) => {
+    setPaymentClientId(id)
+    const c = clients.find((x) => x.id === id)
+    if (c) setCurrency(c.currency)
+  }
 
   const addPayment = () => {
     const amt = Number(amount)
-    if (!accountUsername || !Number.isFinite(amt) || amt <= 0 || !note.trim() || create.isPending) return
-    create.mutate({ accountUsername, amount: amt, currency, paidOn: paidOn || null, status, note: note.trim() })
+    if (!paymentClientId || !Number.isFinite(amt) || amt <= 0 || !note.trim() || create.isPending) return
+    create.mutate({ paymentClientId, amount: amt, currency, paidOn: paidOn || null, status, note: note.trim() })
   }
 
   if (isLoading) {
@@ -113,19 +136,34 @@ export function PaymentsPage() {
       <header className="flex flex-wrap items-center justify-between gap-3 mb-5">
         <div>
           <h1 className="font-serif italic text-3xl text-primary">Payments</h1>
-          <p className="text-secondary text-sm mt-1">Track what each account has paid. Finance only.</p>
+          <p className="text-secondary text-sm mt-1">Track what each client has paid. Finance only.</p>
         </div>
-        <AccountPicker
-          accounts={accounts}
-          value={accountFilter}
-          onChange={setAccountFilter}
-          includeAll
-          className="w-64"
-        />
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowClients(true)}
+            className="flex items-center gap-1.5 text-sm text-secondary hover:text-primary border border-[rgba(245,237,214,0.12)] rounded-md px-3 py-2 transition-colors"
+          >
+            <Users size={15} /> Manage clients
+          </button>
+          <SearchablePicker
+            items={clientItems}
+            value={clientFilter}
+            onChange={setClientFilter}
+            includeAll
+            allLabel="All clients"
+            className="w-56"
+          />
+        </div>
       </header>
 
-      {/* Totals */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
+      {clients.length === 0 && (
+        <p className="text-muted text-sm mb-5">
+          No clients yet — add one with <span className="text-secondary">Manage clients</span> before logging a payment.
+        </p>
+      )}
+
+      {/* Totals — consolidated to INR (each payment converted at current rates) */}
+      <div className="grid grid-cols-3 gap-3 mb-2">
         {STATUSES.map((s) => (
           <div key={s} className="bg-surface border border-[rgba(245,237,214,0.08)] rounded-lg p-3">
             <div className="flex items-center justify-between">
@@ -134,19 +172,23 @@ export function PaymentsPage() {
               </span>
               <span className="text-muted text-xs font-mono">{totals[s].count}</span>
             </div>
-            <div className="text-primary font-mono text-lg mt-2">{fmt(totals[s].sum)}</div>
+            <div className="text-primary font-mono text-lg mt-2">≈ ₹{fmt(totals[s].sum)}</div>
           </div>
         ))}
       </div>
+      <p className="text-muted text-[11px] mb-6">
+        ≈ Totals consolidated in <span className="text-secondary">INR</span> — other currencies converted at{' '}
+        {liveRates ? 'today’s' : 'approximate'} rates. Each payment below keeps its original currency.
+      </p>
 
       {/* Add payment */}
       <div className="bg-surface border border-[rgba(245,237,214,0.08)] rounded-lg p-4 mb-6">
         <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
-          <AccountPicker
-            accounts={accounts}
-            value={accountUsername}
-            onChange={setAccountUsername}
-            placeholder="Account…"
+          <SearchablePicker
+            items={clientItems}
+            value={paymentClientId}
+            onChange={pickClient}
+            placeholder="Client…"
             className="col-span-2"
           />
           <input
@@ -181,7 +223,7 @@ export function PaymentsPage() {
           />
           <button
             onClick={addPayment}
-            disabled={!accountUsername || !amount || !note.trim() || create.isPending}
+            disabled={!paymentClientId || !amount || !note.trim() || create.isPending}
             className="flex items-center justify-center gap-1.5 bg-[#E07B3A] hover:bg-[#C4612A] disabled:opacity-50 text-white text-sm font-medium rounded-md px-4 py-2 transition-colors"
           >
             <Plus size={15} /> {create.isPending ? 'Adding…' : 'Add'}
@@ -207,7 +249,7 @@ export function PaymentsPage() {
       </div>
 
       {view === 'calendar' ? (
-        <PaymentsCalendar payments={payments} accountLabel={accountLabel} />
+        <PaymentsCalendar payments={payments} clientLabel={clientLabel} />
       ) : payments.length === 0 ? (
         <p className="text-muted text-sm">No payments logged yet.</p>
       ) : (
@@ -218,7 +260,7 @@ export function PaymentsPage() {
               className="flex items-center gap-3 bg-surface border border-[rgba(245,237,214,0.08)] rounded-lg px-4 py-3"
             >
               <div className="min-w-0 flex-1">
-                <div className="text-primary text-sm font-medium truncate">{accountLabel(p.accountUsername)}</div>
+                <div className="text-primary text-sm font-medium truncate">{clientLabel(p.paymentClientId)}</div>
                 <div className="text-muted text-xs truncate">
                   {p.paidOn ?? 'no date'}
                   {p.note ? ` · ${p.note}` : ''}
@@ -253,6 +295,8 @@ export function PaymentsPage() {
           ))}
         </ul>
       )}
+
+      {showClients && <PaymentClientsManager onClose={() => setShowClients(false)} />}
     </div>
   )
 }

@@ -43,10 +43,39 @@ export interface ScheduledPostInput {
 
 export type PaymentStatus = 'due' | 'paid' | 'overdue'
 
-/** A manually-logged payment for a tracked account. FINANCE ROLE ONLY (Supabase RLS). */
+/**
+ * A client in the Payments section's OWN standalone database (independent of the
+ * Dashboard's tracked_accounts). Managed entirely by finance from within Payments.
+ * FINANCE ROLE ONLY (Supabase RLS).
+ */
+export interface PaymentClient {
+  id: string
+  name: string                 // company / client name (required)
+  contactPerson: string | null
+  email: string | null
+  phone: string | null
+  taxId: string | null         // GST / billing tax id
+  currency: string             // default billing currency
+  instagramHandle: string | null  // free-text reference only — NOT linked to tracked_accounts
+  notes: string | null
+  createdAt: number
+}
+
+export interface PaymentClientInput {
+  name: string
+  contactPerson?: string | null
+  email?: string | null
+  phone?: string | null
+  taxId?: string | null
+  currency?: string
+  instagramHandle?: string | null
+  notes?: string | null
+}
+
+/** A manually-logged payment for a payment client. FINANCE ROLE ONLY (Supabase RLS). */
 export interface ClientPayment {
   id: string
-  accountUsername: string   // → tracked_accounts.username
+  paymentClientId: string   // → payment_clients.id
   amount: number
   currency: string
   paidOn: string | null     // ISO date (YYYY-MM-DD)
@@ -57,7 +86,7 @@ export interface ClientPayment {
 }
 
 export interface ClientPaymentInput {
-  accountUsername: string
+  paymentClientId: string
   amount: number
   currency?: string
   paidOn?: string | null
