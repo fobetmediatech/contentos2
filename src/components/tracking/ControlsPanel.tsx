@@ -178,7 +178,7 @@ export function ControlsPanel({
         {!confirmRemove ? (
           <button
             onClick={() => setConfirmRemove(true)}
-            className="flex items-center gap-2 text-sm px-3 py-1.5 rounded-md text-[#7A6A54] hover:text-red-400 transition-colors ml-auto"
+            className="flex items-center gap-2 text-sm px-3 py-1.5 rounded-md text-[#7A6A54] hover:text-danger transition-colors ml-auto"
           >
             <Trash2 size={13} />
             Stop tracking
@@ -188,13 +188,13 @@ export function ControlsPanel({
             <span className="text-[#C4A882] text-xs">Delete history too?</span>
             <button
               onClick={() => onRemove(false)}
-              className="text-xs px-2.5 py-1 rounded bg-red-900/40 text-red-400 hover:bg-red-900/60 transition-colors"
+              className="text-xs px-2.5 py-1 rounded bg-[rgba(224,92,92,0.12)] text-danger hover:bg-[rgba(224,92,92,0.2)] transition-colors"
             >
               Remove + keep data
             </button>
             <button
               onClick={() => onRemove(true)}
-              className="text-xs px-2.5 py-1 rounded bg-red-900/60 text-red-300 hover:bg-red-900/80 transition-colors"
+              className="text-xs px-2.5 py-1 rounded bg-[rgba(224,92,92,0.2)] text-danger hover:bg-[rgba(224,92,92,0.3)] transition-colors"
             >
               Remove + delete all
             </button>

@@ -73,6 +73,7 @@ export function CalendarPage() {
   })
   const [accountFilter, setAccountFilter] = useState<string>('all')
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [draft, setDraft] = useState<Draft | null>(null)
 
   const cells = useMemo(() => buildGrid(month), [month])
@@ -276,14 +277,20 @@ export function CalendarPage() {
 
           <div className="flex items-center justify-between mt-5">
             {editingId ? (
-              <button
-                onClick={() => {
-                  if (editingId && window.confirm('Delete this scheduled post?')) remove.mutate(editingId)
-                }}
-                className="flex items-center gap-1.5 text-sm text-muted hover:text-danger transition-colors"
-              >
-                <Trash2 size={15} /> Delete
-              </button>
+              confirmDeleteId === editingId ? (
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-muted">Delete this post?</span>
+                  <button onClick={() => { remove.mutate(editingId); setConfirmDeleteId(null) }} className="text-danger font-medium hover:underline">Confirm</button>
+                  <button onClick={() => setConfirmDeleteId(null)} className="text-muted hover:text-secondary transition-colors">Cancel</button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmDeleteId(editingId)}
+                  className="flex items-center gap-1.5 text-sm text-muted hover:text-danger transition-colors"
+                >
+                  <Trash2 size={15} /> Delete
+                </button>
+              )
             ) : (
               <span />
             )}

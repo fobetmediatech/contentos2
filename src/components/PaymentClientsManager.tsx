@@ -33,6 +33,7 @@ export function PaymentClientsManager({ onClose }: Props) {
   const qc = useQueryClient()
   const { data: clients = [] } = useQuery({ queryKey: ['payment_clients'], queryFn: listPaymentClients })
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [form, setForm] = useState<PaymentClientInput>(EMPTY)
 
   const invalidate = () => void qc.invalidateQueries({ queryKey: ['payment_clients'] })
@@ -149,19 +150,26 @@ export function PaymentClientsManager({ onClose }: Props) {
                 >
                   <Pencil size={15} />
                 </button>
-                <button
-                  onClick={() => {
-                    if (window.confirm(`Delete "${c.name}"? This also deletes all their payment records.`)) {
-                      remove.mutate(c.id)
-                      if (editingId === c.id) reset()
-                    }
-                  }}
-                  disabled={remove.isPending}
-                  aria-label="Delete client"
-                  className="flex-shrink-0 text-muted hover:text-danger disabled:opacity-50 transition-colors p-1"
-                >
-                  <Trash2 size={15} />
-                </button>
+                {confirmDeleteId === c.id ? (
+                  <span className="flex-shrink-0 flex items-center gap-1.5 text-xs">
+                    <button
+                      onClick={() => { remove.mutate(c.id); if (editingId === c.id) reset(); setConfirmDeleteId(null) }}
+                      disabled={remove.isPending}
+                      title="Deletes the client and all their payment records"
+                      aria-label="Confirm delete client and records"
+                      className="text-danger font-medium hover:underline disabled:opacity-50"
+                    >Delete?</button>
+                    <button onClick={() => setConfirmDeleteId(null)} aria-label="Cancel delete" className="text-muted hover:text-secondary transition-colors">Cancel</button>
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => setConfirmDeleteId(c.id)}
+                    aria-label="Delete client"
+                    className="flex-shrink-0 text-muted hover:text-danger transition-colors p-1"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                )}
               </li>
             ))}
           </ul>
