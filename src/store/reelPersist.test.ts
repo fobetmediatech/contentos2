@@ -30,37 +30,11 @@ describe('isCleanReelRun', () => {
     expect(isCleanReelRun({ synthesisStatus: 'idle', creatorStates: {} })).toBe(false)
   })
 
-  // --- Deep-report path (audit fix: deep-only runs were silently dropped on reload) ---
-  // A deep report finishes via deepReportStatus while synthesisStatus stays 'idle', so the
-  // guard must treat a terminal deep report as a finished run too.
-
-  it('is clean when the deep report is done, even though synthesis never ran (deep-only run)', () => {
+  it('is clean for a single-handle HookMap run (synthesisStatus done, no niche synthesis object)', () => {
+    // Single-handle drives synthesisStatus → 'done' even though `synthesis` stays null and the
+    // creator carries a hookSummary instead of analyses. The gate keys off status, so it persists.
     expect(
-      isCleanReelRun({ synthesisStatus: 'idle', deepReportStatus: 'done', creatorStates: { a: { status: 'done' } } }),
-    ).toBe(true)
-  })
-
-  it('is clean when the deep report failed (terminal) with no creator mid-flight', () => {
-    expect(
-      isCleanReelRun({ synthesisStatus: 'idle', deepReportStatus: 'failed', creatorStates: { a: { status: 'done' } } }),
-    ).toBe(true)
-  })
-
-  it('is NOT clean while the deep report is still running (interrupted deep-only reload)', () => {
-    expect(
-      isCleanReelRun({ synthesisStatus: 'idle', deepReportStatus: 'running', creatorStates: { a: { status: 'done' } } }),
-    ).toBe(false)
-  })
-
-  it('is NOT clean when the deep report is done but a creator is still scraping', () => {
-    expect(
-      isCleanReelRun({ synthesisStatus: 'idle', deepReportStatus: 'done', creatorStates: { a: { status: 'scraping' } } }),
-    ).toBe(false)
-  })
-
-  it('is clean when the deep report is unavailable (terminal: backend down, not a stuck spinner)', () => {
-    expect(
-      isCleanReelRun({ synthesisStatus: 'idle', deepReportStatus: 'unavailable', creatorStates: { a: { status: 'done' } } }),
+      isCleanReelRun({ synthesisStatus: 'done', creatorStates: { alice: { status: 'done' } } }),
     ).toBe(true)
   })
 })

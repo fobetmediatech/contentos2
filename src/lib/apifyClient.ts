@@ -80,12 +80,12 @@ export async function scrapeHashtagUsernames(
   hashtags: string[],
   apifyKeys: string[],
   signal?: AbortSignal,
-  perHashtag = 20,
+  perHashtag = 35,
 ): Promise<string[]> {
   if (hashtags.length === 0) return []
 
-  const top3 = hashtags.slice(0, 3)
-  const input = buildHashtagScraperInput(top3, perHashtag)
+  const top5 = hashtags.slice(0, 5)
+  const input = buildHashtagScraperInput(top5, perHashtag)
   const posts = await withKeyFailover(apifyKeys, async (apiKey) => {
     const { runId, datasetId, keyIndex } = await startRun(ACTORS.HASHTAG_SCRAPER, input, apiKey, signal)
     const resolvedDatasetId = await pollRun(runId, apiKey, signal, undefined, keyIndex)
@@ -165,9 +165,18 @@ export async function discoverCompetitors(
     return { inputProfiles, candidateProfiles: [] }
   }
 
-  // Extract top hashtags from input profiles for content-niche expansion
-  const allHashtags = inputProfiles.flatMap((p) => p.topHashtags)
-  const uniqueHashtags = [...new Set(allHashtags)]
+  // Extract hashtags from input profiles for content-niche expansion, ranked by
+  // CROSS-PROFILE frequency (how many reference accounts use each tag). A plain Set
+  // kept first-seen order, so a single sparse/noisy reference account (e.g. one whose
+  // only tags are #ad #collab) could dictate the entire hashtag scrape. Frequency
+  // ranking mirrors the relatedHandles sort above: a tag shared by multiple references
+  // is a far stronger niche signal than one seen on a single account.
+  const hashtagCrossFreq = new Map<string, number>()
+  for (const p of inputProfiles) {
+    for (const h of p.topHashtags) hashtagCrossFreq.set(h, (hashtagCrossFreq.get(h) ?? 0) + 1)
+  }
+  const uniqueHashtags = [...hashtagCrossFreq.keys()]
+    .sort((a, b) => (hashtagCrossFreq.get(b) ?? 0) - (hashtagCrossFreq.get(a) ?? 0))
 
   // Round 2 + Hashtag expansion: run in PARALLEL
   // Round 2 uses audience-adjacency signal (relatedProfiles)
@@ -189,12 +198,13 @@ export async function discoverCompetitors(
   candidateHandles.forEach((h) => seenHandles.add(h.toLowerCase()))
 
   // Compute hashtag handles first (filtered against round1+round2 seen set).
-  // Cap at 20 (2 batches) — beyond this the timing cost exceeds the pool quality gain.
+  // Cap at 40 (4 batches) — the content-niche path is the highest-precision source and
+  // feeds the small on-niche accounts Trending needs, so we give it more reach than Round 3.
   const hashtagHandles = hashtagUsernames
     .filter((h) => !seenHandles.has(h))
-    .slice(0, 20)
+    .slice(0, 40)
 
-  devLog(`[hashtag] ${hashtagHandles.length} net-new handles from content-niche expansion (${uniqueHashtags.slice(0, 3).join(', ')})`)
+  devLog(`[hashtag] ${hashtagHandles.length} net-new handles from content-niche expansion (${uniqueHashtags.slice(0, 5).join(', ')})`)
 
   // Add hashtag handles to seen BEFORE computing Round 3 — prevents overlap between
   // the two parallel scrapes, keeping the combined pool clean.

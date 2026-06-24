@@ -17,14 +17,7 @@ import { useState } from 'react'
 import { Bot, ChevronDown, ChevronUp, Copy, Video } from 'lucide-react'
 import { useSingleReelStore } from '../store/singleReelStore'
 import { CaseStudyMarkdown } from './markdown/CaseStudyMarkdown'
-
-/** Seconds → m:ss (e.g. 75 → "1:15"). Negative / non-finite values clamp to 0:00. */
-function fmtTime(seconds: number): string {
-  const s = Number.isFinite(seconds) && seconds > 0 ? Math.floor(seconds) : 0
-  const m = Math.floor(s / 60)
-  const rem = s % 60
-  return `${m}:${rem.toString().padStart(2, '0')}`
-}
+import { ReelTranscriptView } from './ReelTranscriptView'
 
 export function SingleReelResultMessage() {
   const status = useSingleReelStore((s) => s.status)
@@ -109,20 +102,7 @@ export function SingleReelResultMessage() {
               </button>
               {showTranscript && (
                 <div className="px-4 pb-3 pt-1 border-t border-[rgba(245,237,214,0.08)]">
-                  {result.segments.length > 0 ? (
-                    <div className="space-y-1.5">
-                      {result.segments.map((seg, i) => (
-                        <p key={`${i}-${seg.start}`} className="text-sm text-secondary leading-relaxed">
-                          <span className="font-mono text-xs text-[#E07B3A] tabular-nums mr-2">
-                            [{fmtTime(seg.start)}]
-                          </span>
-                          {seg.text}
-                        </p>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-secondary leading-relaxed whitespace-pre-wrap">{result.transcript}</p>
-                  )}
+                  <ReelTranscriptView result={result} />
                 </div>
               )}
             </div>

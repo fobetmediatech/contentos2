@@ -104,3 +104,25 @@ describe('reelAnalysisStore', () => {
     expect(state.creatorStates['bob'].status).toBe('done')
   })
 })
+
+describe('setReelCaseStudy', () => {
+  it('merges per-reel status and result into a creator without clobbering siblings', () => {
+    const s = useReelAnalysisStore.getState()
+    s.setCreatorState('alice', { handle: 'alice', status: 'analyzing', reels: [], analyses: {} })
+    s.setReelCaseStudy('alice', 'r1', { status: 'analyzing' })
+    s.setReelCaseStudy('alice', 'r2', { status: 'pending' })
+    s.setReelCaseStudy('alice', 'r1', {
+      status: 'done',
+      result: { transcript: 't', segments: [], videoAnalysis: {} as never, markdown: '# m' },
+    })
+    const c = useReelAnalysisStore.getState().creatorStates['alice']
+    expect(c.caseStudyStatus).toEqual({ r1: 'done', r2: 'pending' })
+    expect(c.caseStudies?.r1?.markdown).toBe('# m')
+    expect(c.caseStudies?.r2).toBeUndefined()
+  })
+
+  it('does nothing when the creator does not exist (never mints from a case-study update)', () => {
+    useReelAnalysisStore.getState().setReelCaseStudy('ghost', 'r1', { status: 'done' })
+    expect(useReelAnalysisStore.getState().creatorStates['ghost']).toBeUndefined()
+  })
+})

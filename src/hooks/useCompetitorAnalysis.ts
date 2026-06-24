@@ -26,7 +26,9 @@ import { useConversationsStore } from '../store/conversationsStore'
 import { useKeysStore } from '../store/keysStore'
 import { discoverCompetitors } from '../lib/apifyClient'
 import { analyzeCompetitors, generateClarificationQuestion } from '../ai/gemini'
-import { buildPipelineErrorMessage, sparseSeedMessage, ALL_DISMISSED_MESSAGE } from '../lib/errorMessages'
+import { buildPipelineErrorMessage, sparseSeedMessage, ALL_DISMISSED_MESSAGE, alreadyCollectedMessage, poolExhaustedMessage } from '../lib/errorMessages'
+import { getShownProfiles } from '../lib/competitorCache'
+import type { CompetitorAnalysisResult } from '../ai/prompts'
 import { linkAbort } from '../lib/abortControl'
 import { useCorpusStore } from '../store/corpusStore'
 import { dropDismissedCandidates, selectPreferenceExemplars } from '../lib/corpus'
@@ -34,6 +36,28 @@ import { buildCorpusSignals } from '../ai/prompts'
 
 const TIMEOUT_MS = 150_000
 const MIN_COMPETITOR_RESULTS = 8
+// Below this many on-pool picks after the strict niche pass, attempt a relaxed top-up to avoid
+// very thin results. Conservative (< the 8 sparse threshold) so the precision-first ranking is
+// only supplemented when the niche pool is genuinely thin — not routinely padded with broader picks.
+const UNDERFILL_FLOOR = 6
+const MAX_COMPETITOR_RESULTS = 10 // Top 5 + Trending 5
+/** Target RELEVANT (non-thumbs-downed) competitors PER CATEGORY (5 established/top + 5 growing/trending). */
+export const TARGET_PER_CATEGORY = 5
+
+/**
+ * Keep up to `topMax` 'top' + `trendingMax' 'trending' results, lowest rank first within each
+ * category. Lets a re-run fill each category's deficit independently. Pure — unit-tested.
+ */
+export function capByCategory(
+  list: CompetitorAnalysisResult[],
+  topMax: number,
+  trendingMax: number,
+): CompetitorAnalysisResult[] {
+  const byRank = (a: CompetitorAnalysisResult, b: CompetitorAnalysisResult) => a.rank - b.rank
+  const top = list.filter((c) => c.category === 'top').sort(byRank).slice(0, Math.max(0, topMax))
+  const trending = list.filter((c) => c.category === 'trending').sort(byRank).slice(0, Math.max(0, trendingMax))
+  return [...top, ...trending]
+}
 
 export function useCompetitorAnalysis() {
   const store = useAnalysisStore()
@@ -43,7 +67,7 @@ export function useCompetitorAnalysis() {
   // ── Phase 1: Discovery + clarification question generation ────────────────
 
   const discoverMutation = useMutation({
-    mutationFn: async ({ params, externalSignal }: { params: AnalysisParams; externalSignal?: AbortSignal }) => {
+    mutationFn: async ({ params, externalSignal, autoAnswer }: { params: AnalysisParams; externalSignal?: AbortSignal; autoAnswer?: string }) => {
       // linkAbort: internal 150s timeout + an optional external (agent-loop) signal.
       const abort = linkAbort(TIMEOUT_MS, externalSignal)
 
@@ -100,8 +124,16 @@ export function useCompetitorAnalysis() {
             )
           : { question: 'Which direction best fits your client?', options: ['Exact niche match', 'Broader category'] }
 
-        // Transition to clarifying state — UI shows <ClarificationCard>
+        // Store the discovery data so Phase 2 (analyzeMutation) can read it from the store.
         setClarification({ inputProfiles, candidateProfiles: candidates, clarificationQuestion })
+
+        // Re-run path ("Start over"): an autoAnswer reuses the first run's clarification silently —
+        // skip the card and fire ranking directly. storeAnswerClarification flips status to 'running'
+        // synchronously (same tick), so the 'clarifying' UI never renders.
+        if (autoAnswer !== undefined) {
+          storeAnswerClarification(autoAnswer)
+          analyzeMutation.mutate({ answer: autoAnswer, nicheContext: params.nicheContext, externalSignal })
+        }
 
         return { inputProfiles, candidateProfiles: candidates }
 
@@ -137,51 +169,109 @@ export function useCompetitorAnalysis() {
       try {
         setStep(5)
         const { inputProfiles, candidateProfiles } = discovery
-        const knownHandles = new Set(candidateProfiles.map((p) => p.username.toLowerCase()))
+
+        // Load the per-conversation shown map (username → category) and filter out already-seen
+        // profiles. Returns {} on first run or IDB unavailability — the filter is then a no-op.
+        const runConvId = useAnalysisStore.getState().runConversationId ?? ''
+        const inputHandles = useAnalysisStore.getState().params?.handles ?? []
+        const shownMap = await getShownProfiles(runConvId, inputHandles)
+        const shownSet = new Set(Object.keys(shownMap))
+        const freshCandidates = shownSet.size > 0
+          ? candidateProfiles.filter((p) => !shownSet.has(p.username.toLowerCase()))
+          : candidateProfiles
 
         const corpusCreators = useCorpusStore.getState().creators
+
+        // Relevant = shown profiles the user has NOT thumbs-downed, counted PER CATEGORY. Each
+        // category targets only its own remaining gap toward TARGET_PER_CATEGORY (5 top + 5 trending),
+        // so a re-run fills only the deficit folder(s) instead of a combined total.
+        const dismissed = new Set(
+          Object.values(corpusCreators)
+            .filter((c) => c.feedback === 'dismissed')
+            .map((c) => c.username.toLowerCase()),
+        )
+        const relevantTop = Object.entries(shownMap).filter(([u, cat]) => cat === 'top' && !dismissed.has(u)).length
+        const relevantTrending = Object.entries(shownMap).filter(([u, cat]) => cat === 'trending' && !dismissed.has(u)).length
+        const topTarget = Math.max(0, TARGET_PER_CATEGORY - relevantTop)
+        const trendingTarget = Math.max(0, TARGET_PER_CATEGORY - relevantTrending)
+
+        // Both categories full (primary stop is the pre-scrape check in ChatPage; this is
+        // belt-and-suspenders for direct re-entry). Pool exhausted before reaching the target.
+        if (topTarget <= 0 && trendingTarget <= 0) {
+          throw new Error(alreadyCollectedMessage(TARGET_PER_CATEGORY * 2))
+        }
+        if (freshCandidates.length === 0) {
+          throw new Error(poolExhaustedMessage(relevantTop + relevantTrending))
+        }
+
+        // Hallucination-filter pool = the fresh candidates we actually rank (already-shown excluded).
+        const knownHandles = new Set(freshCandidates.map((p) => p.username.toLowerCase()))
+
         // 3b (Phase 3): bias ranking toward the strategist's saved traits, away from dismissed.
         const preferenceExemplars = selectPreferenceExemplars(Object.values(corpusCreators), nicheContext)
         // 4.4: annotate candidate lines with corpus recognition signal ([KNOWN: seen Nx in 'niche']).
-        const corpusSignals = buildCorpusSignals(candidateProfiles.map((p) => p.username), corpusCreators)
+        const corpusSignals = buildCorpusSignals(freshCandidates.map((p) => p.username), corpusCreators)
+        const corpusArg = Object.keys(corpusSignals).length > 0 ? corpusSignals : undefined
 
-        // Step 5: AI rationale — nicheContext + clarification answer + preference signal (tiebreaker)
-        let output = await analyzeCompetitors(
+        // Hallucination filter: a returned handle must exist in the scraped pool. Strip a leading
+        // @ before matching — Gemini occasionally returns "@handle" despite the "no @" instruction.
+        const normHandle = (u: string) => u.replace(/^@/, '').toLowerCase()
+        const inPool = (c: { username: string }) => knownHandles.has(normHandle(c.username))
+
+        // Step 5: AI rationale — nicheContext + clarification answer + preference + corpus signals
+        const output = await analyzeCompetitors(
           geminiKeys,
           inputProfiles,
-          candidateProfiles,
+          freshCandidates,
           abort.signal,
           nicheContext || undefined,
           answer || undefined,
           preferenceExemplars,
-          Object.keys(corpusSignals).length > 0 ? corpusSignals : undefined,
+          corpusArg,
         )
+        const competitors = output.competitors.filter(inPool)
 
-        // Zero-result guard: if filter signals were set and Gemini returned nothing,
-        // retry without them so the user sees at least some results with a warning.
-        const hasFilterSignal = (nicheContext || '').trim().length > 0 || (answer || '').trim().length > 0
-        if (output.competitors.length === 0 && hasFilterSignal) {
-          console.warn('[analysis] zero competitors with filter signals — retrying without them')
-          output = await analyzeCompetitors(
+        // Underfill top-up (recall safety net): if the strict niche pass yielded few on-pool picks,
+        // re-rank with the NARROWING filter relaxed (drop nicheContext + answer) but KEEP the
+        // preference + corpus quality signals, then MERGE in only NEW unique on-pool picks to fill
+        // the gap. Strict on-niche picks are kept first and never displaced — the relaxed pass only
+        // supplements when the niche pool is genuinely thin. Also covers the old zero-result case.
+        const hadNarrowingFilter = (nicheContext || '').trim().length > 0 || (answer || '').trim().length > 0
+        if (competitors.length < UNDERFILL_FLOOR && hadNarrowingFilter) {
+          console.warn(`[analysis] only ${competitors.length} on-pool picks after strict pass — relaxed top-up`)
+          const relaxed = await analyzeCompetitors(
             geminiKeys,
             inputProfiles,
-            candidateProfiles,
+            freshCandidates,
             abort.signal,
+            undefined,
+            undefined,
+            preferenceExemplars,
+            corpusArg,
           )
+          const seen = new Set(competitors.map((c) => normHandle(c.username)))
+          for (const c of relaxed.competitors) {
+            if (competitors.length >= MAX_COMPETITOR_RESULTS) break
+            if (inPool(c) && !seen.has(normHandle(c.username))) {
+              competitors.push(c)
+              seen.add(normHandle(c.username))
+            }
+          }
         }
 
-        // Apply hallucination filter (post-retry, so both paths are filtered)
-        const filteredCompetitors = output.competitors.filter((c) => knownHandles.has(c.username.toLowerCase()))
-        output = { ...output, competitors: filteredCompetitors }
-
-        if (output.competitors.length === 0) {
+        // Cap each category to its own remaining gap so a re-run fills only the deficit folder(s)
+        // toward TARGET_PER_CATEGORY (5 established + 5 growing). The merge in ChatPage then stitches
+        // these onto the carried-over relevant accounts for the full accumulated view.
+        const capped = capByCategory(competitors, topTarget, trendingTarget)
+        if (capped.length === 0) {
           throw new Error(
             'No verified competitors found — Gemini returned accounts that weren\'t in the scraped set. Try again or use different reference handles.',
           )
         }
 
-        setResults(output, inputProfiles, candidateProfiles.length, candidateProfiles)
-        return output
+        const finalOutput = { ...output, competitors: capped }
+        setResults(finalOutput, inputProfiles, candidateProfiles.length, candidateProfiles)
+        return finalOutput
 
       } catch (err) {
         if (abort.wasSuperseded()) return undefined
@@ -199,9 +289,13 @@ export function useCompetitorAnalysis() {
 
   // ── Public API ─────────────────────────────────────────────────────────────
 
-  /** Kick off Phase 1 (discovery + question generation). */
-  const analyze = (params: AnalysisParams, externalSignal?: AbortSignal) => {
-    discoverMutation.mutate({ params, externalSignal })
+  /**
+   * Kick off Phase 1 (discovery + question generation).
+   * Pass `autoAnswer` to skip the clarification card and rank directly with that answer —
+   * used by "Start over" re-runs to reuse the first run's clarification silently.
+   */
+  const analyze = (params: AnalysisParams, externalSignal?: AbortSignal, autoAnswer?: string) => {
+    discoverMutation.mutate({ params, externalSignal, autoAnswer })
   }
 
   /**

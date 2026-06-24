@@ -32,6 +32,11 @@ import type { ChatMessage as ChatMessageData } from '../store/analysisStore'
 import { useCorpusStore } from '../store/corpusStore'
 import { harvestCompetitors, harvestDiscovery, harvestReelContent } from '../lib/corpusHarvest'
 import { buildReelResultPayload } from '../lib/reelSnapshot'
+import { addShownProfiles, getShownProfiles } from '../lib/competitorCache'
+import { mergeCompetitorResults } from '../components/competitorResultView'
+import { alreadyCollectedMessage } from '../lib/errorMessages'
+import { TARGET_PER_CATEGORY } from '../hooks/useCompetitorAnalysis'
+import type { CompetitorResultPayload } from '../domain/chat'
 
 // Tool chips shown in the empty state — one per independent tool, so all three
 // are discoverable at a glance. Tapping prefills the input with a representative prompt.
@@ -103,8 +108,8 @@ export function ChatPage() {
   // Phase 1 graduated: the turn-based agent loop is THE conversation engine (the old
   // useConversation wizard is retired). Input stays live; a new message steers (latest-wins).
   const agentConv = useAgentConversation()
-  const { answerClarification, isPending: clarificationPending } = useCompetitorAnalysis()
-  const { startAnalysis: startReelAnalysis, startDeepReport, activeHandles, creatorStates, synthesisStatus, synthesis, synthesisError, deepReport, deepReportStatus, reset: resetReel } = useReelAnalysis()
+  const { analyze, answerClarification, isPending: clarificationPending } = useCompetitorAnalysis()
+  const { startAnalysis: startReelAnalysis, activeHandles, creatorStates, synthesisStatus, synthesis, synthesisError, reset: resetReel } = useReelAnalysis()
   // Which conversation the current reel run belongs to — gates the live block to that chat and
   // routes its snapshot there on supersede (results-as-messages parity with competitor/discovery).
   const reelConversationId = useReelAnalysisStore((s) => s.reelConversationId)
@@ -186,25 +191,58 @@ export function ChatPage() {
       competitorResultArmedRef.current = true
     } else if (status === 'done' && competitorResultArmedRef.current) {
       competitorResultArmedRef.current = false
+      const convId = competitorRunConversationId ?? activeConversationId
       const handles = new Set(competitors.map((c) => c.username))
       // Match against candidateProfiles (the scraped competitors), NOT inputProfiles (the user's
       // reference accounts) — the ranked competitors live in the candidate set, so this is what
       // gives cards their metrics and feeds the corpus real creators.
       const matched = candidateProfiles.filter((p) => handles.has(p.username))
+
+      // Carry forward previously-shown RELEVANT (non-thumbs-downed) accounts so each run renders the
+      // full accumulated set (carried + new) together. Read the latest prior competitor result in
+      // this conversation; on a first run there is none, so carried is empty (just the new results).
+      const corpus = useCorpusStore.getState().creators
+      const priorMsgs = useConversationsStore.getState().conversations[convId]?.messages ?? []
+      const prior = [...priorMsgs]
+        .reverse()
+        .find((m) => m.type === 'result' && m.result?.kind === 'competitor')?.result as
+        | CompetitorResultPayload
+        | undefined
+      const carriedComp = (prior?.competitors ?? []).filter((c) => corpus[c.username]?.feedback !== 'dismissed')
+      const carriedProfiles = (prior?.profiles ?? []).filter((p) => corpus[p.username]?.feedback !== 'dismissed')
+
+      // Merge + re-rank the whole set (fresh wins on dups); merge profiles (fresh wins).
+      const mergedComp = mergeCompetitorResults(carriedComp, competitors)
+      const profMap = new Map<string, NormalizedProfile>()
+      for (const p of carriedProfiles) profMap.set(p.username, p)
+      for (const p of matched.map(trimProfile)) profMap.set(p.username, p)
+      const mergedProfiles = [...profMap.values()]
+
       // 2.1: route to the conversation the run started in, not the currently-active one.
-      addMessageTo(competitorRunConversationId ?? activeConversationId, {
+      addMessageTo(convId, {
         role: 'assistant',
         type: 'result',
-        content: `Found ${competitors.length} competitor${competitors.length !== 1 ? 's' : ''}${niche ? ` in ${niche}` : ''}.`,
+        content: `Found ${mergedComp.length} competitor${mergedComp.length !== 1 ? 's' : ''}${niche ? ` in ${niche}` : ''}.`,
         result: {
           kind: 'competitor',
-          competitors,
+          competitors: mergedComp,
           summary,
-          niche,
-          profiles: matched.map(trimProfile),
+          niche: niche || prior?.niche || '',
+          profiles: mergedProfiles,
           didExpand: analysisDidExpand,
+          // Re-run context for "Start over": same handles + reused clarification answer.
+          handles: useAnalysisStore.getState().params?.handles ?? prior?.handles ?? [],
+          nicheContext: useAnalysisStore.getState().params?.nicheContext ?? prior?.nicheContext ?? '',
+          clarificationAnswer: useAnalysisStore.getState().clarificationAnswer ?? prior?.clarificationAnswer ?? '',
         },
       })
+      // Write shown profiles (username → category) to the per-conversation cache so a rerun
+      // excludes them and tracks per-category relevant counts. Fire-and-forget, best-effort.
+      void addShownProfiles(
+        convId,
+        useAnalysisStore.getState().params?.handles ?? [],
+        competitors.map((c) => ({ username: c.username, category: c.category })),
+      ).catch(() => {})
       // Remember these creators in the cross-search corpus (untrimmed, so topHashtags
       // survive as signal). Fire-and-forget — a corpus write never blocks the chat.
       void useCorpusStore
@@ -330,8 +368,7 @@ export function ChatPage() {
   const snapshotCurrentReelRun = () => {
     const s = useReelAnalysisStore.getState()
     const terminal =
-      s.synthesisStatus === 'done' || s.synthesisStatus === 'failed' ||
-      s.deepReportStatus === 'done' || s.deepReportStatus === 'failed'
+      s.synthesisStatus === 'done' || s.synthesisStatus === 'failed'
     if (!s.reelConversationId || s.activeHandles.length === 0 || !terminal) return
     addMessageTo(s.reelConversationId, {
       role: 'assistant',
@@ -341,7 +378,6 @@ export function ChatPage() {
         handles: s.activeHandles,
         creatorStates: s.creatorStates,
         synthesis: s.synthesis,
-        deepReport: s.deepReport,
       }),
     })
   }
@@ -351,6 +387,37 @@ export function ChatPage() {
     resetReel()
     startNew() // a fresh conversation — the finished one stays in history (switchable)
     freshenAnalysis()
+  }
+
+  // Competitor "Start over": re-run the SAME handles in the SAME conversation to fill the gap
+  // toward 5 relevant (non-thumbs-downed) per category, reusing the first run's
+  // clarification answer silently. Legacy payloads (no handles) fall back to the blank reset.
+  const handleCompetitorStartOver = async (payload: CompetitorResultPayload) => {
+    const handles = payload.handles ?? []
+    if (handles.length === 0) {
+      handleStartOver()
+      return
+    }
+    const convId = activeConversationId
+    // Pre-scrape stop: BOTH categories already full? Friendly message instead of a 60s re-scrape.
+    const shownMap = await getShownProfiles(convId, handles)
+    const dismissed = new Set(
+      Object.values(useCorpusStore.getState().creators)
+        .filter((c) => c.feedback === 'dismissed')
+        .map((c) => c.username.toLowerCase()),
+    )
+    const relTop = Object.entries(shownMap).filter(([u, cat]) => cat === 'top' && !dismissed.has(u)).length
+    const relTrend = Object.entries(shownMap).filter(([u, cat]) => cat === 'trending' && !dismissed.has(u)).length
+    if (relTop >= TARGET_PER_CATEGORY && relTrend >= TARGET_PER_CATEGORY) {
+      addMessageTo(convId, { role: 'assistant', content: alreadyCollectedMessage(TARGET_PER_CATEGORY * 2), type: 'text' })
+      return
+    }
+    // No startNew() → same conversation → same cache key → the shown-set keeps accumulating.
+    analyze(
+      { handles, depth: 'standard', clientName: '', nicheContext: payload.nicheContext ?? '' },
+      undefined,
+      payload.clarificationAnswer ?? '',
+    )
   }
 
   const handleSwitchConversation = (id: string) => {
@@ -496,8 +563,8 @@ export function ChatPage() {
                     onToggleSelect={handleToggleSelect}
                     onClearSelection={() => setSelectedHandles([])}
                     onAnalyzeReels={handleAnalyzeReels}
-                    onStartOver={handleStartOver}
-                    reelActive={activeHandles.length > 0}
+                    onStartOver={() => void handleCompetitorStartOver(message.result as CompetitorResultPayload)}
+                    reelActive={isReelRunning}
                   />
                 ) : message.type === 'result' && message.result?.kind === 'discovery' ? (
                   <DiscoveryResultMessage
@@ -508,7 +575,7 @@ export function ChatPage() {
                     onClearSelection={() => setSelectedHandles([])}
                     onAnalyzeReels={handleAnalyzeReels}
                     onStartOver={handleStartOver}
-                    reelActive={activeHandles.length > 0}
+                    reelActive={isReelRunning}
                   />
                 ) : message.type === 'result' && message.result?.kind === 'reel' ? (
                   // A superseded/finished reel run, snapshotted into this conversation. Renders
@@ -520,7 +587,6 @@ export function ChatPage() {
                       setInputText(text)
                       textareaRef.current?.focus()
                     }}
-                    onDeepReport={(handles) => void startDeepReport(handles)}
                     onStartOver={handleStartOver}
                   />
                 ) : message.type === 'reel' ? (
@@ -550,9 +616,6 @@ export function ChatPage() {
                           setInputText(text)
                           textareaRef.current?.focus()
                         }}
-                        onDeepReport={(handles) => void startDeepReport(handles)}
-                        deepReport={deepReport}
-                        deepReportStatus={deepReportStatus}
                       />
 
                       {isReelDone && (

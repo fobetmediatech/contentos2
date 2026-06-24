@@ -117,6 +117,11 @@ export interface AnalysisOutput {
  * @param clarificationAnswer   User's answer from the mid-run clarification card (optional).
  *                              When present and non-empty, injected as USER REFINEMENT to direct ranking.
  */
+// Trending floor: accounts below this are nano-accounts whose ER is inflated by a tiny follower
+// denominator (a 1K account with 100 likes = 10% ER) — not meaningful competitors. Mirrors the
+// 500K Top ceiling as a hard, reliable numeric gate. Tunable in one place.
+const MIN_TRENDING_FOLLOWERS = 10_000
+
 export function buildCompetitorPrompt(
   inputProfiles: NormalizedProfile[],
   candidates: NormalizedProfile[],
@@ -144,6 +149,11 @@ export function buildCompetitorPrompt(
       const establishedLabel = p.followersCount > 500_000
         ? ' [ESTABLISHED: 500K+ followers — assign to Top category]'
         : ''
+      // Bottom-end gate (mirrors establishedLabel): nano-accounts have mathematically inflated ER,
+      // so flag them so Gemini doesn't pull them into Trending on ER alone.
+      const microLabel = p.followersCount < MIN_TRENDING_FOLLOWERS
+        ? ` [MICRO: under ${MIN_TRENDING_FOLLOWERS / 1000}K followers — ER inflated by small follower count, NOT eligible for Trending]`
+        : ''
       // Source label: tells Gemini how this candidate was discovered.
       // CONTENT-NICHE accounts were found by scraping posts using the reference accounts'
       // own hashtags — they are the highest-confidence niche matches.
@@ -157,7 +167,17 @@ export function buildCompetitorPrompt(
             ? ' [AUDIENCE-ADJACENT: relatedProfiles]'
             : '' // undefined = input profile (should not appear here, but safe fallback)
       const corpusLabel = corpusSignals?.[p.username] ? ` ${corpusSignals[p.username]}` : ''
-      return `@${p.username} | followers: ${p.followersCount.toLocaleString()} | ER: ${er}% | posts: ${p.postsCount} | verified: ${p.verified} | bio: "${p.biography.replace(/[\n\r]/g, ' ').replace(/"/g, '\\"').slice(0, 120)}"${establishedLabel}${sourceLabel}${corpusLabel}`
+      // IG's own business/creator category (e.g. "Finance", "Digital creator") — a low-hallucination
+      // structured niche signal that bio text alone often lacks.
+      const categoryLabel = p.businessCategoryName
+        ? ` | category: ${p.businessCategoryName.replace(/[\n\r|]/g, ' ').slice(0, 40)}`
+        : ''
+      // Candidate's OWN top hashtags — the strongest direct content-niche signal, especially for
+      // the ER-ranked Trending picks. Previously withheld; now surfaced per candidate.
+      const candidateHashtags = p.topHashtags.length > 0
+        ? ` | hashtags: ${p.topHashtags.slice(0, 5).map((h) => `#${h}`).join(' ')}`
+        : ''
+      return `@${p.username} | followers: ${p.followersCount.toLocaleString()} | ER: ${er}% | posts: ${p.postsCount} | verified: ${p.verified}${categoryLabel} | bio: "${p.biography.replace(/[\n\r]/g, ' ').replace(/"/g, '\\"').slice(0, 120)}"${candidateHashtags}${establishedLabel}${microLabel}${sourceLabel}${corpusLabel}`
     })
     .join('\n')
 
@@ -167,9 +187,8 @@ export function buildCompetitorPrompt(
     ? `\nEXPLICIT NICHE CONTEXT (provided by the strategist — treat this as the definitive niche description):\n${trimmedNicheContext}\n`
     : ''
 
-  // Collect and deduplicate hashtags across all input profiles.
-  // Only input profiles' hashtags are used as niche signals — candidate hashtags
-  // are ignored here and left to Gemini's own judgment.
+  // Collect and deduplicate INPUT profiles' hashtags — the niche-derivation signal.
+  // (Each CANDIDATE's own hashtags are now included per-candidate in the line above.)
   const allHashtags = inputProfiles.flatMap((p) => p.topHashtags)
   const uniqueHashtags = [...new Set(allHashtags)]
   const nicheSignalsSection = uniqueHashtags.length > 0
@@ -185,12 +204,17 @@ export function buildCompetitorPrompt(
     ? `\nUSER REFINEMENT (the strategist selected this direction after seeing the candidate pool):\n"${trimmedClarificationAnswer.replace(/"/g, '\\"')}"\nPrioritize candidates that match this direction. Deprioritize candidates that clearly belong to other sub-niches.\n`
     : ''
 
-  // Count instruction: use "up to" whenever any filtering signal is available
-  // (strategist context OR hashtag signals OR user refinement), so Gemini can
-  // legitimately exclude wrong-niche accounts. Without any signals, force "exactly"
-  // so Gemini doesn't return fewer accounts simply because it has no filter criterion.
+  // hasFilterSignal gates the NICHE DERIVATION chain-of-thought below. It includes
+  // hashtag signals (≈always present) so niche-guarding stays on for virtually every run.
   const hasFilterSignal = trimmedNicheContext.length > 0 || uniqueHashtags.length > 0 || trimmedClarificationAnswer.length > 0
-  const countInstruction = hasFilterSignal ? 'up to' : 'exactly'
+
+  // Count instruction is gated SEPARATELY on human-supplied filters only. Hashtags are an
+  // INFERRED niche signal, not a user instruction to return fewer — folding them into the
+  // count made "up to" permanent (hashtags are almost always present), which let Gemini
+  // silently under-return (the <10-results bug). "up to" now requires an explicit niche
+  // context or clarification answer; otherwise "exactly" forces Gemini to fill all 10 slots.
+  const hasExplicitNicheFilter = trimmedNicheContext.length > 0 || trimmedClarificationAnswer.length > 0
+  const countInstruction = hasExplicitNicheFilter ? 'up to' : 'exactly'
 
   // Injected when filter signals exist — forces Gemini to (1) derive the specific sub-niche
   // from the reference accounts, and (2) explicitly identify adjacent-but-NOT-target niches
@@ -243,11 +267,11 @@ SELECTION CRITERIA:
 - FIRST: Check niche relevance. If EXPLICIT NICHE CONTEXT is provided above, treat it as the definitive niche boundary. When the niche is a PROFESSION (e.g. "marketing education", "productivity coaching", "content strategy"), accounts whose PRIMARY focus is a TOOL CATEGORY adjacent to that profession (e.g. "AI tools reviews", "tech news", "coding tutorials") are NOT niche-relevant — even if that tool is used by the profession. Include an account only if its primary content IS the profession itself, not just the tools. If only NICHE SIGNALS are provided, apply the same distinction. Borderline accounts whose content is clearly about the profession topic (even if they sometimes cover tools) should be included.
 - ADJACENT NICHE GUARD: Different sub-niches within the same broad umbrella are still different niches. "Entrepreneurship tips" and "trading/investing" are both "business" broadly — but they are NOT the same niche and serve different audiences. Apply the STEP 2 exclusion list from NICHE DERIVATION above: reject any candidate whose PRIMARY content or bio belongs to an adjacent-but-excluded sub-niche, even if they occasionally post on-niche content. Bio signals are decisive: a bio leading with trading emojis (📈), "forex", "crypto", "stock picks", or similar adjacent-niche language indicates an excluded account.
 - SOURCE PRIORITY: Each candidate is labeled [CONTENT-NICHE] or [AUDIENCE-ADJACENT]. [CONTENT-NICHE] candidates were discovered by scraping posts that used the reference accounts' own hashtags — they are the highest-confidence niche matches. [AUDIENCE-ADJACENT] candidates came from Instagram's relatedProfiles graph (audience overlap) — they may or may not share the niche. When assigning candidates to Top 5 or Trending 5, prefer [CONTENT-NICHE] accounts over [AUDIENCE-ADJACENT] accounts at the same follower tier and ER band. Do NOT override the Top/Trending tier logic: a [CONTENT-NICHE] account with 50K followers still belongs in Trending, not Top. Only include an [AUDIENCE-ADJACENT] candidate if (a) there are not enough [CONTENT-NICHE] accounts to fill the category, AND (b) their bio clearly confirms niche alignment with the reference accounts.
-- GOAL: Fill both categories as completely as possible. Aim for 5 in each. Only reduce the count if there are genuinely not enough niche-relevant candidates — do not leave slots empty out of excessive strictness.
+- NICHE GATE IS ABSOLUTE FOR BOTH TIERS: an account that fails the niche-relevance check or the ADJACENT NICHE GUARD above is NOT eligible for Top OR Trending. High engagement does NOT buy an exception. Apply this gate BEFORE the tier and tie rules below.
+- GOAL: Fill Top 5 as completely as possible. For TRENDING, relevance beats quota — returning 3–4 genuinely on-niche Trending accounts is BETTER than padding to 5 with borderline or audience-adjacent picks. An empty Trending slot is better than an off-niche filler. Never add an account to Trending just to reach 5.
 - For Top 5: prioritize follower count, brand authority, posting consistency, and verified status. Accounts with the [ESTABLISHED: 500K+ followers] label MUST be assigned to Top, not Trending.
-- For Trending 5: prioritize engagement rate (ER %) relative to follower tier — accounts in their growth phase where ER significantly exceeds peers at the same follower count.
-- When a candidate could qualify for either category (mid-tier account with decent followers AND high ER), prefer Trending if the account has under 500K followers.
-- If a candidate fits both Top and Trending criteria, assign it to whichever category has fewer entries.
+- For Trending 5: from the NICHE-RELEVANT set ONLY, prioritize engagement rate (ER %) relative to follower tier — growth-phase accounts whose ER exceeds the typical range for their tier. Trending accounts MUST have at least 10K followers: any candidate carrying the [MICRO: under 10K followers] label is NOT eligible for Trending, no matter how high its ER looks — its ER is inflated by a tiny follower count and it is not a meaningful competitor. Typical ER by follower tier (baseline): 10K–50K ≈ 3–8%, 50K–100K ≈ 2–5%, 100K–500K ≈ 1–3%, 500K+ ≈ 0.5–1.5%. A Trending pick should exceed the upper end of its tier's range. When a candidate shows "ER: N/A%" there is NO engagement signal — do NOT place it in Trending on follower count or bio alone (only as a last resort, and only if Trending would otherwise have fewer than 3 on-niche entries).
+- Tie rules (apply ONLY to candidates that already passed the niche gate): when a candidate could qualify for either category, prefer Trending if it has under 500K followers; if it fits both, assign it to whichever category has fewer entries. NEVER use a tie rule to admit a borderline-niche account.
 
 OUTPUT FORMAT (respond with valid JSON only, no markdown):
 {

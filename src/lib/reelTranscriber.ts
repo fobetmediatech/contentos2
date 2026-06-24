@@ -13,34 +13,16 @@
 
 import pLimit from 'p-limit'
 import type { ReelData } from '../store/reelAnalysisStore'
-import type { SingleReelResult } from '../store/singleReelStore'
 import { scrapeReelVideos } from './reelVideoClient'
 import { getCachedSingleReel, setCachedSingleReel } from './singleReelCache'
-import { getClerkSessionToken } from './clerkToken'
+import { analyzeReelHookmap } from './reelHookmap'
 
 // Conservative: the serverless analyzer uses a SINGLE Gemini key (no server rotation), so
 // this caps concurrent Gemini uploads — same reasoning as the deep path's deepLimiter.
 const transcribeLimiter = pLimit(3)
 
-/**
- * Probe whether the single-reel analyzer is deployed (404 under plain `vite dev`). Mirrors
- * useReelAnalysis.deepFnAvailable: a 404 means "not deployed → skip enrichment"; any other
- * status (or a network error) means proceed. Avoids wasting an Apify video scrape when the
- * function can't run anyway.
- */
-export async function singleReelFnAvailable(signal?: AbortSignal): Promise<boolean> {
-  try {
-    const res = await fetch('/api/analyze-single-reel', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: '{}',
-      signal,
-    })
-    return res.status !== 404
-  } catch {
-    return true
-  }
-}
+// Re-export singleReelFnAvailable from reelHookmap for backward compatibility
+export { singleReelFnAvailable } from './reelHookmap'
 
 /**
  * Transcribe a creator's reels. Returns a map of shortCode → transcript for the reels that
@@ -78,7 +60,7 @@ export async function transcribeReels(
         if (signal?.aborted) return
         const videoUrl = videos.get(reel.shortCode)
         if (!videoUrl) return // no downloadable video → skip (no transcript for this reel)
-        const result = await analyzeSingleReel(handle, reel, videoUrl, signal)
+        const result = await analyzeReelHookmap(handle, reel, videoUrl, signal)
         if (!result) return
         void setCachedSingleReel(reel.shortCode, result) // best-effort: makes re-runs free
         transcripts[reel.shortCode] = result.transcript
@@ -86,46 +68,4 @@ export async function transcribeReels(
     ),
   )
   return transcripts
-}
-
-/**
- * POST one reel to the single-reel analyzer. Attaches the Clerk session JWT exactly as
- * useSingleReelAnalysis does (retry ONCE on a 401 token-window miss). Returns null on any
- * failure — the caller treats that as "no transcript", never an error.
- */
-async function analyzeSingleReel(
-  handle: string,
-  reel: ReelData,
-  videoUrl: string,
-  signal?: AbortSignal,
-): Promise<SingleReelResult | null> {
-  const body = JSON.stringify({
-    downloadedVideoUrl: videoUrl,
-    shortCode: reel.shortCode,
-    apify: {
-      ownerUsername: handle,
-      caption: reel.caption,
-      likesCount: reel.likesCount,
-      commentsCount: reel.commentsCount,
-      videoViewCount: reel.videoViewCount,
-      videoDuration: reel.videoDuration,
-      hashtags: reel.hashtags,
-      musicInfo: reel.musicInfo,
-    },
-  })
-  const post = async (): Promise<Response> => {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    const token = await getClerkSessionToken()
-    if (token) headers['Authorization'] = `Bearer ${token}`
-    return fetch('/api/analyze-single-reel', { method: 'POST', headers, body, signal })
-  }
-  try {
-    let res = await post()
-    if (res.status === 401) res = await post()
-    if (!res.ok) return null
-    const json = (await res.json()) as { result: SingleReelResult }
-    return json.result
-  } catch {
-    return null
-  }
 }
