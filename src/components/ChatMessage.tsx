@@ -139,7 +139,7 @@ export function ProgressBubble({ label, currentStep, steps, onStop }: ProgressBu
             {label}
           </div>
         )}
-        <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(245,237,214,0.08)] flex flex-col gap-2.5">
+        <div role="status" aria-live="polite" className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(245,237,214,0.08)] flex flex-col gap-2.5">
           {stepIndices.map((step) => {
             const isDone = step < currentStep
             const isActive = step === currentStep

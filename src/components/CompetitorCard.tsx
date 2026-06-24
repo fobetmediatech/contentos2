@@ -98,7 +98,14 @@ export const CompetitorCard = memo(function CompetitorCard({ competitor, profile
         {/* Handle + meta */}
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="font-semibold text-[#F5EDD6] text-sm">@{competitor.username}</span>
+            <a
+              href={`https://www.instagram.com/${competitor.username}/`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+              className="font-semibold text-[#F5EDD6] text-sm hover:text-[#E07B3A] hover:underline transition-colors"
+            >@{competitor.username}</a>
             {profile?.verified && (
               <BadgeCheck size={14} className="text-[#C4A882] flex-shrink-0" />
             )}
@@ -128,7 +135,7 @@ export const CompetitorCard = memo(function CompetitorCard({ competitor, profile
         <div className="mt-3 flex items-baseline gap-1.5">
           <span
             className={`text-xl font-bold tabular-nums ${
-              erAboveAvg ? 'text-[#4DB88A]' : 'text-[#E07B3A]'
+              erAboveAvg ? 'text-success' : 'text-warning'
             }`}
           >
             {er.toFixed(2)}%

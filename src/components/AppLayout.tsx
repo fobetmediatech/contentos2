@@ -69,7 +69,7 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
           </Link>
 
           {/* Nav links — derived from NAV_SECTIONS */}
-          <nav className="flex items-center gap-1">
+          <nav aria-label="Main" className="flex items-center gap-1">
             {sections.map((s) => {
               const Icon = s.icon
               const active = isActive(s)
@@ -78,6 +78,7 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
                   key={s.path}
                   to={s.path}
                   title={s.path === '/memory' && corpusCount > 0 ? `${corpusCount} creators remembered` : undefined}
+                  aria-current={active ? 'page' : undefined}
                   className={navClass(active)}
                 >
                   <Icon size={14} className={s.path === '/memory' ? 'text-[#E07B3A]' : undefined} />
