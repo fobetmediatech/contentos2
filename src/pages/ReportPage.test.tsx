@@ -19,7 +19,8 @@ vi.mock('../lib/supabaseClient', () => ({
 }))
 import { render, screen, cleanup } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { ReportPage, summaryToMarkdown } from './ReportPage'
+import { ReportPage } from './ReportPage'
+import { summaryToMarkdown } from '../shared/utils/export'
 import { useReelAnalysisStore } from '../store/reelAnalysisStore'
 import type { CreatorHookSummary } from '../ai/prompts/creatorHookSummary'
 
