@@ -6,17 +6,20 @@
  * Renders HookSummaryCard full-page with Print / Save as PDF. Empty state when no summary exists yet.
  */
 
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useReelAnalysisStore } from '../store/reelAnalysisStore'
 import type { CreatorAnalysisState } from '../store/reelAnalysisStore'
 import { HookSummaryCard } from '../components/HookSummaryCard'
 import { ReelCaseStudyCard } from '../components/ReelCaseStudyCard'
+import { copyToClipboard, summaryToMarkdown } from '../shared/utils/export'
 
 export function ReportPage() {
   const navigate = useNavigate()
   const creatorStates = useReelAnalysisStore((s) => s.creatorStates)
   const creator = firstCreatorWithSummary(creatorStates)
   const summary = creator?.hookSummary
+  const [copied, setCopied] = useState(false)
 
   if (!creator || !summary) {
     return (
@@ -39,12 +42,24 @@ export function ReportPage() {
     <div className="max-w-3xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-6 no-print">
         <h1 className="text-2xl font-bold text-[#F5EDD6]">Reel Hook Report</h1>
-        <button
-          onClick={() => window.print()}
-          className="px-4 py-2 rounded-xl bg-[#2C2218] text-[#C4A882] border border-[rgba(245,237,214,0.12)] hover:border-[#E07B3A]/40 transition-colors text-sm font-semibold"
-        >
-          Print / Save as PDF
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              copyToClipboard(summaryToMarkdown(summary))
+                .then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) })
+                .catch(() => {})
+            }}
+            className="px-4 py-2 rounded-xl bg-[#2C2218] text-[#C4A882] border border-[rgba(245,237,214,0.12)] hover:border-[#E07B3A]/40 transition-colors text-sm font-semibold"
+          >
+            {copied ? 'Copied!' : 'Copy as Markdown'}
+          </button>
+          <button
+            onClick={() => window.print()}
+            className="px-4 py-2 rounded-xl bg-[#2C2218] text-[#C4A882] border border-[rgba(245,237,214,0.12)] hover:border-[#E07B3A]/40 transition-colors text-sm font-semibold"
+          >
+            Print / Save as PDF
+          </button>
+        </div>
       </div>
       <div className="report-printable flex flex-col gap-6">
         <HookSummaryCard summary={summary} />

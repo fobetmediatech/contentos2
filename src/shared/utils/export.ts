@@ -10,6 +10,37 @@
 import type { CompetitorAnalysisResult, DiscoveryResult } from '../../ai/prompts'
 import type { NormalizedProfile } from '../../lib/transformers'
 import { COMPETITOR_CATEGORIES, DISCOVERY_CATEGORIES } from './categories'
+import type { CreatorHookSummary } from '../../ai/prompts/creatorHookSummary'
+
+/** Serialize a creator hook summary to portable Markdown (paste into Notion / Docs / email). */
+export function summaryToMarkdown(summary: CreatorHookSummary): string {
+  const n = (x: number) => Math.round(x).toLocaleString()
+  const out: string[] = [`# @${summary.handle} — Reel Hook Report`, '', `_${summary.reelCount} reels analyzed_`]
+  if (summary.narrative) out.push('', `> ${summary.narrative}`)
+  out.push(
+    '', '## Benchmarks',
+    `- Median views: ${n(summary.benchmarks.medianViews)}`,
+    `- Median likes: ${n(summary.benchmarks.medianLikes)}`,
+    `- Comments/likes ratio: ${(summary.benchmarks.commentsLikesRatio * 100).toFixed(1)}%`,
+  )
+  if (summary.dominantHooks.length) {
+    out.push('', '## Dominant hooks')
+    for (const h of summary.dominantHooks) out.push(`- **${h.pattern}** (${h.count}×) — "${h.example}"`)
+  }
+  if (summary.whatConsistentlyWorks.length) {
+    out.push('', '## What consistently works')
+    for (const w of summary.whatConsistentlyWorks) out.push(`- ${w}`)
+  }
+  if (summary.recurringOpenings.length) {
+    out.push('', '## Recurring openings')
+    for (const o of summary.recurringOpenings) out.push(`- "${o}"`)
+  }
+  if (summary.replicableTemplates.length) {
+    out.push('', '## Replicable templates')
+    for (const t of summary.replicableTemplates) out.push(`- ${t}`)
+  }
+  return out.join('\n')
+}
 
 interface ExportData {
   competitors: CompetitorAnalysisResult[]
