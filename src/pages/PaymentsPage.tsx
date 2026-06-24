@@ -42,6 +42,7 @@ export function PaymentsPage() {
   const [amount, setAmount] = useState('')
   const [currency, setCurrency] = useState('INR')
   const [paidOn, setPaidOn] = useState('')
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [status, setStatus] = useState<PaymentStatus>('due')
   const [note, setNote] = useState('')
 
@@ -281,16 +282,20 @@ export function PaymentsPage() {
                   </option>
                 ))}
               </select>
-              <button
-                onClick={() => {
-                  if (window.confirm('Delete this payment record?')) remove.mutate(p.id)
-                }}
-                disabled={remove.isPending}
-                aria-label="Delete payment"
-                className="flex-shrink-0 text-muted hover:text-danger disabled:opacity-50 transition-colors p-1"
-              >
-                <Trash2 size={15} />
-              </button>
+              {confirmDeleteId === p.id ? (
+                <span className="flex-shrink-0 flex items-center gap-1.5 text-xs">
+                  <button onClick={() => { remove.mutate(p.id); setConfirmDeleteId(null) }} disabled={remove.isPending} aria-label="Confirm delete payment" className="text-danger font-medium hover:underline disabled:opacity-50">Delete?</button>
+                  <button onClick={() => setConfirmDeleteId(null)} aria-label="Cancel delete" className="text-muted hover:text-secondary transition-colors">Cancel</button>
+                </span>
+              ) : (
+                <button
+                  onClick={() => setConfirmDeleteId(p.id)}
+                  aria-label="Delete payment"
+                  className="flex-shrink-0 text-muted hover:text-danger transition-colors p-1"
+                >
+                  <Trash2 size={15} />
+                </button>
+              )}
             </li>
           ))}
         </ul>

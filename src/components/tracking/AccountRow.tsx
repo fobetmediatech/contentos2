@@ -101,7 +101,7 @@ export function AccountRow({
             <div className="text-[#F5EDD6] font-mono text-sm tabular-nums">
               {followers != null ? fmt(followers) : '—'}
               {followerDelta && (
-                <span className={`ml-1.5 text-xs ${followerDelta.startsWith('+') ? 'text-green-400' : 'text-red-400'}`}>
+                <span className={`ml-1.5 text-xs ${followerDelta.startsWith('+') ? 'text-success' : 'text-danger'}`}>
                   {followerDelta}
                 </span>
               )}
@@ -141,13 +141,13 @@ export function AccountRow({
           ) : account.last_error ? (
             <span
               title={account.last_error}
-              className="flex items-center gap-1 text-[10px] font-mono text-red-400 bg-red-900/20 px-2 py-1 rounded-full"
+              className="flex items-center gap-1 text-[10px] font-mono text-danger bg-[rgba(224,92,92,0.12)] px-2 py-1 rounded-full"
             >
               <AlertCircle size={10} />
               Can't fetch
             </span>
           ) : latestSnapshot ? (
-            <CheckCircle size={14} className="text-green-500/60" />
+            <CheckCircle size={14} className="text-success/60" />
           ) : (
             <span className="flex items-center gap-1 text-[10px] font-mono text-[#7A6A54]">
               <Clock size={10} />
