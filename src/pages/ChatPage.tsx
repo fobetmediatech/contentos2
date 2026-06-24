@@ -19,6 +19,7 @@ import { useActivePipeline } from '../hooks/useActivePipeline'
 import { useReelAnalysis } from '../hooks/useReelAnalysis'
 import { useReelAnalysisStore } from '../store/reelAnalysisStore'
 import { ChatMessage, ProgressBubble, TypingIndicator } from '../components/ChatMessage'
+import { useElapsedTime, formatElapsed } from '../hooks/useElapsedTime'
 import { ClarificationCard } from '../components/ClarificationCard'
 import { CompetitorResultMessage } from '../components/CompetitorResultMessage'
 import { DiscoveryResultMessage } from '../components/DiscoveryResultMessage'
@@ -477,6 +478,10 @@ export function ChatPage() {
   const showInlineContent = isAnalysisRunning || isAnalysisClarifying || isAnalysisDone ||
     isDiscoveryRunning || isDiscoveryDone
   const isReelRunning = activeHandles.length > 0 && synthesisStatus !== 'done' && synthesisStatus !== 'failed'
+  // Live elapsed timers — the honest "how long has this been running" signal for each pipeline.
+  const analysisElapsed = useElapsedTime(isAnalysisRunning)
+  const discoveryElapsed = useElapsedTime(isDiscoveryRunning)
+  const reelElapsed = useElapsedTime(isReelRunning)
   const showRunPlaceholder = agentConv.isThinking || isAnalysisRunning || isDiscoveryRunning || isReelRunning
   const lastUserMessage = useMemo(
     () => [...conversationMessages].reverse().find((m) => m.role === 'user')?.content,
@@ -601,7 +606,11 @@ export function ChatPage() {
                         <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(245,237,214,0.08)] text-sm leading-relaxed max-w-[80%]">
                           <span className="font-semibold text-primary">Analyzing reels</span>
                           <p className="text-secondary mt-0.5">
-                            Scraping and analyzing reels for {activeHandles.map((h) => `@${h}`).join(', ')} — this takes {activeHandles.length * 2}–{activeHandles.length * 3} min.
+                            Scraping and analyzing reels for {activeHandles.map((h) => `@${h}`).join(', ')}.
+                          </p>
+                          <p className="text-xs font-mono text-muted mt-1 tabular-nums">
+                            {formatElapsed(reelElapsed)} elapsed · usually {activeHandles.length * 2}–{activeHandles.length * 4} min
+                            {reelElapsed > activeHandles.length * 240 ? ' (taking longer than usual — hang tight)' : ''}
                           </p>
                         </div>
                       </div>
@@ -666,6 +675,7 @@ export function ChatPage() {
                         : 'Analyzing competitors — this takes up to 2 minutes…'
                     }
                     onStop={isAnalysisRunning ? agentConv.abort : undefined}
+                    elapsedSec={isAnalysisRunning ? analysisElapsed : undefined}
                   />
                   {isAnalysisClarifying && pendingDiscovery && (
                     <div className="flex items-start gap-2">
@@ -692,6 +702,7 @@ export function ChatPage() {
                   steps={activePipeline.stepLabels}
                   label={activePipeline.progressLabel ?? undefined}
                   onStop={agentConv.abort}
+                  elapsedSec={discoveryElapsed}
                 />
               )}
 

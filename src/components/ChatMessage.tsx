@@ -12,6 +12,7 @@
  */
 
 import { Bot, Check, Loader2, RefreshCw, Square, User } from 'lucide-react'
+import { formatElapsed } from '../hooks/useElapsedTime'
 import type { ChatMessage as ChatMessageType } from '../store/analysisStore'
 import { STEP_LABELS } from '../store/analysisStore'
 import { ChatOptions } from './ChatOptions'
@@ -114,6 +115,8 @@ interface ProgressBubbleProps {
   steps?: string[]
   /** Called when the user taps Stop — aborts the current run. */
   onStop?: () => void
+  /** Live seconds elapsed for the running pipeline — shown as an honest progress signal. */
+  elapsedSec?: number
 }
 
 /**
@@ -121,7 +124,7 @@ interface ProgressBubbleProps {
  * Replaces the standalone centered progress block so pipeline state stays
  * in the same visual lane as the rest of the conversation.
  */
-export function ProgressBubble({ label, currentStep, steps, onStop }: ProgressBubbleProps) {
+export function ProgressBubble({ label, currentStep, steps, onStop, elapsedSec }: ProgressBubbleProps) {
   const allLabels: Record<number, string> = steps
     ? Object.fromEntries(steps.map((l, i) => [i + 1, l]))
     : (STEP_LABELS as Record<number, string>)
@@ -175,6 +178,9 @@ export function ProgressBubble({ label, currentStep, steps, onStop }: ProgressBu
               </div>
             )
           })}
+          {elapsedSec ? (
+            <span className="self-start text-[11px] font-mono text-[#7A6A54] tabular-nums">{formatElapsed(elapsedSec)} elapsed</span>
+          ) : null}
           {onStop && (
             <button
               onClick={onStop}
