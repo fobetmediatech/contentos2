@@ -22,6 +22,12 @@ const reelSteps: string[] = ['Scraping reels', 'Analyzing hooks', 'Synthesizing 
  */
 const singleReelSteps: string[] = ['Scraping reel', 'Analyzing hook & psychology']
 
+const repurposeSteps = [
+  'Building the client voice profile',
+  'Analyzing the source reel',
+  'Rewriting in the client voice',
+]
+
 const competitorSteps: string[] = Object.values(STEP_LABELS)
 // Only steps 1-5 in the static registry — step 6 ("Expanding search") is
 // conditionally added at runtime by useActivePipeline when the quality gate fires.
@@ -52,5 +58,11 @@ export const PIPELINE_REGISTRY: Record<string, PipelineToolDescriptor> = {
     id: 'single-reel',
     name: 'Single Reel Case Study',
     steps: singleReelSteps,
+  },
+
+  repurpose: {
+    id: 'repurpose',
+    name: 'Repurpose Reel',
+    steps: repurposeSteps,
   },
 }
