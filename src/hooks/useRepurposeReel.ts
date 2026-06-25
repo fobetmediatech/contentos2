@@ -41,6 +41,8 @@ export interface RepurposeArgs {
   shortCode?: string
   clientHandle?: string
   pastedScripts?: string[]
+  /** Skip the cached-profile reuse and re-scrape + re-synthesize (Memory "Rebuild"). */
+  forceRebuild?: boolean
 }
 
 export function useRepurposeReel() {
@@ -100,8 +102,9 @@ export function useRepurposeReel() {
       const handle = args.clientHandle?.trim().toLowerCase()
       const scripts = (args.pastedScripts ?? []).filter((s) => s.trim().length > 0)
 
-      // Reuse a saved profile when we have a handle and it's already in the corpus mirror.
-      if (handle) {
+      // Reuse a saved profile when we have a handle and it's already in the corpus mirror —
+      // unless this is an explicit Rebuild, which must always re-scrape + re-synthesize.
+      if (handle && !args.forceRebuild) {
         const existing = useCorpusStore.getState().voiceProfiles[handle]
         if (existing) return existing
       }
@@ -205,5 +208,17 @@ export function useRepurposeReel() {
     [analyzeSource, buildVoiceProfile, geminiKeys],
   )
 
-  return { startRepurpose }
+  /**
+   * Rebuild a saved client's voice profile in place (Memory "Voices" tab): force a fresh
+   * scrape + synthesis, bypassing the cache, and overwrite the saved profile. Resolves to the
+   * new profile; rejects on failure so the caller can surface it. Only valid for handle-based
+   * profiles (pasted-script profiles have no reels to re-scrape).
+   */
+  const rebuildVoiceProfile = useCallback(
+    (handle: string, signal?: AbortSignal): Promise<VoiceProfile> =>
+      buildVoiceProfile({ sourceReelUrl: '', clientHandle: handle, forceRebuild: true }, signal),
+    [buildVoiceProfile],
+  )
+
+  return { startRepurpose, rebuildVoiceProfile }
 }

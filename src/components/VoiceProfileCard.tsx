@@ -3,8 +3,8 @@
  *
  * Shows handle / display name, tone chips, meta stats, and supports inline editing of all
  * qualitative fields (saved via corpusStore.setVoiceProfile). A Rebuild button is shown for
- * handle-based profiles (not pasted-script ones), routing the operator back to chat to kick
- * off a fresh scrape+synthesis run.
+ * handle-based profiles (not pasted-script ones); it re-scrapes + re-synthesizes the profile
+ * in place (onRebuild) and the corpus mirror update re-renders the card with fresh data.
  *
  * inputCls and the edit pattern mirror PaymentClientsManager.tsx.
  * Any authenticated user may edit / rebuild — no owner gate (locked decision).
@@ -19,7 +19,7 @@ const inputCls =
 
 interface Props {
   profile: VoiceProfile
-  onRebuild: (handle: string) => void
+  onRebuild: (handle: string) => Promise<void>
 }
 
 export default function VoiceProfileCard({ profile, onRebuild }: Props) {
@@ -27,6 +27,16 @@ export default function VoiceProfileCard({ profile, onRebuild }: Props) {
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState<VoiceProfile>(profile)
   const [saving, setSaving] = useState(false)
+  const [rebuilding, setRebuilding] = useState(false)
+  const [rebuildError, setRebuildError] = useState<string | null>(null)
+
+  const rebuild = () => {
+    setRebuildError(null)
+    setRebuilding(true)
+    void onRebuild(profile.handle)
+      .catch((e) => setRebuildError((e as Error)?.message || 'Rebuild failed — try again.'))
+      .finally(() => setRebuilding(false))
+  }
 
   const patch = (p: Partial<VoiceProfile>) => setForm((f) => ({ ...f, ...p }))
   const csv = (s: string) =>
@@ -175,14 +185,19 @@ export default function VoiceProfileCard({ profile, onRebuild }: Props) {
           {!profile.fromScripts && (
             <button
               type="button"
-              onClick={() => onRebuild(profile.handle)}
-              className="text-xs px-2 py-1 rounded-md border border-[rgba(245,237,214,0.12)] text-muted hover:text-primary hover:border-[#E07B3A] transition-colors"
+              disabled={rebuilding}
+              onClick={rebuild}
+              className="text-xs px-2 py-1 rounded-md border border-[rgba(245,237,214,0.12)] text-muted hover:text-primary hover:border-[#E07B3A] disabled:opacity-50 transition-colors"
             >
-              Rebuild
+              {rebuilding ? 'Rebuilding…' : 'Rebuild'}
             </button>
           )}
         </div>
       </div>
+
+      {rebuildError && (
+        <div className="mt-2 text-xs text-[#E07B3A]">{rebuildError}</div>
+      )}
 
       {profile.toneDescriptors.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1">

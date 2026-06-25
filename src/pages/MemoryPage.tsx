@@ -15,6 +15,7 @@ import { sortCreators, creatorContexts } from '../lib/corpus'
 import type { CorpusSort, CreatorRecord, ContentRecord, Feedback } from '../lib/corpus'
 import { FeedbackControl } from '../components/FeedbackControl'
 import VoiceProfileCard from '../components/VoiceProfileCard'
+import { useRepurposeReel } from '../hooks/useRepurposeReel'
 
 function formatCount(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
@@ -41,6 +42,7 @@ export function MemoryPage() {
   // selector — that returns a fresh array each call and loops useSyncExternalStore).
   const creators = useCorpusStore((s) => s.creators)
   const voiceProfiles = useCorpusStore((s) => s.voiceProfiles)
+  const { rebuildVoiceProfile } = useRepurposeReel()
   const [tab, setTab] = useState<'creators' | 'voices'>('creators')
   const [sort, setSort] = useState<CorpusSort>('lastSeenAt')
   const [verdict, setVerdict] = useState<VerdictFilter>('all')
@@ -178,9 +180,7 @@ export function MemoryPage() {
               <VoiceProfileCard
                 key={p.handle}
                 profile={p}
-                onRebuild={(handle) => {
-                  window.location.href = `/?repurpose=${encodeURIComponent(handle)}`
-                }}
+                onRebuild={(handle) => rebuildVoiceProfile(handle).then(() => undefined)}
               />
             ))
           )}
