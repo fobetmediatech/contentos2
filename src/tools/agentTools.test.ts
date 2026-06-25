@@ -77,7 +77,7 @@ describe('buildGeminiHistory', () => {
 })
 
 describe('AGENT_TOOLS declarations', () => {
-  it('declares exactly the 6 agent tools, each with name/description/parameters', () => {
+  it('declares exactly the 7 agent tools, each with name/description/parameters', () => {
     const names = AGENT_TOOLS.map((t) => t.name).sort()
     expect(names).toEqual([
       'analyze_reels',
@@ -86,6 +86,7 @@ describe('AGENT_TOOLS declarations', () => {
       'ask_clarification',
       'discover_by_location',
       'discover_competitors',
+      'repurpose_reel',
     ])
     for (const t of AGENT_TOOLS) {
       expect(t.name.length).toBeGreaterThan(0)

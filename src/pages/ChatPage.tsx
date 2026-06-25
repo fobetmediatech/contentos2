@@ -27,7 +27,10 @@ import { ChatSidebar } from '../components/ChatSidebar'
 import { InlineReelResults } from '../components/InlineReelResults'
 import { ReelResultMessage } from '../components/ReelResultMessage'
 import { SingleReelResultMessage } from '../components/SingleReelResultMessage'
+import RepurposeResultMessage from '../components/RepurposeResultMessage'
 import { useSingleReelStore } from '../store/singleReelStore'
+import { useRepurposeStore } from '../store/repurposeStore'
+import { PIPELINE_REGISTRY } from '../tools/registry'
 import type { NormalizedProfile } from '../lib/transformers'
 import type { ChatMessage as ChatMessageData } from '../store/analysisStore'
 import { useCorpusStore } from '../store/corpusStore'
@@ -118,6 +121,12 @@ export function ChatPage() {
   // Which conversation the current single-reel run belongs to — gates its live block to that
   // chat (mirrors reelConversationId; the single-reel store calls this field `conversationId`).
   const singleReelConversationId = useSingleReelStore((s) => s.conversationId)
+  // Repurpose run state — drives the live progress marker; the finished result is snapshotted
+  // into the conversation (kind 'repurpose') by the effect below, then the store is reset.
+  const repurposeStatus = useRepurposeStore((s) => s.status)
+  const repurposeConversationId = useRepurposeStore((s) => s.conversationId)
+  const repurposeError = useRepurposeStore((s) => s.error)
+  const resetRepurpose = useRepurposeStore((s) => s.reset)
 
   const [inputText, setInputText] = useState('')
   const [isNearBottom, setIsNearBottom] = useState(true)
@@ -132,6 +141,7 @@ export function ChatPage() {
   const reelActiveRef = useRef(activeHandles.length > 0)
   const discoveryResultArmedRef = useRef(false) // armed while a discovery run is live; fires once on done
   const reelContentArmedRef = useRef(false) // armed while a reel run is live; harvests content once on synthesis done
+  const repurposeArmedRef = useRef(false) // armed while a repurpose run is live; snapshots once on done
 
   // Selection state — shared across competitor + discovery results
   const [selectedHandles, setSelectedHandles] = useState<string[]>([])
@@ -295,6 +305,43 @@ export function ChatPage() {
       resetDiscovery()
     }
   }, [discoveryStatus, discoveryResults, discoveryCity, discoveryNiche, discoveryProfiles, discoveryDidExpand, discoveryLocationRelaxed, addMessageTo, discoveryRunConversationId, activeConversationId, resetDiscovery])
+
+  // Snapshot a finished repurpose run into the conversation, then reset the store. Armed only
+  // while a real run is live so it fires once. The persisted payload carries everything the
+  // result card needs, so it survives reload independent of the (reset) transient store.
+  useEffect(() => {
+    const running = repurposeStatus === 'building-profile' || repurposeStatus === 'analyzing-source' || repurposeStatus === 'rewriting'
+    if (running) {
+      repurposeArmedRef.current = true
+    } else if (repurposeStatus === 'done' && repurposeArmedRef.current) {
+      repurposeArmedRef.current = false
+      const s = useRepurposeStore.getState()
+      if (s.conversationId && s.voiceProfile && s.rewrite) {
+        addMessageTo(s.conversationId, {
+          role: 'assistant',
+          type: 'result',
+          content: `Repurposed in @${s.voiceProfile.handle.replace('__scripts__', 'pasted ')}'s voice.`,
+          result: {
+            kind: 'repurpose',
+            sourceReelUrl: s.sourceReelUrl,
+            clientHandle: s.clientHandle,
+            voiceProfile: s.voiceProfile,
+            rewrite: s.rewrite,
+          },
+        })
+      }
+      resetRepurpose()
+    } else if (repurposeStatus === 'error' && repurposeArmedRef.current) {
+      repurposeArmedRef.current = false
+      const s = useRepurposeStore.getState()
+      addMessageTo(s.conversationId ?? activeConversationId, {
+        role: 'assistant',
+        type: 'error',
+        content: s.error || 'Could not repurpose this reel.',
+      })
+      resetRepurpose()
+    }
+  }, [repurposeStatus, addMessageTo, activeConversationId, resetRepurpose])
 
   // Reel → corpus content: when a reel run's synthesis finishes, harvest each analyzed reel
   // into the corpus as content tied to its creator (the "content" half of the corpus). Armed
@@ -479,6 +526,9 @@ export function ChatPage() {
   // Same one-live-run rule for single-reel: only the latest marker in the owning conversation
   // renders the live block — older/cross-conversation markers no-op (prevents ghost renders).
   const lastSingleReelMarkerId = [...conversationMessages].reverse().find((m) => m.type === 'single-reel')?.id
+  // Same one-live-run rule for repurpose: only the latest marker in the owning conversation
+  // renders the live progress block — older / cross-conversation markers no-op.
+  const lastRepurposeMarkerId = [...conversationMessages].reverse().find((m) => m.type === 'repurpose')?.id
   const isAnalysisRunning = status === 'running'
   const isAnalysisClarifying = status === 'clarifying'
   const isAnalysisDone = status === 'done'
@@ -614,6 +664,10 @@ export function ChatPage() {
                     }}
                     onStartOver={handleStartOver}
                   />
+                ) : message.type === 'result' && message.result?.kind === 'repurpose' ? (
+                  // A finished repurpose run, snapshotted into this conversation. Renders
+                  // statically from the persisted payload — survives reload.
+                  <RepurposeResultMessage key={message.id} payload={message.result} />
                 ) : message.type === 'reel' ? (
                   // Reel block renders in place at the LATEST reel marker (the store holds one
                   // live run). Older markers + a restored marker with no live run no-op.
@@ -675,6 +729,29 @@ export function ChatPage() {
                   message.id === lastSingleReelMarkerId && singleReelConversationId === activeConversationId ? (
                     <div key={message.id} className="my-2">
                       <SingleReelResultMessage />
+                    </div>
+                  ) : null
+                ) : message.type === 'repurpose' ? (
+                  // Repurpose progress renders in place at the LATEST repurpose marker in the
+                  // owning conversation while the run is live; older / cross-conversation markers
+                  // no-op (mirrors the single-reel branch's last-marker + same-conversation guard).
+                  message.id === lastRepurposeMarkerId
+                  && repurposeConversationId === activeConversationId
+                  && (repurposeStatus === 'building-profile' || repurposeStatus === 'analyzing-source' || repurposeStatus === 'rewriting' || repurposeStatus === 'error') ? (
+                    <div key={message.id} className="my-2 text-sm text-muted flex items-center gap-2">
+                      {repurposeStatus === 'error' ? (
+                        <span className="text-[#E07B3A]">{repurposeError || 'Could not repurpose this reel.'}</span>
+                      ) : (
+                        <>
+                          <span className="inline-block w-3 h-3 rounded-full border-2 border-[#E07B3A] border-t-transparent animate-spin" />
+                          <span>
+                            {repurposeStatus === 'building-profile' && PIPELINE_REGISTRY.repurpose.steps[0]}
+                            {repurposeStatus === 'analyzing-source' && PIPELINE_REGISTRY.repurpose.steps[1]}
+                            {repurposeStatus === 'rewriting' && PIPELINE_REGISTRY.repurpose.steps[2]}
+                            …
+                          </span>
+                        </>
+                      )}
                     </div>
                   ) : null
                 ) : (

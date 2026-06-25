@@ -12,6 +12,7 @@
  */
 
 import type { NormalizedProfile } from './transformers'
+import type { VoiceProfile } from '../ai/prompts/voiceProfile'
 
 export type Pipeline = 'competitor' | 'discovery'
 
@@ -123,6 +124,12 @@ export interface CorpusRepository {
   /** All analyzed content across every creator, most-recent first (the reel gallery feed). */
   listAllContent(opts?: { limit?: number }): Promise<ContentRecord[]>
   clear(): Promise<void>
+  /** Upsert a client voice profile (Repurpose Reel). Keyed by handle; re-build overwrites. */
+  upsertVoiceProfile(handle: string, profile: VoiceProfile): Promise<void>
+  /** Load one voice profile by handle, or undefined if none. */
+  getVoiceProfile(handle: string): Promise<VoiceProfile | undefined>
+  /** All voice profiles, most-recently-updated first (the Memory Voices tab feed). */
+  listVoiceProfiles(): Promise<VoiceProfile[]>
 }
 
 /** The identity + metrics half of a record — everything except username + bookkeeping. */
@@ -331,6 +338,7 @@ export function creatorContexts(record: CreatorRecord): string[] {
 export function createMemoryCorpus(): CorpusRepository {
   const store = new Map<string, CreatorRecord>()
   const content = new Map<string, ContentRecord>()
+  const voiceProfiles = new Map<string, VoiceProfile>()
   return {
     async remember(inputs) {
       const out: CreatorRecord[] = []
@@ -378,5 +386,8 @@ export function createMemoryCorpus(): CorpusRepository {
       store.clear()
       content.clear()
     },
+    async upsertVoiceProfile(handle, profile) { voiceProfiles.set(handle, profile) },
+    async getVoiceProfile(handle) { return voiceProfiles.get(handle) },
+    async listVoiceProfiles() { return [...voiceProfiles.values()] },
   }
 }

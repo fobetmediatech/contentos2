@@ -24,6 +24,7 @@ import { useCompetitorAnalysis } from './useCompetitorAnalysis'
 import { useLocationDiscovery } from './useLocationDiscovery'
 import { useReelAnalysis } from './useReelAnalysis'
 import { useSingleReelAnalysis } from './useSingleReelAnalysis'
+import { useRepurposeReel } from './useRepurposeReel'
 import { callGeminiWithTools, callGeminiContent, GeminiError } from '../ai/gemini'
 import type { GeminiTurn } from '../ai/gemini'
 import type { ContentContext } from '../ai/prompts'
@@ -46,6 +47,7 @@ export function useAgentConversation() {
   const { discover } = useLocationDiscovery()
   const { startAnalysis: startReelAnalysis } = useReelAnalysis()
   const { startSingleReel } = useSingleReelAnalysis()
+  const { startRepurpose } = useRepurposeReel()
 
   const [isThinking, setIsThinking] = useState(false)
   const thinkingRef = useRef(false) // ref mirror of isThinking, readable synchronously in sendMessage
@@ -265,6 +267,25 @@ export function useAgentConversation() {
       // conversation), so we only add the chat marker and fire it — never call startRun here.
       addMessage({ role: 'assistant', type: 'single-reel', content: `Analyzing this reel: ${reelUrl}` })
       startSingleReel(reelUrl, signal)
+      return
+    }
+
+    if (name === 'repurpose_reel') {
+      const clientHandle = args.clientHandle ? `@${String(args.clientHandle)}` : 'this client'
+      addMessage({
+        role: 'assistant',
+        type: 'repurpose',
+        content: `Repurposing this reel for ${clientHandle}…`,
+      })
+      startRepurpose(
+        {
+          sourceReelUrl: String(args.sourceReelUrl ?? ''),
+          shortCode: args.shortCode ? String(args.shortCode) : undefined,
+          clientHandle: args.clientHandle ? String(args.clientHandle) : undefined,
+          pastedScripts: Array.isArray(args.pastedScripts) ? (args.pastedScripts as string[]) : [],
+        },
+        signal,
+      )
       return
     }
 

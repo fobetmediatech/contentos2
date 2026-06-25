@@ -42,7 +42,7 @@ interface EvalCase {
   messages: HistoryMessage[]
   expect: {
     type: AgentAction['type']
-    dispatchName?: 'discover_competitors' | 'discover_by_location' | 'analyze_reels' | 'analyze_single_reel'
+    dispatchName?: 'discover_competitors' | 'discover_by_location' | 'analyze_reels' | 'analyze_single_reel' | 'repurpose_reel'
   }
 }
 
@@ -103,6 +103,18 @@ const CASES: EvalCase[] = [
     label: 'single-reel contrast: plain @handle reel-hook request stays analyze_reels (NOT single-reel)',
     messages: [{ role: 'user', content: 'Analyse the reels of @garyvee' }],
     expect: { type: 'dispatch', dispatchName: 'analyze_reels' },
+  },
+
+  // ── Repurpose Reel pipeline ────────────────────────────────────────────────
+  {
+    label: 'repurpose: url + client handle → dispatch',
+    messages: [{ role: 'user', content: 'Repurpose https://www.instagram.com/reel/Cabc123/ for @aanya' }],
+    expect: { type: 'dispatch', dispatchName: 'repurpose_reel' },
+  },
+  {
+    label: 'repurpose: url with no client → ask, never guess a handle',
+    messages: [{ role: 'user', content: 'Repurpose https://www.instagram.com/reel/Cabc123/' }],
+    expect: { type: 'ask' },
   },
 
   // ── Content / strategy (no scraping) ──────────────────────────────────────

@@ -11,6 +11,8 @@
 import type { NormalizedProfile } from '../lib/transformers'
 import type { CompetitorAnalysisResult, DiscoveryResult } from '../ai/prompts'
 import type { CreatorAnalysisState, SynthesisOutput } from '../store/reelAnalysisStore'
+import type { VoiceProfile } from '../ai/prompts/voiceProfile'
+import type { ReelRewriteResult } from '../ai/prompts/reelRewrite'
 
 export type CompetitorResultPayload = {
   kind: 'competitor'
@@ -48,7 +50,19 @@ export type ReelResultPayload = {
   synthesis: SynthesisOutput | null
 }
 
-export type ResultPayload = CompetitorResultPayload | DiscoveryResultPayload | ReelResultPayload
+export type RepurposeResultPayload = {
+  kind: 'repurpose'
+  sourceReelUrl: string
+  clientHandle: string
+  voiceProfile: VoiceProfile
+  rewrite: ReelRewriteResult
+}
+
+export type ResultPayload =
+  | CompetitorResultPayload
+  | DiscoveryResultPayload
+  | ReelResultPayload
+  | RepurposeResultPayload
 
 export interface ChatMessage {
   /** Stable unique id for React keys — monotonic, assigned by addMessage. */
@@ -61,7 +75,7 @@ export interface ChatMessage {
    * result = inline result cards, reel = position marker for the (live) reel-analysis block,
    * single-reel = position marker for the (live) single-reel case-study block.
    */
-  type?: 'text' | 'options' | 'error' | 'result' | 'reel' | 'single-reel'
+  type?: 'text' | 'options' | 'error' | 'result' | 'reel' | 'single-reel' | 'repurpose'
   /** Present when type === 'options' */
   options?: string[]
   /** Present when type === 'result' — the snapshotted pipeline result rendered inline. */
