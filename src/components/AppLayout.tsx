@@ -44,7 +44,7 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
   const sections = NAV_SECTIONS.filter((s) => !s.financeOnly || isFinance)
 
   const navClass = (active: boolean) =>
-    `flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md transition-colors ${
+    `flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md transition-colors flex-shrink-0 whitespace-nowrap ${
       active ? 'bg-surface-raised text-primary font-medium' : 'text-secondary hover:text-primary hover:bg-surface-raised'
     }`
 
@@ -59,7 +59,7 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
     <div className={`${noPadding ? 'h-[100dvh] flex flex-col overflow-hidden' : 'min-h-screen'} bg-chai`}>
       {/* Top navigation bar */}
       <header className="sticky top-0 z-10 bg-surface border-b border-[rgba(245,237,214,0.08)] flex-shrink-0">
-        <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 h-14 flex items-center justify-between gap-2">
           {/* Brand — Instrument Serif italic */}
           <Link
             to="/"
@@ -69,7 +69,7 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
           </Link>
 
           {/* Nav links — derived from NAV_SECTIONS */}
-          <nav aria-label="Main" className="flex items-center gap-1">
+          <nav aria-label="Main" className="flex items-center gap-1 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {sections.map((s) => {
               const Icon = s.icon
               const active = isActive(s)
