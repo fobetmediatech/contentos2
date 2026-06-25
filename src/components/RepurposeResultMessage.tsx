@@ -65,6 +65,14 @@ export default function RepurposeResultMessage({
     r.cta,
   ].join('\n\n')
 
+  // Voiceover-only: just the spoken lines in order — no beat labels, no on-screen text —
+  // so it reads/records/copies as a clean teleprompter script. Falls back to hook + CTA
+  // when there's no beat breakdown.
+  const spokenLines = (
+    r.beatScript.length > 0 ? r.beatScript.map((b) => b.script) : [r.spokenHook, r.cta]
+  ).filter((s) => s.trim().length > 0)
+  const spokenScript = spokenLines.join('\n\n')
+
   return (
     <div className="my-2 space-y-3">
       {/* Voice attribution mini-card */}
@@ -156,6 +164,23 @@ export default function RepurposeResultMessage({
           )
         }
       />
+
+      {/* Spoken script only — clean voiceover (no labels / on-screen text) for recording */}
+      {spokenLines.length > 0 && (
+        <Section
+          title="Spoken script (voiceover)"
+          copy={spokenScript}
+          body={
+            <div className="space-y-2.5">
+              {spokenLines.map((line, i) => (
+                <p key={i} className="text-[15px] leading-relaxed text-primary">
+                  {line}
+                </p>
+              ))}
+            </div>
+          }
+        />
+      )}
 
       {/* Caption */}
       <Section title="Caption" body={r.caption} copy={r.caption} />
