@@ -225,7 +225,7 @@ function ReelModal({ reel, onClose }: { reel: ContentRecord; onClose: () => void
         aria-modal="true"
         aria-label={`Reel by @${reel.creatorUsername}`}
         onClick={(e) => e.stopPropagation()}
-        className="relative flex flex-col md:flex-row w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl border border-[rgba(245,237,214,0.12)] bg-[#1A1410] shadow-[0_24px_80px_rgba(0,0,0,0.7)]"
+        className="relative flex flex-col md:flex-row w-full max-w-4xl max-h-[90vh] overflow-y-auto md:overflow-hidden rounded-2xl border border-[rgba(245,237,214,0.12)] bg-[#1A1410] shadow-[0_24px_80px_rgba(0,0,0,0.7)]"
       >
         <button
           type="button"
@@ -249,7 +249,7 @@ function ReelModal({ reel, onClose }: { reel: ContentRecord; onClose: () => void
         </div>
 
         {/* RIGHT — details: header, metrics, caption, transcript (Instagram-desktop side column). */}
-        <div className="flex flex-col min-w-0 md:w-[360px] max-h-[90vh]">
+        <div className="flex flex-col min-w-0 md:w-[360px] md:max-h-[90vh]">
           <div className="p-4 border-b border-[rgba(245,237,214,0.08)]">
             <a
               href={`https://www.instagram.com/${reel.creatorUsername}/`}
@@ -264,7 +264,7 @@ function ReelModal({ reel, onClose }: { reel: ContentRecord; onClose: () => void
             </div>
           </div>
 
-          <div className="p-4 overflow-y-auto flex flex-col gap-4">
+          <div className="p-4 md:overflow-y-auto flex flex-col gap-4">
             {reel.hookArchetype && (
               <span className="self-start text-xs px-2 py-0.5 rounded-full bg-[#A78BFA]/10 text-[#A78BFA] border border-[#A78BFA]/20">
                 {reel.hookArchetype}
