@@ -63,7 +63,7 @@ function SynthesisCard({ synthesis, onSuggest }: { synthesis: SynthesisOutput; o
         ))}
       </div>
 
-      <div className="grid grid-cols-3 gap-3 mb-5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
         <div className="px-3 py-2 bg-[#13101E] rounded-lg">
           <p className="text-xs text-[#7A6A54] mb-0.5">Median views</p>
           <p className="text-sm font-mono text-[#C4A882]">{formatViews(synthesis.benchmarks.medianViews)}</p>
@@ -78,7 +78,7 @@ function SynthesisCard({ synthesis, onSuggest }: { synthesis: SynthesisOutput; o
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <h3 className="text-xs font-semibold text-[#A78BFA] uppercase tracking-wide mb-2">Replicate</h3>
           <ul className="space-y-2">
@@ -183,7 +183,7 @@ function CreatorSection({ state, singleHandle }: { state: CreatorAnalysisState; 
           </div>
         ) : (
           // Fallback for older snapshots captured under the quick caption-only path.
-          <div className="grid gap-3 grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
             {state.reels.map(reel => (
               <ReelCard key={reel.shortCode} reel={reel} analysis={state.analyses[reel.shortCode]} />
             ))}

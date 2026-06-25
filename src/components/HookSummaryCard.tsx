@@ -22,7 +22,7 @@ export function HookSummaryCard({ summary }: { summary: CreatorHookSummary }) {
       </div>
 
       {/* Benchmarks line */}
-      <div className="grid grid-cols-3 gap-3 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
         <div className="px-3 py-2 bg-[#1A1410] rounded-lg">
           <p className="text-xs text-[#7A6A54] mb-0.5">Median views</p>
           <p className="text-sm font-mono text-[#C4A882] tabular-nums">{formatNumber(summary.benchmarks.medianViews)}</p>
