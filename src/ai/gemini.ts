@@ -19,6 +19,12 @@ import { devLog } from '../lib/devLog'
 // (harmless VITE_ — this is just a model name, not a secret).
 const MODEL = import.meta.env.VITE_GEMINI_MODEL ?? 'gemini-2.5-flash'
 
+// PREMIUM model for the high-leverage calls only — competitor ranking + the knowledge seed, where
+// quality directly drives result relevance/recall. Defaults to MODEL, so behavior is UNCHANGED
+// until VITE_GEMINI_PREMIUM_MODEL is set (e.g. 'gemini-3.5-flash'). This is the per-call split that
+// captures a stronger model where it pays off without paying its price on every cheap routing call.
+const PREMIUM_MODEL = import.meta.env.VITE_GEMINI_PREMIUM_MODEL ?? MODEL
+
 /**
  * Shared request headers for every Gemini REST call.
  *
@@ -136,6 +142,7 @@ export async function geminiGenerate(
   _apiKeys: string | string[],
   requestBody: Record<string, unknown>,
   signal?: AbortSignal,
+  model: string = MODEL,
 ): Promise<{ ok: boolean; status: number; json: GeminiResponse }> {
   const clerkToken = await getClerkSessionToken()
   const res = await fetch('/api/gemini', {
@@ -144,7 +151,7 @@ export async function geminiGenerate(
       'Content-Type': 'application/json',
       ...(clerkToken ? { Authorization: `Bearer ${clerkToken}` } : {}),
     },
-    body: JSON.stringify({ model: MODEL, body: requestBody }),
+    body: JSON.stringify({ model, body: requestBody }),
     signal,
   })
   const json = (await res.json().catch(() => ({
@@ -171,9 +178,10 @@ export async function callGeminiWithSchema<T>(
     maxOutputTokens?: number               // default: 8192
     thinkingBudget?: number               // when set, adds thinkingConfig
     signal?: AbortSignal
+    model?: string                         // override the proxy model (default: MODEL)
   },
 ): Promise<T> {
-  const { temperature = 0.3, maxOutputTokens = 8192, thinkingBudget, signal } = options ?? {}
+  const { temperature = 0.3, maxOutputTokens = 8192, thinkingBudget, signal, model } = options ?? {}
 
   const generationConfig: Record<string, unknown> = {
     temperature,
@@ -192,7 +200,7 @@ export async function callGeminiWithSchema<T>(
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     if (signal?.aborted) throw new GeminiError('UNKNOWN', 'Aborted', false)
     if (attempt > 0) await new Promise<void>((r) => setTimeout(r, 1500))
-    const result = await geminiGenerate(apiKeys, requestBody, signal)
+    const result = await geminiGenerate(apiKeys, requestBody, signal, model)
     lastOk = result.ok; lastStatus = result.status; lastJson = result.json
     if (!result.ok) {
       const err = mapGeminiHttpError(result.status, result.json)
@@ -269,15 +277,16 @@ function stripToJson(text: string): string {
 export async function callGeminiGroundedJson<T>(
   apiKeys: string | string[],
   prompt: string,
-  options?: { temperature?: number; maxOutputTokens?: number; signal?: AbortSignal },
+  options?: { temperature?: number; maxOutputTokens?: number; signal?: AbortSignal; model?: string },
 ): Promise<T> {
-  const { temperature = 0.4, maxOutputTokens = 4096, signal } = options ?? {}
+  // Knowledge-seed path → defaults to the PREMIUM model (the recall-critical call).
+  const { temperature = 0.4, maxOutputTokens = 4096, signal, model = PREMIUM_MODEL } = options ?? {}
   const requestBody = {
     contents: [{ parts: [{ text: prompt }] }],
     tools: [{ googleSearch: {} }],
     generationConfig: { temperature, maxOutputTokens },
   }
-  const { ok, status, json } = await geminiGenerate(apiKeys, requestBody, signal)
+  const { ok, status, json } = await geminiGenerate(apiKeys, requestBody, signal, model)
   if (!ok) throw mapGeminiHttpError(status, json)
   if (!json.candidates || json.candidates.length === 0) {
     throw new GeminiError('SAFETY_BLOCK', 'Gemini blocked the grounded response.', false)
@@ -408,7 +417,7 @@ export async function analyzeCompetitors(
     geminiKey,
     prompt,
     COMPETITOR_SCHEMA,
-    { temperature: 0.3, maxOutputTokens: 16384, signal },
+    { temperature: 0.3, maxOutputTokens: 16384, signal, model: PREMIUM_MODEL },
   )
   return validateAnalysisOutput(parsed)
 }
