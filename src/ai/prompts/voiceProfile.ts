@@ -61,7 +61,7 @@ export function buildVoiceProfilePrompt(
     ? transcripts.map((t, i) => `### Reel ${i + 1} transcript\n${t}`).join('\n\n')
     : '(no spoken transcripts available)'
   const captionBlock = captions.length
-    ? captions.map((c, i) => `- ${c}`).join('\n')
+    ? captions.map((c) => `- ${c}`).join('\n')
     : '(no captions available)'
 
   return `You are a voice/tone analyst. Study how the creator @${handle} actually talks and writes, then distil a reusable VOICE PROFILE that someone could use to rewrite ANY script so it sounds like @${handle}.
