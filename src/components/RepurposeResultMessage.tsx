@@ -126,19 +126,31 @@ export default function RepurposeResultMessage({
         copy={fullScript}
         body={
           r.beatScript.length > 0 ? (
-            <div className="space-y-2">
+            <ol className="space-y-4">
               {r.beatScript.map((b, i) => (
-                <div key={i}>
-                  <div className="text-xs text-muted">{b.beatLabel}</div>
-                  <div>{b.script}</div>
+                <li key={i} className="relative pl-9">
+                  {/* Beat number — DM Mono in a saffron chip, the structural anchor */}
+                  <span className="absolute left-0 top-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-[rgba(224,123,58,0.12)] font-mono text-[11px] tabular-nums text-accent-light">
+                    {i + 1}
+                  </span>
+                  {/* Beat function — a quiet stage direction, not the line itself */}
+                  {b.beatLabel && (
+                    <div className="text-[11px] italic leading-snug text-muted mb-1">{b.beatLabel}</div>
+                  )}
+                  {/* The spoken line — the thing you actually read, so make it the focus */}
+                  <p className="text-[15px] leading-relaxed text-primary">{b.script}</p>
+                  {/* On-screen overlay — distinct violet callout (AI-generated → ai-tint) */}
                   {b.onScreenText && (
-                    <div className="text-xs text-ai-tint">
-                      on-screen: {b.onScreenText}
+                    <div className="mt-2 flex items-start gap-2 rounded-md border border-[rgba(167,139,250,0.20)] bg-[rgba(167,139,250,0.10)] px-2.5 py-1.5">
+                      <span className="shrink-0 mt-[3px] font-mono text-[10px] uppercase tracking-[0.1em] text-ai-tint">
+                        on-screen
+                      </span>
+                      <span className="text-[13px] leading-snug text-ai-tint">{b.onScreenText}</span>
                     </div>
                   )}
-                </div>
+                </li>
               ))}
-            </div>
+            </ol>
           ) : (
             <span className="text-muted italic">No beat breakdown available.</span>
           )
