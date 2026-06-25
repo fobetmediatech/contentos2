@@ -17,6 +17,7 @@ import {
   type CorpusRepository, type CreatorInput, type CreatorRecord,
   type ContentRecord, type Feedback, type Sighting, type CorpusSort,
 } from './corpus'
+import type { VoiceProfile } from '../ai/prompts/voiceProfile'
 
 // corpus_feedback.polarity is constrained to ('save','dismiss') by the migration, but the
 // app's Feedback vocabulary is ('saved','dismissed'). Map so the append-only event log
@@ -281,6 +282,46 @@ export function createSupabaseCorpus(): CorpusRepository {
       // Destructive on SHARED team data — never wired to a real delete. Tests use the
       // in-memory double (createMemoryCorpus) for clear() semantics.
       throw new Error('clear() is not supported on the shared Supabase corpus')
+    },
+
+    async upsertVoiceProfile(handle: string, profile: VoiceProfile) {
+      // owner_user_id must equal the Clerk sub for the INSERT RLS check; guard null so a
+      // signed-out write fails loudly instead of hitting a NOT NULL / RLS violation.
+      const userId = await getClerkUserId()
+      if (!userId) throw new Error('Sign in to save voice profiles.')
+      const { error } = await supabase
+        .from('corpus_voice_profiles')
+        .upsert(
+          {
+            handle,
+            owner_user_id: userId,
+            display_name: profile.displayName,
+            voice_data: profile,
+            reel_count: profile.reelCount,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'handle' },
+        )
+      if (error) throw error
+    },
+
+    async getVoiceProfile(handle: string) {
+      const { data, error } = await supabase
+        .from('corpus_voice_profiles')
+        .select('voice_data')
+        .eq('handle', handle)
+        .maybeSingle()
+      if (error) throw error
+      return data ? ((data as { voice_data: VoiceProfile }).voice_data) : undefined
+    },
+
+    async listVoiceProfiles() {
+      const { data, error } = await supabase
+        .from('corpus_voice_profiles')
+        .select('voice_data')
+        .order('updated_at', { ascending: false })
+      if (error) throw error
+      return ((data ?? []) as { voice_data: VoiceProfile }[]).map((r) => r.voice_data)
     },
   }
   return repo
