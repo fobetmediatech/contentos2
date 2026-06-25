@@ -42,7 +42,7 @@ interface EvalCase {
   messages: HistoryMessage[]
   expect: {
     type: AgentAction['type']
-    dispatchName?: 'discover_competitors' | 'discover_by_location' | 'analyze_reels' | 'analyze_single_reel' | 'repurpose_reel'
+    dispatchName?: 'discover_competitors' | 'discover_by_location' | 'analyze_reels' | 'analyze_single_reel' | 'repurpose_reel' | 'get_reel_transcript'
   }
 }
 
@@ -115,6 +115,18 @@ const CASES: EvalCase[] = [
     label: 'repurpose: url with no client → ask, never guess a handle',
     messages: [{ role: 'user', content: 'Repurpose https://www.instagram.com/reel/Cabc123/' }],
     expect: { type: 'ask' },
+  },
+
+  // ── Transcript pipeline ────────────────────────────────────────────────────
+  {
+    label: 'transcript: explicit "provide transcript" with reel URL routes to get_reel_transcript',
+    messages: [{ role: 'user', content: 'provide transcript for this reel https://www.instagram.com/reel/CxYz123/' }],
+    expect: { type: 'dispatch', dispatchName: 'get_reel_transcript' },
+  },
+  {
+    label: 'transcript: "transcribe this reel" routes to get_reel_transcript',
+    messages: [{ role: 'user', content: 'transcribe this reel https://www.instagram.com/reel/CxYz123/' }],
+    expect: { type: 'dispatch', dispatchName: 'get_reel_transcript' },
   },
 
   // ── Content / strategy (no scraping) ──────────────────────────────────────

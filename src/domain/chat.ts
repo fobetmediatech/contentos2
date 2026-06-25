@@ -13,6 +13,7 @@ import type { CompetitorAnalysisResult, DiscoveryResult } from '../ai/prompts'
 import type { CreatorAnalysisState, SynthesisOutput } from '../store/reelAnalysisStore'
 import type { VoiceProfile } from '../ai/prompts/voiceProfile'
 import type { ReelRewriteResult } from '../ai/prompts/reelRewrite'
+import type { TranscriptSegment } from '../store/transcriptStore'
 
 export type CompetitorResultPayload = {
   kind: 'competitor'
@@ -58,11 +59,19 @@ export type RepurposeResultPayload = {
   rewrite: ReelRewriteResult
 }
 
+export type TranscriptResultPayload = {
+  kind: 'transcript'
+  reelUrl: string
+  transcript: string
+  segments: TranscriptSegment[]
+}
+
 export type ResultPayload =
   | CompetitorResultPayload
   | DiscoveryResultPayload
   | ReelResultPayload
   | RepurposeResultPayload
+  | TranscriptResultPayload
 
 export interface ChatMessage {
   /** Stable unique id for React keys — monotonic, assigned by addMessage. */
@@ -75,7 +84,7 @@ export interface ChatMessage {
    * result = inline result cards, reel = position marker for the (live) reel-analysis block,
    * single-reel = position marker for the (live) single-reel case-study block.
    */
-  type?: 'text' | 'options' | 'error' | 'result' | 'reel' | 'single-reel' | 'repurpose'
+  type?: 'text' | 'options' | 'error' | 'result' | 'reel' | 'single-reel' | 'repurpose' | 'transcript'
   /** Present when type === 'options' */
   options?: string[]
   /** Present when type === 'result' — the snapshotted pipeline result rendered inline. */

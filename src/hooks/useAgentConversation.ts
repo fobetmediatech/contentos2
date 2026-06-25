@@ -25,6 +25,7 @@ import { useLocationDiscovery } from './useLocationDiscovery'
 import { useReelAnalysis } from './useReelAnalysis'
 import { useSingleReelAnalysis } from './useSingleReelAnalysis'
 import { useRepurposeReel } from './useRepurposeReel'
+import { useTranscriptAnalysis } from './useTranscriptAnalysis'
 import { callGeminiWithTools, callGeminiContent, GeminiError } from '../ai/gemini'
 import type { GeminiTurn } from '../ai/gemini'
 import type { ContentContext } from '../ai/prompts'
@@ -48,6 +49,7 @@ export function useAgentConversation() {
   const { startAnalysis: startReelAnalysis } = useReelAnalysis()
   const { startSingleReel } = useSingleReelAnalysis()
   const { startRepurpose } = useRepurposeReel()
+  const { startTranscript } = useTranscriptAnalysis()
 
   const [isThinking, setIsThinking] = useState(false)
   const thinkingRef = useRef(false) // ref mirror of isThinking, readable synchronously in sendMessage
@@ -286,6 +288,13 @@ export function useAgentConversation() {
         },
         signal,
       )
+      return
+    }
+
+    if (name === 'get_reel_transcript') {
+      const reelUrl = String(args.reelUrl ?? '')
+      addMessage({ role: 'assistant', type: 'transcript', content: `Transcribing this reel: ${reelUrl}` })
+      startTranscript(reelUrl, signal)
       return
     }
 
