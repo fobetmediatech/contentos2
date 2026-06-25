@@ -37,4 +37,10 @@ describe('voiceProfile', () => {
     expect(req).not.toContain('handle')      // code-attached
     expect(req).not.toContain('reelCount')   // code-attached
   })
+
+  it('instructs Latin-script / Hinglish field values (no Devanagari)', () => {
+    const p = buildVoiceProfilePrompt('aanya', [], [])
+    expect(p).toMatch(/Hinglish/i)
+    expect(p).toMatch(/Devanagari/i)
+  })
 })

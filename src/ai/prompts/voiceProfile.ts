@@ -7,7 +7,7 @@
  * useRepurposeReel (build) and the rewrite prompt (reelRewrite.ts).
  */
 
-export const VOICE_PROFILE_PROMPT_VERSION = 1
+export const VOICE_PROFILE_PROMPT_VERSION = 2
 
 export interface VoiceProfile {
   handle: string
@@ -65,6 +65,8 @@ export function buildVoiceProfilePrompt(
     : '(no captions available)'
 
   return `You are a voice/tone analyst. Study how the creator @${handle} actually talks and writes, then distil a reusable VOICE PROFILE that someone could use to rewrite ANY script so it sounds like @${handle}.
+
+LANGUAGE & SCRIPT (strict): write every field value in Latin/Roman script only. Romanize any Hindi/Indian-language words as Hinglish ("bhai aaj kuch alag karte hain", NOT Devanagari); keep English as English. NEVER use Devanagari or any non-Latin script.
 
 Focus on HOW they communicate, not WHAT topics they cover:
 
