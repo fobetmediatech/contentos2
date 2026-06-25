@@ -13,6 +13,7 @@
 import { create } from 'zustand'
 import { corpus } from '../lib/corpusIdb'
 import type { CorpusRepository, CreatorInput, CreatorRecord, ContentRecord, Feedback } from '../lib/corpus'
+import type { VoiceProfile } from '../ai/prompts/voiceProfile'
 
 export interface CorpusState {
   /** Remembered creators keyed by username — the synchronous mirror of the corpus. */
@@ -28,6 +29,10 @@ export interface CorpusState {
   /** Set (or clear, with null) the user's verdict on a remembered creator, mirroring the
    *  updated record into synchronous state so cards re-render instantly (Phase 3). */
   setFeedback: (username: string, feedback: Feedback | null, at: number) => Promise<CreatorRecord | undefined>
+  /** Voice profiles keyed by handle — synchronous mirror of the corpus_voice_profiles table. */
+  voiceProfiles: Record<string, VoiceProfile>
+  /** Upsert a voice profile through the repo and mirror it into synchronous state. */
+  setVoiceProfile: (handle: string, profile: VoiceProfile) => Promise<void>
 }
 
 // 6.5: cap the in-memory recognition mirror to the most-recently-seen creators.
@@ -42,18 +47,26 @@ function keyBy(records: CreatorRecord[]): Record<string, CreatorRecord> {
   return map
 }
 
+function keyVoiceProfiles(profiles: VoiceProfile[]): Record<string, VoiceProfile> {
+  const map: Record<string, VoiceProfile> = {}
+  for (const p of profiles) map[p.handle] = p
+  return map
+}
+
 export function makeCorpusStore(repo: CorpusRepository) {
   return create<CorpusState>((set, get) => ({
     creators: {},
     count: 0,
     hydrated: false,
+    voiceProfiles: {},
     hydrate: async () => {
       if (get().hydrated) return
-      const [slice, total] = await Promise.all([
+      const [slice, total, profiles] = await Promise.all([
         repo.list({ limit: HYDRATION_CAP }),
         repo.count(),
+        repo.listVoiceProfiles(),
       ])
-      set({ creators: keyBy(slice), count: total, hydrated: true })
+      set({ creators: keyBy(slice), count: total, voiceProfiles: keyVoiceProfiles(profiles), hydrated: true })
     },
     remember: async (inputs) => {
       const merged = await repo.remember(inputs)
@@ -71,6 +84,10 @@ export function makeCorpusStore(repo: CorpusRepository) {
       // Mirror only on a real update (unknown creator → repo returns undefined → state untouched).
       if (updated) set({ creators: { ...get().creators, [updated.username]: updated } })
       return updated
+    },
+    setVoiceProfile: async (handle, profile) => {
+      await repo.upsertVoiceProfile(handle, profile)
+      set({ voiceProfiles: { ...get().voiceProfiles, [handle]: profile } })
     },
   }))
 }
