@@ -315,22 +315,26 @@ export function useAgentConversation() {
     const handles = (args.knownHandles as string[]) ?? []
     const niche = String(args.niche ?? '')
     const segment = String(args.segment ?? 'all')
+    const mode = (args.mode as 'precise' | 'broad') ?? 'precise'
     const nicheContext = segment !== 'all' && niche ? `${niche} — ${segment}` : niche
 
     if (handles.length > 0) {
-      analyze({ handles, depth: 'standard', clientName: '', nicheContext }, signal)
+      analyze({ handles, depth: 'standard', clientName: '', nicheContext, mode }, signal)
       return
     }
 
-    // Niche-only: scrape seed accounts from hashtags, then rank.
+    // Niche-only bootstrap: hashtag-author seeds feed the graph walk, while the knowledge + IG
+    // search sources (run inside discoverCompetitors from nicheContext) carry recall. If even the
+    // hashtag seeds are empty we STILL proceed when a niche is present — the speculative sources
+    // can build the whole pool from the niche alone; only bail when there is genuinely nothing.
     const { hashtags } = await generateHashtags(geminiKeys, '', niche, 'standard', signal)
     const seeds = await scrapeHashtagUsernames(hashtags, apifyKeys, signal)
     if (signal.aborted) return
-    if (seeds.length === 0) {
+    if (seeds.length === 0 && !niche) {
       bot(`Couldn't find accounts for "${niche}" automatically. Know any @handles I can start from?`)
       return
     }
-    analyze({ handles: seeds.slice(0, SEED_LIMIT), depth: 'standard', clientName: '', nicheContext }, signal)
+    analyze({ handles: seeds.slice(0, SEED_LIMIT), depth: 'standard', clientName: '', nicheContext, mode }, signal)
   }
 
   // 2.2: exposed so ChatPage can abort in-flight runs on conversation switch/delete,

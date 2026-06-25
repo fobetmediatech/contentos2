@@ -20,9 +20,10 @@
 
 import pLimit from 'p-limit'
 import { devLog } from './devLog'
-import { ACTORS, buildProfileScraperInput, buildHashtagScraperInput } from './actors'
+import { ACTORS, buildProfileScraperInput, buildHashtagScraperInput, buildSearchScraperInput } from './actors'
 import { normalizeProfiles, type ApifyProfileRaw, type NormalizedProfile } from './transformers'
 import { startRun, pollRun, fetchDataset, chunk, withKeyFailover } from './apifyCore'
+import { generateNicheSeeds, matchesIntendedIdentity, SEARCH_RESULT_CAP } from './knowledgeSeed'
 
 // Re-export shared error class so existing callers don't need to change their imports
 export { ApifyError, type ApifyErrorCode } from './apifyCore'
@@ -31,6 +32,32 @@ const MAX_CONCURRENT = 3        // p-limit cap for concurrent actor runs
 
 // Concurrency limiter — prevents firing too many actor runs simultaneously
 const limit = pLimit(MAX_CONCURRENT)
+
+// Dedicated limiter for the SPECULATIVE recall sources (knowledge seed A/B + IG keyword search C).
+// Separate from `limit` so these NEW scrapes run concurrently with the graph walk instead of
+// queueing behind Round 2/hashtag/Round 3 on the same 3 slots — the latency fix for CR-1. They get
+// their own 3 slots; both pools draw distinct keys via the proxy's per-run key rotation.
+const speculativeLimit = pLimit(3)
+
+// Source precedence for cross-source dedup + prompt ordering (lower = higher confidence; kept on
+// conflict and placed earlier in the candidate list so the ranker reads strongest signals first).
+const SOURCE_PRECEDENCE: Record<string, number> = {
+  knowledge: 0, hashtag: 1, search: 2, relatedProfiles: 3, round3: 4,
+}
+
+/** Dedup candidates by username, keeping the highest-precedence discoverySource on conflict. */
+function dedupBySource(profiles: NormalizedProfile[]): NormalizedProfile[] {
+  const best = new Map<string, NormalizedProfile>()
+  for (const p of profiles) {
+    const key = p.username.toLowerCase()
+    const existing = best.get(key)
+    if (!existing) { best.set(key, p); continue }
+    const incoming = SOURCE_PRECEDENCE[p.discoverySource ?? ''] ?? 99
+    const current = SOURCE_PRECEDENCE[existing.discoverySource ?? ''] ?? 99
+    if (incoming < current) best.set(key, p)
+  }
+  return [...best.values()]
+}
 
 // ----- Types -----
 
@@ -101,6 +128,105 @@ export async function scrapeHashtagUsernames(
   return [...new Set(usernames)]
 }
 
+/** Raw account row from the Search Scraper (searchType:'user') — account search yields `username`. */
+interface SearchAccountRaw {
+  username?: string
+}
+
+/**
+ * Component C: find ACCOUNTS by keyword via apify~instagram-scraper (searchType:'user').
+ * Returns unique usernames — the caller profile-scrapes them, mirroring the hashtag two-step.
+ * NOTE: account search returns `username` (NOT `ownerUsername` like the hashtag/post path).
+ */
+export async function scrapeSearchUsernames(
+  keyword: string,
+  apifyKeys: string[],
+  signal?: AbortSignal,
+  searchLimit = SEARCH_RESULT_CAP,
+): Promise<string[]> {
+  const trimmed = keyword.trim()
+  if (!trimmed) return []
+  const input = buildSearchScraperInput(trimmed, searchLimit)
+  const rows = await withKeyFailover(apifyKeys, async (apiKey) => {
+    const { runId, datasetId, keyIndex } = await startRun(ACTORS.SEARCH_SCRAPER, input, apiKey, signal)
+    const resolvedDatasetId = await pollRun(runId, apiKey, signal, undefined, keyIndex)
+    return fetchDataset<SearchAccountRaw>(resolvedDatasetId || datasetId, apiKey, signal, keyIndex)
+  })
+  const usernames = rows
+    .map((r) => r.username?.trim().toLowerCase())
+    .filter((u): u is string => Boolean(u))
+  return [...new Set(usernames)]
+}
+
+/**
+ * Scrape handles with PER-BATCH fault isolation (CR-2). Speculative (LLM/search-named) handles
+ * are adversarial input the batch path isn't isolated against: scrapeHandles puts 10 handles in
+ * ONE run and Promise.all fail-fasts, so a single hard run-failure could collapse the source AND
+ * the trusted graph walk running in parallel. Here each batch runs under Promise.allSettled on the
+ * DEDICATED limiter, so a failed batch drops only its ≤10 handles — never the graph walk, never
+ * the other batches. (Non-existent handles are normally just omitted by the actor, run SUCCEEDED.)
+ */
+async function scrapeHandlesIsolated(
+  handles: string[],
+  apifyKeys: string[],
+  signal?: AbortSignal,
+): Promise<NormalizedProfile[]> {
+  const batches = chunk(handles, 10)
+  const settled = await Promise.allSettled(
+    batches.map((b) => speculativeLimit(() => scrapeHandles(b, apifyKeys, signal))),
+  )
+  const out: NormalizedProfile[] = []
+  for (const r of settled) if (r.status === 'fulfilled') out.push(...r.value)
+  return out
+}
+
+/**
+ * Run the SPECULATIVE recall sources for a niche: knowledge seed (A + B) and IG keyword search (C).
+ * Each leg generates handles → scrape-verifies them (fault-isolated) → tags discoverySource. The
+ * knowledge leg additionally applies the identity gate (CR-2) so a scraped-but-wrong account never
+ * surfaces. Runs on the dedicated limiter and each leg degrades to [] independently on failure, so
+ * a slow/failed source returns a partial pool instead of aborting the run (CR-1 graceful degrade).
+ */
+async function discoverSpeculativeSources(
+  niche: string,
+  inputProfiles: NormalizedProfile[],
+  geminiKeys: string[],
+  apifyKeys: string[],
+  mode: 'precise' | 'broad',
+  signal?: AbortSignal,
+): Promise<NormalizedProfile[]> {
+  const seenInput = new Set(inputProfiles.map((p) => p.username.toLowerCase()))
+
+  const [knowledgeProfiles, searchProfiles] = await Promise.all([
+    // A + B: AI names creators (web-grounded) → scrape-verify → identity gate → tag 'knowledge'.
+    (async (): Promise<NormalizedProfile[]> => {
+      const seeds = await generateNicheSeeds(geminiKeys, niche, inputProfiles, mode, signal)
+      const handles = seeds.map((s) => s.handle).filter((h) => !seenInput.has(h))
+      if (handles.length === 0) return []
+      const scraped = await scrapeHandlesIsolated(handles, apifyKeys, signal)
+      const seedByHandle = new Map(seeds.map((s) => [s.handle, s]))
+      const verified = scraped.filter((p) => {
+        const seed = seedByHandle.get(p.username.toLowerCase())
+        return seed ? matchesIntendedIdentity(p, seed) : false
+      })
+      const dropped = scraped.length - verified.length
+      if (dropped > 0) devLog(`[knowledge] identity gate dropped ${dropped}/${scraped.length} scraped seeds (possible wrong-person matches)`)
+      return verified.map((p) => ({ ...p, discoverySource: 'knowledge' as const }))
+    })().catch((): NormalizedProfile[] => []),
+    // C: IG keyword/account search → scrape-verify → tag 'search'.
+    (async (): Promise<NormalizedProfile[]> => {
+      const usernames = await scrapeSearchUsernames(niche, apifyKeys, signal).catch(() => [] as string[])
+      const handles = usernames.filter((h) => !seenInput.has(h)).slice(0, SEARCH_RESULT_CAP)
+      if (handles.length === 0) return []
+      const scraped = await scrapeHandlesIsolated(handles, apifyKeys, signal)
+      return scraped.map((p) => ({ ...p, discoverySource: 'search' as const }))
+    })().catch((): NormalizedProfile[] => []),
+  ])
+
+  devLog(`[speculative] knowledge: ${knowledgeProfiles.length}, search: ${searchProfiles.length}`)
+  return [...knowledgeProfiles, ...searchProfiles]
+}
+
 // ----- Public API: 2-round competitor discovery -----
 
 export interface ScrapeResult {
@@ -143,9 +269,24 @@ export async function discoverCompetitors(
   apifyKeys: string[],
   signal?: AbortSignal,
   depth: 'standard' | 'deep' = 'standard',
+  opts?: { niche?: string; geminiKeys?: string[]; mode?: 'precise' | 'broad' },
 ): Promise<ScrapeResult> {
-  // Round 1: scrape input handles → get profiles, relatedHandles, topHashtags
-  const inputProfiles = await scrapeHandles(inputHandles, apifyKeys, signal)
+  const niche = (opts?.niche ?? '').trim()
+  const mode = opts?.mode ?? 'precise'
+  const geminiKeys = opts?.geminiKeys ?? []
+
+  // Round 1: scrape input handles → profiles, relatedHandles, topHashtags. Skipped when no handles
+  // are given — the niche-only bootstrap builds the pool purely from the speculative sources.
+  const inputProfiles = inputHandles.length > 0
+    ? await scrapeHandles(inputHandles, apifyKeys, signal)
+    : []
+
+  // Kick off the SPECULATIVE recall sources NOW (knowledge A/B + search C). They only need the
+  // niche + reference profiles and run on a dedicated limiter, so they execute CONCURRENTLY with
+  // the graph walk below instead of queueing behind it (CR-1). No niche → no speculative pool.
+  const speculativePromise: Promise<NormalizedProfile[]> = niche
+    ? discoverSpeculativeSources(niche, inputProfiles, geminiKeys, apifyKeys, mode, signal)
+    : Promise.resolve([])
 
   // Build seen set to avoid re-scraping any handle
   const seenHandles = new Set(inputHandles.map((h) => h.replace(/^@/, '').toLowerCase()))
@@ -161,9 +302,10 @@ export async function discoverCompetitors(
     .sort((a, b) => (handleFreq.get(b) ?? 0) - (handleFreq.get(a) ?? 0))
     .slice(0, depth === 'deep' ? 40 : 25)
 
-  if (candidateHandles.length === 0) {
-    return { inputProfiles, candidateProfiles: [] }
-  }
+  // The relatedProfiles + hashtag + Round-3 graph walk runs only when Round 1 yielded a graph to
+  // walk; otherwise the speculative sources carry the pool. Wrapped in an IIFE so the graph-walk
+  // body is unchanged and the empty-graph case short-circuits to [].
+  const graphCandidates: NormalizedProfile[] = candidateHandles.length === 0 ? [] : await (async (): Promise<NormalizedProfile[]> => {
 
   // Extract hashtags from input profiles for content-niche expansion, ranked by
   // CROSS-PROFILE frequency (how many reference accounts use each tag). A plain Set
@@ -257,15 +399,24 @@ export async function discoverCompetitors(
   // Merge order: hashtag (content-niche) first — Gemini's context window reads top-down,
   // so placing the highest-confidence niche candidates first creates an ordering bias that
   // reinforces the SOURCE PRIORITY instruction in the prompt.
-  const allCandidates = [...taggedHashtagProfiles, ...round2Profiles, ...taggedRound3Profiles]
-  devLog(`[pipeline] total candidates: ${allCandidates.length} (hashtag: ${taggedHashtagProfiles.length}, r2: ${round2Profiles.length}, r3: ${taggedRound3Profiles.length})`)
+    const allCandidates = [...taggedHashtagProfiles, ...round2Profiles, ...taggedRound3Profiles]
+    devLog(`[graph-walk] candidates: ${allCandidates.length} (hashtag: ${taggedHashtagProfiles.length}, r2: ${round2Profiles.length}, r3: ${taggedRound3Profiles.length})`)
+    return allCandidates
+  })()
+
+  // Merge graph-walk + speculative sources, dedup by username (source precedence), and order
+  // strongest-signal-first so the ranker's top-down read reinforces SOURCE PRIORITY.
+  const speculativeProfiles = await speculativePromise
+  const merged = dedupBySource([...graphCandidates, ...speculativeProfiles])
+    .sort((a, b) => (SOURCE_PRECEDENCE[a.discoverySource ?? ''] ?? 99) - (SOURCE_PRECEDENCE[b.discoverySource ?? ''] ?? 99))
+  devLog(`[pipeline] merged candidates: ${merged.length} (graph: ${graphCandidates.length}, speculative: ${speculativeProfiles.length})`)
 
   // Dead account gate: remove inactive accounts before handing the pool to Gemini.
   // Accounts with no posts or last post >180 days ago are not active competitors —
-  // keeping them wastes context window tokens and degrades ranking quality.
-  // Computed at call time (not module scope) so tests don't get stale timestamps.
+  // keeping them wastes context window tokens and degrades ranking quality. Now also drops
+  // dead AI-named / search-found accounts (part of the speculative verify step).
   const sixMonthsAgo = Date.now() - 180 * 24 * 60 * 60 * 1000
-  const candidateProfiles = allCandidates.filter((p) => {
+  const candidateProfiles = merged.filter((p) => {
     if (p.postsCount === 0) return false
     if (p.lastPostDate) {
       const lastPostTs = new Date(p.lastPostDate).getTime()
@@ -273,7 +424,7 @@ export async function discoverCompetitors(
     }
     return true
   })
-  const removedCount = allCandidates.length - candidateProfiles.length
+  const removedCount = merged.length - candidateProfiles.length
   if (removedCount > 0) {
     devLog(`[dead-account-gate] removed ${removedCount} inactive accounts (0 posts or last post >180 days ago)`)
   }

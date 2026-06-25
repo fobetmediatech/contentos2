@@ -28,6 +28,11 @@ export const ACTORS = {
   // download each reel's video (includeDownloadedVideo) to a stable Apify URL.
   // Use it ONLY with direct /reel/<shortcode>/ URLs (profile scrapes get IG-blocked).
   REEL_VIDEO_SCRAPER: 'apify~instagram-reel-scraper',
+  // SEARCH_SCRAPER finds ACCOUNTS by keyword (searchType:'user'). Same underlying actor as
+  // REEL_SCRAPER (apify~instagram-scraper) — already on the server allowlist — multiplexed by
+  // input: `search` + `searchType` does account search; `directUrls` does profile/posts. The two
+  // input shapes are mutually exclusive (never pass both). Output rows carry `username`.
+  SEARCH_SCRAPER: 'apify~instagram-scraper',
 } as const
 
 /**
@@ -98,5 +103,23 @@ export function buildSingleReelInput(reelUrl: string): Record<string, unknown> {
   return {
     username: [reelUrl],
     includeDownloadedVideo: true,
+  }
+}
+
+/**
+ * Build the input for the keyword/account Search Scraper (apify~instagram-scraper, searchType:'user').
+ *
+ * `search` + `searchType:'user'` returns ACCOUNTS matching the keyword (rows carry `username`).
+ * Do NOT pass `directUrls` here — `search` and `directUrls` are mutually exclusive in this actor.
+ *
+ * @param keyword       The niche/keyword to search accounts for (e.g. "fitness coach")
+ * @param searchLimit   Max accounts to return (kept small — this is one serial Apify run)
+ */
+export function buildSearchScraperInput(keyword: string, searchLimit: number): Record<string, unknown> {
+  return {
+    search: keyword,
+    searchType: 'user',
+    searchLimit,
+    resultsType: 'details',
   }
 }

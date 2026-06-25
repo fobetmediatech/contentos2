@@ -105,7 +105,7 @@ describe('normalizeProfile — discoverySource field (source-tagging)', () => {
   it('accepts all valid DiscoverySource values', () => {
     const raw = makeRaw()
     const profile = normalizeProfile(raw)
-    const sources = ['input', 'relatedProfiles', 'hashtag', 'round3'] as const
+    const sources = ['input', 'relatedProfiles', 'hashtag', 'round3', 'knowledge', 'search'] as const
     for (const source of sources) {
       const tagged = { ...profile, discoverySource: source }
       expect(tagged.discoverySource).toBe(source)

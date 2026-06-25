@@ -237,6 +237,61 @@ export async function callGeminiWithSchema<T>(
   }
 }
 
+// ----- Grounded JSON call (knowledge seed generator — Components A + B) -----
+
+/** Extract a JSON array/object from grounded output that may carry prose or code fences. */
+function stripToJson(text: string): string {
+  let t = text.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim()
+  const firstArr = t.indexOf('[')
+  const firstObj = t.indexOf('{')
+  const start = firstArr === -1 ? firstObj : firstObj === -1 ? firstArr : Math.min(firstArr, firstObj)
+  if (start > 0) {
+    const end = Math.max(t.lastIndexOf(']'), t.lastIndexOf('}'))
+    if (end > start) t = t.slice(start, end + 1)
+  }
+  return t.trim()
+}
+
+/**
+ * Gemini call WITH Google Search grounding (tools:[{googleSearch:{}}]) for recency.
+ *
+ * Gemini 2.5 FORBIDS responseSchema / responseMimeType:'application/json' together with the
+ * googleSearch tool, so JSON cannot be structurally enforced here — the prompt must instruct JSON
+ * and we parse the text defensively (grounded output often wraps JSON in prose + citations).
+ * The /api/gemini proxy forwards the tools field verbatim; no server change is required.
+ *
+ * Throws GeminiError on transport/parse failure — the knowledge-seed caller catches and degrades
+ * to an empty pool so a seed failure never aborts the whole discovery run.
+ */
+export async function callGeminiGroundedJson<T>(
+  apiKeys: string | string[],
+  prompt: string,
+  options?: { temperature?: number; maxOutputTokens?: number; signal?: AbortSignal },
+): Promise<T> {
+  const { temperature = 0.4, maxOutputTokens = 4096, signal } = options ?? {}
+  const requestBody = {
+    contents: [{ parts: [{ text: prompt }] }],
+    tools: [{ googleSearch: {} }],
+    generationConfig: { temperature, maxOutputTokens },
+  }
+  const { ok, status, json } = await geminiGenerate(apiKeys, requestBody, signal)
+  if (!ok) throw mapGeminiHttpError(status, json)
+  if (!json.candidates || json.candidates.length === 0) {
+    throw new GeminiError('SAFETY_BLOCK', 'Gemini blocked the grounded response.', false)
+  }
+  const candidate = json.candidates[0]
+  if (candidate.finishReason === 'MAX_TOKENS') {
+    throw new GeminiError('PARSE_ERROR', 'Grounded response was cut off (MAX_TOKENS).', false)
+  }
+  const text = joinThoughtFilteredText(candidate.content?.parts).trim()
+  if (!text) throw new GeminiError('SAFETY_BLOCK', 'Gemini returned an empty grounded response.', false)
+  try {
+    return JSON.parse(stripToJson(text)) as T
+  } catch (err) {
+    throw new GeminiError('PARSE_ERROR', `Could not parse grounded response as JSON: ${(err as Error).message}`, false)
+  }
+}
+
 // ----- Competitor analysis schema -----
 
 const COMPETITOR_SCHEMA = {
@@ -337,8 +392,9 @@ export async function analyzeCompetitors(
   clarificationAnswer?: string,
   preferenceExemplars?: PreferenceExemplars,
   corpusSignals?: Record<string, string>,
+  mode: 'precise' | 'broad' = 'precise',
 ): Promise<AnalysisOutput> {
-  const prompt = buildCompetitorPrompt(inputProfiles, candidateProfiles, nicheContext, clarificationAnswer, preferenceExemplars, corpusSignals)
+  const prompt = buildCompetitorPrompt(inputProfiles, candidateProfiles, nicheContext, clarificationAnswer, preferenceExemplars, corpusSignals, mode)
   const parsed = await callGeminiWithSchema<AnalysisOutput>(
     geminiKey,
     prompt,

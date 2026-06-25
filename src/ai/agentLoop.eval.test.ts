@@ -68,6 +68,14 @@ const CASES: EvalCase[] = [
     messages: [{ role: 'user', content: 'Show me the top skincare brands on Instagram' }],
     expect: { type: 'dispatch', dispatchName: 'discover_competitors' },
   },
+  {
+    // Hybrid recall fix: a broad/comprehensive phrasing must still route to discover_competitors
+    // (the eval can only assert routing — mode='broad' is a post-dispatch internal, unit-tested in
+    // prompts.test.ts). Verifies the new `mode` param didn't change routing for a recall-first ask.
+    label: 'competitor: broad/comprehensive recall phrasing',
+    messages: [{ role: 'user', content: 'Give me a broad, comprehensive list of every productivity creator on Instagram' }],
+    expect: { type: 'dispatch', dispatchName: 'discover_competitors' },
+  },
 
   // ── Location discovery pipeline ────────────────────────────────────────────
   {
