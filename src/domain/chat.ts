@@ -75,7 +75,7 @@ export interface ChatMessage {
    * result = inline result cards, reel = position marker for the (live) reel-analysis block,
    * single-reel = position marker for the (live) single-reel case-study block.
    */
-  type?: 'text' | 'options' | 'error' | 'result' | 'reel' | 'single-reel' | 'repurpose'
+  type?: 'text' | 'options' | 'error' | 'result' | 'reel' | 'single-reel' | 'repurpose' | 'transcript'
   /** Present when type === 'options' */
   options?: string[]
   /** Present when type === 'result' — the snapshotted pipeline result rendered inline. */
