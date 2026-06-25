@@ -83,11 +83,39 @@ describe('callGeminiWithTools — function-calling primitive', () => {
     await expect(callGeminiWithTools('key', CONTENTS, TOOLS)).rejects.toMatchObject({ code: 'SAFETY_BLOCK' })
   })
 
-  it('maps MALFORMED_FUNCTION_CALL → retryable PARSE_ERROR, not a "decline"', async () => {
-    // The model tried to call a tool but malformed it: candidate comes back with this
-    // finishReason and no usable parts. Must be a retryable parse error, not SAFETY_BLOCK.
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse([], 'MALFORMED_FUNCTION_CALL')))
+  it('throws retryable PARSE_ERROR only after exhausting malformed-call retries', async () => {
+    // Persistent malform on every attempt → after retries are spent, surface a retryable
+    // parse error (not SAFETY_BLOCK). 1 initial + 2 retries = 3 fetches.
+    // Fresh Response per call — a Response body can only be read once, and the retry reuses fetch.
+    const fetchMock = vi.fn().mockImplementation(() => makeResponse([], 'MALFORMED_FUNCTION_CALL'))
+    vi.stubGlobal('fetch', fetchMock)
     await expect(callGeminiWithTools('key', CONTENTS, TOOLS)).rejects.toMatchObject({ code: 'PARSE_ERROR', retryable: true })
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('retries on MALFORMED_FUNCTION_CALL and recovers when a later attempt succeeds', async () => {
+    // The intermittent hiccup: first attempt malforms, retry returns a clean tool call.
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(makeResponse([], 'MALFORMED_FUNCTION_CALL'))
+      .mockResolvedValueOnce(makeResponse([{ functionCall: { name: 'discover_competitors', args: { niche: 'fitness' } } }]))
+    vi.stubGlobal('fetch', fetchMock)
+    const r = await callGeminiWithTools('key', CONTENTS, TOOLS)
+    expect(r).toEqual({ kind: 'call', name: 'discover_competitors', args: { niche: 'fitness' } })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('drops the thinking budget on the retry after a malformed call', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(makeResponse([], 'MALFORMED_FUNCTION_CALL'))
+      .mockResolvedValueOnce(makeResponse([{ text: 'ok' }]))
+    vi.stubGlobal('fetch', fetchMock)
+    await callGeminiWithTools('key', CONTENTS, TOOLS, { thinkingBudget: 512 })
+    const env0 = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
+    const env1 = JSON.parse((fetchMock.mock.calls[1][1] as RequestInit).body as string)
+    const gc0 = (env0.body ?? env0).generationConfig
+    const gc1 = (env1.body ?? env1).generationConfig
+    expect(gc0.thinkingConfig).toEqual({ thinkingBudget: 512 }) // first attempt keeps thinking
+    expect(gc1.thinkingConfig).toBeUndefined() // retry drops it
   })
 
   it('sends functionDeclarations + systemInstruction in the request body', async () => {

@@ -537,50 +537,60 @@ export async function callGeminiWithTools(
 ): Promise<GeminiToolResult> {
   const { temperature = 0.3, thinkingBudget, signal, systemInstruction } = options ?? {}
 
-  const generationConfig: Record<string, unknown> = { temperature }
-  if (thinkingBudget !== undefined) generationConfig.thinkingConfig = { thinkingBudget }
+  // MALFORMED_FUNCTION_CALL is an intermittent Gemini hiccup: the model tries to emit a tool
+  // call but malforms it (finishReason MALFORMED_FUNCTION_CALL, usually no usable parts). It
+  // almost always clears on a retry, and thinking+tools is the common trigger — so retry a few
+  // times and DROP thinking on the retries. Without this, a one-off malform surfaced a bare
+  // "unexpected response" the user had to resend by hand (the resend is what fixed it).
+  const MAX_MALFORMED_RETRIES = 2
+  for (let attempt = 0; attempt <= MAX_MALFORMED_RETRIES; attempt++) {
+    const generationConfig: Record<string, unknown> = { temperature }
+    // Keep the thinking budget only on the first attempt; retries go thinking-free.
+    if (thinkingBudget !== undefined && attempt === 0) generationConfig.thinkingConfig = { thinkingBudget }
 
-  const reqBody: Record<string, unknown> = {
-    contents,
-    tools: [{ functionDeclarations: tools }],
-    generationConfig,
-  }
-  if (systemInstruction) reqBody.systemInstruction = { parts: [{ text: systemInstruction }] }
+    const reqBody: Record<string, unknown> = {
+      contents,
+      tools: [{ functionDeclarations: tools }],
+      generationConfig,
+    }
+    if (systemInstruction) reqBody.systemInstruction = { parts: [{ text: systemInstruction }] }
 
-  // geminiGenerate handles key rotation + 429 retry/failover; non-429 errors + parsing stay here.
-  const { ok, status, json } = await geminiGenerate(apiKeys, reqBody, signal)
+    // geminiGenerate handles key rotation + 429 retry/failover; non-429 errors + parsing stay here.
+    const { ok, status, json } = await geminiGenerate(apiKeys, reqBody, signal)
 
-  if (!ok) {
-    // Diagnostic (console only — raw body is NEVER shown to the user, per C2/H11).
-    console.error('[gemini:tools] HTTP error', status, json.error?.status, json.error?.message)
-    throw mapGeminiHttpError(status, json)
+    if (!ok) {
+      // Diagnostic (console only — raw body is NEVER shown to the user, per C2/H11).
+      console.error('[gemini:tools] HTTP error', status, json.error?.status, json.error?.message)
+      throw mapGeminiHttpError(status, json)
+    }
+
+    if (!json.candidates || json.candidates.length === 0) {
+      console.error('[gemini:tools] blocked / no candidates', json)
+      throw new GeminiError('SAFETY_BLOCK', 'Gemini blocked the response (content policy).', false)
+    }
+
+    const candidate = json.candidates[0]
+    if (candidate.finishReason === 'MALFORMED_FUNCTION_CALL') {
+      console.error(`[gemini:tools] malformed function call (attempt ${attempt + 1}/${MAX_MALFORMED_RETRIES + 1})`)
+      if (attempt < MAX_MALFORMED_RETRIES) continue // retry — next attempt drops thinking
+      throw new GeminiError('PARSE_ERROR', 'Gemini returned a malformed function call.', true)
+    }
+
+    const parts = candidate.content?.parts ?? []
+    // Prefer a tool call if the model emitted one; otherwise fall back to text.
+    const call = parts.find((p) => p.functionCall)?.functionCall
+    if (call?.name) {
+      return { kind: 'call', name: call.name, args: call.args ?? {} }
+    }
+    const text = joinThoughtFilteredText(parts).trim()
+    if (!text) {
+      console.error('[gemini:tools] empty output', candidate.finishReason)
+      throw new GeminiError('SAFETY_BLOCK', 'Gemini returned neither a tool call nor text.', false)
+    }
+    return { kind: 'text', text }
   }
 
-  if (!json.candidates || json.candidates.length === 0) {
-    console.error('[gemini:tools] blocked / no candidates', json)
-    throw new GeminiError('SAFETY_BLOCK', 'Gemini blocked the response (content policy).', false)
-  }
-
-  const candidate = json.candidates[0]
-  // Known intermittent function-calling hiccup: the model attempts a tool call but malforms
-  // it, so the candidate comes back with finishReason MALFORMED_FUNCTION_CALL and (usually)
-  // no usable parts. Treat it as a retryable parse error, NOT a content-policy "decline".
-  if (candidate.finishReason === 'MALFORMED_FUNCTION_CALL') {
-    console.error('[gemini:tools] malformed function call', candidate.finishReason)
-    throw new GeminiError('PARSE_ERROR', 'Gemini returned a malformed function call.', true)
-  }
-
-  const parts = candidate.content?.parts ?? []
-  // Prefer a tool call if the model emitted one; otherwise fall back to text.
-  const call = parts.find((p) => p.functionCall)?.functionCall
-  if (call?.name) {
-    return { kind: 'call', name: call.name, args: call.args ?? {} }
-  }
-  const text = joinThoughtFilteredText(parts).trim()
-  if (!text) {
-    console.error('[gemini:tools] empty output', candidate.finishReason)
-    throw new GeminiError('SAFETY_BLOCK', 'Gemini returned neither a tool call nor text.', false)
-  }
-  return { kind: 'text', text }
+  // Unreachable: the loop either returns or throws on the final attempt. Satisfies the type checker.
+  throw new GeminiError('PARSE_ERROR', 'Gemini returned a malformed function call.', true)
 }
 
