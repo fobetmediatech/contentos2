@@ -38,28 +38,27 @@ describe('filterAndSortReels', () => {
     expect(result[0].shortCode).toBe('reel1')
   })
 
-  it('filters out posts where videoViewCount === 0', () => {
+  it('keeps clips even when videoViewCount === 0 (small/new reels must not be dropped)', () => {
     const posts = [
       makeRawPost({ shortCode: 'zeroViews', productType: 'clips', videoViewCount: 0 }),
       makeRawPost({ shortCode: 'hasViews', productType: 'clips', videoViewCount: 100 }),
     ]
     const result = filterAndSortReels(posts, 10)
-    expect(result).toHaveLength(1)
-    expect(result[0].shortCode).toBe('hasViews')
+    // Both kept (views desc); the 0-view reel is no longer dropped.
+    expect(result.map((r) => r.shortCode)).toEqual(['hasViews', 'zeroViews'])
   })
 
-  it('filter uses AND — post with clips but 0 views is excluded', () => {
+  it('keeps clips regardless of views; excludes only non-clips', () => {
     const posts = [
-      // clips but 0 views — should be excluded (both conditions must be true)
+      // clips but 0 views — KEPT now (was wrongly excluded, causing false "no reels")
       makeRawPost({ shortCode: 'clipsZero', productType: 'clips', videoViewCount: 0 }),
-      // not clips but has views — should also be excluded
+      // not clips but has views — still excluded (it's not a reel)
       makeRawPost({ shortCode: 'imageViews', productType: 'image', videoViewCount: 50000 }),
-      // clips + views — only this passes
+      // clips + views
       makeRawPost({ shortCode: 'good', productType: 'clips', videoViewCount: 2000 }),
     ]
     const result = filterAndSortReels(posts, 10)
-    expect(result).toHaveLength(1)
-    expect(result[0].shortCode).toBe('good')
+    expect(result.map((r) => r.shortCode)).toEqual(['good', 'clipsZero'])
   })
 
   it('sorts by videoViewCount descending', () => {
@@ -124,5 +123,31 @@ describe('filterAndSortReels', () => {
     const result = filterAndSortReels([raw], 1)
     expect(result[0].caption).toBe('')
     expect(result[0].hashtags).toEqual([])
+  })
+
+  it('coalesces views from playCount when videoViewCount is missing', () => {
+    const raw = makeRawPost({ shortCode: 'pc', productType: 'clips', videoViewCount: undefined, playCount: 4200 })
+    const result = filterAndSortReels([raw], 1)
+    expect(result).toHaveLength(1)
+    expect(result[0].videoViewCount).toBe(4200)
+  })
+
+  it('coalesces views from viewCount when videoViewCount + playCount are missing', () => {
+    const raw = makeRawPost({ shortCode: 'vc', productType: 'clips', videoViewCount: undefined, playCount: undefined, viewCount: 777 })
+    const result = filterAndSortReels([raw], 1)
+    expect(result[0].videoViewCount).toBe(777)
+  })
+
+  // Regression: the exact "small public account" symptom — every reel reports 0/missing views,
+  // so the old `videoViewCount > 0` gate dropped them ALL → scrapeTopReels threw NoReelsError
+  // ("no reels") on accounts that genuinely have public reels.
+  it('small public account: all reels 0/missing views → returns them all (no false "no reels")', () => {
+    const posts = [
+      makeRawPost({ shortCode: 's1', productType: 'clips', videoViewCount: 0 }),
+      makeRawPost({ shortCode: 's2', productType: 'clips', videoViewCount: undefined, playCount: undefined, viewCount: undefined }),
+      makeRawPost({ shortCode: 's3', productType: 'clips', videoViewCount: 0 }),
+    ]
+    const result = filterAndSortReels(posts, 8)
+    expect(result).toHaveLength(3)
   })
 })
