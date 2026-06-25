@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [3.7.0.0] — 2026-06-25
+
+**Repurpose Reel pipeline.** A 4th conversational pipeline: give a viral reel URL + a client (an @handle or pasted scripts) and get the reel rewritten in that client's voice — a full shoot-ready package (spoken hook, beat-by-beat script, caption, CTA, on-screen text) plus 3 hook variants. Client voice profiles are saved to the shared team corpus and editable on a new Memory "Voices" tab.
+
+### Added
+- **`repurpose_reel` agent tool** — routed from chat; rewrites a source reel into a client's tone. **Zero new server code** — reuses `/api/analyze-single-reel` for both the client-profiling and source-structure paths, and `/api/gemini` for the text rewrite.
+- **Voice profiles** — `src/ai/prompts/voiceProfile.ts` synthesizes a reusable client voice (vocabulary, cadence, audience address, hook habits, tone) from their reels (8 by default — transcripts + captions) or from pasted scripts. Cached in the corpus, so repeat clients cost no extra scraping.
+- **Reel rewrite** — `src/ai/prompts/reelRewrite.ts` maps the source reel's beat structure into the client's voice, preserving beat count, beat functions, and CTA placement.
+- **Corpus persistence** — new `corpus_voice_profiles` Supabase table (migration `20260625000000_voice_profiles.sql`) with team-read / any-authenticated-write RLS; `CorpusRepository.upsertVoiceProfile`/`getVoiceProfile`/`listVoiceProfiles` + a `voiceProfiles` map on `corpusStore`.
+- **Memory "Voices" tab** — browse, full inline-edit, and rebuild saved client voice profiles (`VoiceProfileCard`).
+- **`RepurposeResultMessage`** — inline result card with per-section copy, snapshotted into the conversation (survives reload); live 3-step progress while a run is in flight.
+- **`repurposeStore`** — persisted run state with an interrupted-run merge guard.
+- Eval + unit coverage: agent-loop golden cases (url + handle → dispatch; url-only → clarify), prompt coercion guards, store hydration/merge, and a frozen `kind:'repurpose'` discriminant check.
+
 ## [3.6.0.0] — 2026-06-12
 
 **Production hardening + intelligence + UX + performance.** Seven-phase audit-driven improvement plan (phases 0–7). All 17-agent audit findings addressed: repo guardrails, security proxy, correctness bugs, partial architecture refactor, AI grounding, UX polish, and performance.
