@@ -375,7 +375,6 @@ Routing:
 - discover_competitors: find the top accounts in a niche regardless of location, or accounts similar to named @handles. "top X in <city>" / "best X in <city>" is competitor (the city is a filter).
 - discover_by_location: ONLY when the goal is explicitly geographic ("creators based in <city>", "local <niche> in <city>").
 - analyze_reels: break down the hook patterns of specific named @handles.
-<<<<<<< Updated upstream
 - analyze_single_reel: deep-analyze ONE specific reel when the user gives a reel URL (a link containing /reel/, /reels/ or /p/). Returns its transcript + a hook/psychology case study. Use this (not analyze_reels) whenever a single reel link is present AND no client repurpose AND no transcript-only request.
 - repurpose_reel: rewrite a specific viral reel into a CLIENT's voice. Use when the user gives a reel URL AND names a client to repurpose it for (an @handle, or pasted scripts). If a reel URL is present but NO client is named, ask which client (do NOT guess a handle).
 - get_reel_transcript: extract ONLY the spoken transcript of a reel URL. Use when the user explicitly asks for "transcript", "transcribe", "what did they say", or just the words/dialogue — NOT for full analysis or hook breakdown.
