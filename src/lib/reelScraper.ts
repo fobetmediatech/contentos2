@@ -2,8 +2,11 @@
  * Reel scraper — fetches the top N reels by views for an Instagram handle.
  *
  * Uses apify~instagram-scraper with resultsLimit: 30 (recent posts),
- * filters to clips (productType === 'clips' AND videoViewCount > 0),
- * sorts by videoViewCount descending, returns top Math.min(n, reels.length).
+ * filters to clips (productType === 'clips') — NO view-count gate. Small/new reels
+ * legitimately report 0 or missing views, and the actor sometimes reports views under
+ * playCount/viewCount rather than videoViewCount; gating on videoViewCount > 0 produced
+ * false "no reels" on public accounts that have reels. Views are coalesced and used only
+ * to sort; sorts by views descending, returns top Math.min(n, reels.length).
  *
  * Throws NoReelsError if zero reels pass the filter.
  * Throws ApifyError on Apify failures (including RATE_LIMITED when all keys are on cooldown).
@@ -38,6 +41,8 @@ interface RawPost {
   url?: string
   displayUrl?: string
   videoViewCount?: number
+  playCount?: number // apify~instagram-scraper sometimes reports reel views here, not videoViewCount
+  viewCount?: number // ...or here. Coalesced in toReelData (mirrors trackingClient.ts).
   likesCount?: number
   commentsCount?: number
   videoDuration?: number
@@ -54,7 +59,7 @@ function toReelData(raw: RawPost): ReelData {
     shortCode: raw.shortCode ?? '',
     url: raw.url ?? '',
     displayUrl: raw.displayUrl ?? '',
-    videoViewCount: raw.videoViewCount ?? 0,
+    videoViewCount: raw.videoViewCount ?? raw.playCount ?? raw.viewCount ?? 0,
     likesCount: raw.likesCount ?? 0,
     commentsCount: raw.commentsCount ?? 0,
     videoDuration: raw.videoDuration ?? 0,
@@ -69,15 +74,17 @@ function toReelData(raw: RawPost): ReelData {
 /**
  * Filter, sort, and slice raw Apify posts into ReelData[].
  *
- * Filters to productType === 'clips' AND videoViewCount > 0,
- * sorts by videoViewCount descending, returns top Math.min(n, results.length).
+ * Filters to productType === 'clips' (a reel). Does NOT require views > 0 — small/new reels
+ * often report 0 or missing views, and dropping them produced false "no reels" on public
+ * accounts that genuinely have reels. View count is coalesced (videoViewCount ?? playCount ??
+ * viewCount) in toReelData and used only to sort; 0-view reels are kept (sorted last).
  *
- * Returns [] when no posts pass the filter (caller decides whether to throw).
+ * Returns [] only when no clips are present at all (caller decides whether to throw).
  */
 export function filterAndSortReels(rawPosts: unknown[], n: number): ReelData[] {
   const posts = rawPosts as RawPost[]
   const allReels = posts
-    .filter((p) => p.productType === 'clips' && (p.videoViewCount ?? 0) > 0)
+    .filter((p) => p.productType === 'clips')
     .map(toReelData)
     .sort((a, b) => b.videoViewCount - a.videoViewCount)
   return allReels.slice(0, Math.min(n, allReels.length))
