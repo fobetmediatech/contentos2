@@ -13,6 +13,7 @@ import { buildCompetitorPrompt, buildDiscoveryPrompt, buildClarificationPrompt, 
 import type { NormalizedProfile } from '../lib/transformers'
 import type { PreferenceExemplars } from '../lib/corpus'
 import { getClerkSessionToken } from '../lib/clerkToken'
+import { devLog } from '../lib/devLog'
 
 // Model used when building the proxy request. Still respects VITE_GEMINI_MODEL overrides
 // (harmless VITE_ — this is just a model name, not a secret).
@@ -72,6 +73,8 @@ interface GeminiCandidate {
   }
   /** STOP = normal completion. MAX_TOKENS = truncated output = invalid JSON. */
   finishReason: string
+  /** Present ONLY when Google Search grounding actually ran — used to confirm web search engaged. */
+  groundingMetadata?: Record<string, unknown>
 }
 
 interface GeminiResponse {
@@ -283,6 +286,12 @@ export async function callGeminiGroundedJson<T>(
   if (candidate.finishReason === 'MAX_TOKENS') {
     throw new GeminiError('PARSE_ERROR', 'Grounded response was cut off (MAX_TOKENS).', false)
   }
+  // Observability: groundingMetadata is present ONLY when web-search grounding actually engaged.
+  // Its absence means web search silently did NOT activate (key entitlement / quota). Prod stays
+  // quiet on the happy path (devLog is DEV-only) and warns loudly on the failure case. Logs only a
+  // boolean — never the niche or the search queries (C3: research-target data never logs in prod).
+  if (candidate.groundingMetadata) devLog('[grounding] web search active on grounded call')
+  else console.warn('[grounding] web search did NOT activate on grounded call (Gemini key entitlement or quota?)')
   const text = joinThoughtFilteredText(candidate.content?.parts).trim()
   if (!text) throw new GeminiError('SAFETY_BLOCK', 'Gemini returned an empty grounded response.', false)
   try {
