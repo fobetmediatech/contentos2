@@ -14,6 +14,7 @@ import { corpus } from '../lib/corpusIdb'
 import { sortCreators, creatorContexts } from '../lib/corpus'
 import type { CorpusSort, CreatorRecord, ContentRecord, Feedback } from '../lib/corpus'
 import { FeedbackControl } from '../components/FeedbackControl'
+import VoiceProfileCard from '../components/VoiceProfileCard'
 
 function formatCount(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
@@ -39,6 +40,8 @@ export function MemoryPage() {
   // Select the stable record; derive the sorted list in render (never sort inside the
   // selector — that returns a fresh array each call and loops useSyncExternalStore).
   const creators = useCorpusStore((s) => s.creators)
+  const voiceProfiles = useCorpusStore((s) => s.voiceProfiles)
+  const [tab, setTab] = useState<'creators' | 'voices'>('creators')
   const [sort, setSort] = useState<CorpusSort>('lastSeenAt')
   const [verdict, setVerdict] = useState<VerdictFilter>('all')
   const [query, setQuery] = useState('')
@@ -65,77 +68,123 @@ export function MemoryPage() {
         <Brain size={20} className="text-[#E07B3A]" />
         <h1 className="font-serif italic text-2xl text-[#F5EDD6] tracking-tight">Memory</h1>
       </div>
-      <p className="text-sm text-[#C4A882] mb-5">
+      <p className="text-sm text-[#C4A882] mb-4">
         {list.length} creator{list.length !== 1 ? 's' : ''} remembered across your searches.
       </p>
 
-      {list.length === 0 ? (
-        <div className="text-center py-16">
-          <p className="text-sm text-[#7A6A54]">Nothing remembered yet — run a search and creators show up here.</p>
-          <Link to="/" className="inline-block mt-3 text-sm text-[#E07B3A] hover:underline">
-            Start a search →
-          </Link>
-        </div>
-      ) : (
+      {/* Tab switcher — Creators / Voice Profiles */}
+      <div className="flex gap-2 mb-4">
+        {(['creators', 'voices'] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTab(t)}
+            className={`text-sm px-3 py-1.5 rounded-md border transition-colors ${
+              tab === t
+                ? 'border-[#E07B3A] text-[#F5EDD6]'
+                : 'border-[rgba(245,237,214,0.12)] text-[#7A6A54] hover:text-[#C4A882] hover:border-[rgba(245,237,214,0.20)]'
+            }`}
+          >
+            {t === 'creators' ? 'Creators' : 'Voice Profiles'}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'creators' && (
         <>
-          {/* Text search over the loaded corpus */}
-          <div className="relative mb-3">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7A6A54] pointer-events-none" />
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search remembered creators…"
-              aria-label="Search creators"
-              className="w-full pl-9 pr-3 py-2 text-sm bg-[#2C2218] text-[#F5EDD6] border border-[rgba(245,237,214,0.08)] rounded-xl focus:outline-none focus:border-[#E07B3A] placeholder:text-[#7A6A54] transition-colors"
-            />
-          </div>
-
-          <div className="flex items-center gap-1.5 mb-3 flex-wrap">
-            {SORTS.map((s) => (
-              <button
-                key={s.key}
-                onClick={() => setSort(s.key)}
-                className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-                  sort === s.key
-                    ? 'bg-[rgba(224,123,58,0.12)] text-[#F4A97B] border-[rgba(224,123,58,0.3)]'
-                    : 'bg-[#2C2218] text-[#C4A882] border-[rgba(245,237,214,0.08)] hover:border-[rgba(245,237,214,0.15)]'
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Verdict filter (Phase 3) — review what you've saved or dismissed. */}
-          <div className="flex items-center gap-1.5 mb-4 flex-wrap">
-            {VERDICTS.map((v) => (
-              <button
-                key={v.key}
-                onClick={() => setVerdict(v.key)}
-                className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-                  verdict === v.key
-                    ? 'bg-[rgba(224,123,58,0.12)] text-[#F4A97B] border-[rgba(224,123,58,0.3)]'
-                    : 'bg-[#2C2218] text-[#7A6A54] border-[rgba(245,237,214,0.08)] hover:border-[rgba(245,237,214,0.15)]'
-                }`}
-              >
-                {v.label}
-              </button>
-            ))}
-          </div>
-
-          {searched.length === 0 ? (
-            <p className="text-sm text-[#7A6A54] py-8 text-center">
-              {query.trim() ? 'No creators match your search.' : `No ${verdict} creators yet.`}
-            </p>
-          ) : (
-            <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
-              {searched.map((r) => (
-                <MemoryCreatorCard key={r.username} record={r} />
-              ))}
+          {list.length === 0 ? (
+            <div className="text-center py-16">
+              <p className="text-sm text-[#7A6A54]">Nothing remembered yet — run a search and creators show up here.</p>
+              <Link to="/" className="inline-block mt-3 text-sm text-[#E07B3A] hover:underline">
+                Start a search →
+              </Link>
             </div>
+          ) : (
+            <>
+              {/* Text search over the loaded corpus */}
+              <div className="relative mb-3">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7A6A54] pointer-events-none" />
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search remembered creators…"
+                  aria-label="Search creators"
+                  className="w-full pl-9 pr-3 py-2 text-sm bg-[#2C2218] text-[#F5EDD6] border border-[rgba(245,237,214,0.08)] rounded-xl focus:outline-none focus:border-[#E07B3A] placeholder:text-[#7A6A54] transition-colors"
+                />
+              </div>
+
+              <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+                {SORTS.map((s) => (
+                  <button
+                    key={s.key}
+                    onClick={() => setSort(s.key)}
+                    className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                      sort === s.key
+                        ? 'bg-[rgba(224,123,58,0.12)] text-[#F4A97B] border-[rgba(224,123,58,0.3)]'
+                        : 'bg-[#2C2218] text-[#C4A882] border-[rgba(245,237,214,0.08)] hover:border-[rgba(245,237,214,0.15)]'
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Verdict filter (Phase 3) — review what you've saved or dismissed. */}
+              <div className="flex items-center gap-1.5 mb-4 flex-wrap">
+                {VERDICTS.map((v) => (
+                  <button
+                    key={v.key}
+                    onClick={() => setVerdict(v.key)}
+                    className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                      verdict === v.key
+                        ? 'bg-[rgba(224,123,58,0.12)] text-[#F4A97B] border-[rgba(224,123,58,0.3)]'
+                        : 'bg-[#2C2218] text-[#7A6A54] border-[rgba(245,237,214,0.08)] hover:border-[rgba(245,237,214,0.15)]'
+                    }`}
+                  >
+                    {v.label}
+                  </button>
+                ))}
+              </div>
+
+              {searched.length === 0 ? (
+                <p className="text-sm text-[#7A6A54] py-8 text-center">
+                  {query.trim() ? 'No creators match your search.' : `No ${verdict} creators yet.`}
+                </p>
+              ) : (
+                <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
+                  {searched.map((r) => (
+                    <MemoryCreatorCard key={r.username} record={r} />
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </>
+      )}
+
+      {tab === 'voices' && (
+        <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
+          {Object.values(voiceProfiles).length === 0 ? (
+            <p className="text-sm text-[#7A6A54] col-span-full py-8 text-center">
+              No voice profiles yet.{' '}
+              <Link to="/" className="text-[#E07B3A] hover:underline">
+                Repurpose a reel for a client
+              </Link>{' '}
+              to create one.
+            </p>
+          ) : (
+            Object.values(voiceProfiles).map((p) => (
+              <VoiceProfileCard
+                key={p.handle}
+                profile={p}
+                onRebuild={(handle) => {
+                  window.location.href = `/?repurpose=${encodeURIComponent(handle)}`
+                }}
+              />
+            ))
+          )}
+        </div>
       )}
     </div>
   )
