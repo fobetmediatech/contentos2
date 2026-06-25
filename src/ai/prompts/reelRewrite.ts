@@ -10,7 +10,7 @@
 import type { SingleReelResult } from '../../store/singleReelStore'
 import type { VoiceProfile } from './voiceProfile'
 
-export const REEL_REWRITE_PROMPT_VERSION = 1
+export const REEL_REWRITE_PROMPT_VERSION = 2
 
 export interface ReelRewriteResult {
   spokenHook: string
@@ -89,6 +89,7 @@ ${voiceBlock(voice)}
 
 ## Rules
 
+- LANGUAGE & SCRIPT (strict): write EVERY field in Latin/Roman script only. If @${voice.handle}'s voice is Hindi or a Hindi-English mix, write it in HINGLISH — Hindi spelled phonetically in English letters ("Dekho, yeh viral ho gaya", NOT "देखो, ये वायरल हो गया"). English voices stay in English. NEVER output Devanagari or any non-Latin script in any field.
 - Preserve the source's beat structure EXACTLY: same number of beats, same beat functions, same CTA placement.
 - Replace ONLY the words and energy so they match @${voice.handle}'s voice. NEVER copy the source's wording.
 - Every line must pass the test: "Could @${voice.handle} have said this?"

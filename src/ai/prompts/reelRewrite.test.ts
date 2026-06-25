@@ -53,4 +53,11 @@ describe('reelRewrite', () => {
     const req = (REEL_REWRITE_SCHEMA as { required: string[] }).required
     expect(req).toEqual(expect.arrayContaining(['spokenHook', 'beatScript', 'caption', 'cta', 'onScreenText', 'altHooks']))
   })
+
+  it('instructs Latin-script / Hinglish output (no Devanagari)', () => {
+    const p = buildReelRewritePrompt(SOURCE, VOICE)
+    expect(p).toMatch(/Hinglish/i)
+    expect(p).toMatch(/Latin/i)
+    expect(p).toMatch(/Devanagari/i)
+  })
 })
