@@ -85,9 +85,25 @@ describe('PIPELINE_REGISTRY — single-reel entry', () => {
   })
 })
 
+describe('PIPELINE_REGISTRY — repurpose entry', () => {
+  const entry = PIPELINE_REGISTRY['repurpose']
+
+  it('exists in the registry', () => {
+    expect(entry).toBeDefined()
+  })
+
+  it('has id "repurpose"', () => {
+    expect(entry.id).toBe('repurpose')
+  })
+
+  it('has a non-empty steps array', () => {
+    expect(entry.steps.length).toBeGreaterThan(0)
+  })
+})
+
 describe('PIPELINE_REGISTRY — registry shape invariants', () => {
-  it('has exactly 4 entries (competitor + discovery + reel + single-reel)', () => {
-    expect(Object.keys(PIPELINE_REGISTRY)).toHaveLength(4)
+  it('has exactly 5 entries (competitor + discovery + reel + single-reel + repurpose)', () => {
+    expect(Object.keys(PIPELINE_REGISTRY)).toHaveLength(5)
   })
 
   it('every entry id matches its key', () => {

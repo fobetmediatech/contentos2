@@ -143,7 +143,7 @@ export function useRepurposeReel() {
             await useCorpusStore.getState().setVoiceProfile(handle, profile)
             return profile
           }
-          throw new Error(`@${handle} has no public reels — paste 2-3 of their scripts instead.`)
+          throw new Error(`@${handle} has no public reels — paste 2-3 of their scripts instead.`, { cause: err })
         }
         throw err
       }
