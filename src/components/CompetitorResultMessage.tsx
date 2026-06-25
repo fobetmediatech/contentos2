@@ -103,7 +103,7 @@ export function CompetitorResultMessage({
       {/* AI summary — violet AI tint + Gemini eyebrow per DESIGN.md */}
       {summary && (
         <div className="px-4 py-3 bg-[rgba(167,139,250,0.08)] border border-[#A78BFA]/20 rounded-xl">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-[#A78BFA] mb-1">✦ Gemini</p>
+          <p className="text-[10px] font-semibold font-mono uppercase tracking-wide text-[#A78BFA] mb-1">✦ Gemini</p>
           <p className="text-sm text-[#C4B5FD] leading-relaxed">{summary}</p>
         </div>
       )}
@@ -111,7 +111,7 @@ export function CompetitorResultMessage({
       {/* Card grids */}
       {top.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-[#7A6A54] uppercase tracking-wide mb-3">
+          <p className="text-xs font-semibold font-mono text-[#7A6A54] uppercase tracking-wide mb-3">
             {COMPETITOR_CATEGORIES.top.sectionLabel}
           </p>
           <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
@@ -130,7 +130,7 @@ export function CompetitorResultMessage({
       )}
       {trending.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-[#7A6A54] uppercase tracking-wide mb-3">
+          <p className="text-xs font-semibold font-mono text-[#7A6A54] uppercase tracking-wide mb-3">
             {COMPETITOR_CATEGORIES.trending.sectionLabel}
           </p>
           <div className="grid gap-3 grid-cols-1 md:grid-cols-2">

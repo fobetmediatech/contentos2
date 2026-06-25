@@ -45,7 +45,7 @@ export function HookSummaryCard({ summary }: { summary: CreatorHookSummary }) {
       {/* Dominant hooks list */}
       {summary.dominantHooks.length > 0 && (
         <div className="mb-4">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-[#E07B3A] mb-2">Dominant hooks</h3>
+          <h3 className="text-xs font-semibold font-mono uppercase tracking-wide text-[#E07B3A] mb-2">Dominant hooks</h3>
           <ul className="space-y-2">
             {summary.dominantHooks.map((hook, idx) => (
               <li key={idx} className="text-sm text-[#C4A882]">
@@ -64,7 +64,7 @@ export function HookSummaryCard({ summary }: { summary: CreatorHookSummary }) {
       {/* What Consistently Works */}
       {hasWhatWorks && (
         <div className="mb-4">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-[#E07B3A] mb-2">What consistently works</h3>
+          <h3 className="text-xs font-semibold font-mono uppercase tracking-wide text-[#E07B3A] mb-2">What consistently works</h3>
           <ul className="space-y-1.5">
             {summary.whatConsistentlyWorks.map((item, idx) => (
               <li key={idx} className="text-sm text-[#C4A882] flex items-start gap-2">
@@ -79,7 +79,7 @@ export function HookSummaryCard({ summary }: { summary: CreatorHookSummary }) {
       {/* Recurring Openings */}
       {hasRecurringOpenings && (
         <div className="mb-4">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-[#E07B3A] mb-2">Recurring openings</h3>
+          <h3 className="text-xs font-semibold font-mono uppercase tracking-wide text-[#E07B3A] mb-2">Recurring openings</h3>
           <ul className="space-y-1.5">
             {summary.recurringOpenings.map((opening, idx) => (
               <li key={idx} className="text-sm text-[#C4A882] flex items-start gap-2">
@@ -94,7 +94,7 @@ export function HookSummaryCard({ summary }: { summary: CreatorHookSummary }) {
       {/* Replicable Templates */}
       {hasTemplates && (
         <div>
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-[#A78BFA] mb-2">Replicate</h3>
+          <h3 className="text-xs font-semibold font-mono uppercase tracking-wide text-[#A78BFA] mb-2">Replicate</h3>
           <ul className="space-y-1.5">
             {summary.replicableTemplates.map((template, idx) => (
               <li key={idx} className="text-sm text-[#C4A882] flex items-start gap-2">

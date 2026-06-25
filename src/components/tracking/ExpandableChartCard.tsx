@@ -41,7 +41,7 @@ export function ExpandableChartCard({ title, info, children }: ExpandableChartCa
   return (
     <div className="bg-[#2C2218] border border-[rgba(245,237,214,0.08)] rounded-xl p-4 space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-[#C4A882] text-xs font-medium uppercase tracking-wider">{title}</h3>
+        <h3 className="text-[#C4A882] text-xs font-medium font-mono uppercase tracking-wider">{title}</h3>
         <div className="flex items-center gap-2">
           {info && <InfoPopover title={info.title} formula={info.formula} significance={info.significance} />}
           <button
@@ -80,7 +80,7 @@ export function ExpandableChartCard({ title, info, children }: ExpandableChartCa
             >
               <div className="flex items-center justify-between gap-3 mb-4">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-[#F5EDD6] text-sm font-medium uppercase tracking-wider">{title}</h3>
+                  <h3 className="text-[#F5EDD6] text-sm font-medium font-mono uppercase tracking-wider">{title}</h3>
                   {info && (
                     <InfoPopover
                       title={info.title}

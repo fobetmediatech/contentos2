@@ -65,7 +65,7 @@ export function CaseStudyMarkdown({ markdown }: { markdown: string }) {
           ),
           thead: ({ children }) => <thead>{children}</thead>,
           th: ({ children }) => (
-            <th className="border-b border-[rgba(245,237,214,0.15)] px-2 py-1.5 font-medium uppercase tracking-wide text-[11px] text-muted">
+            <th className="border-b border-[rgba(245,237,214,0.15)] px-2 py-1.5 font-medium font-mono uppercase tracking-wide text-[11px] text-muted">
               {children}
             </th>
           ),
