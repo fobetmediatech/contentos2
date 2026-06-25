@@ -131,6 +131,8 @@ export function ChatPage() {
   const resetRepurpose = useRepurposeStore((s) => s.reset)
   // Which conversation the current transcript run belongs to — independent from single-reel.
   const transcriptConversationId = useTranscriptStore((s) => s.conversationId)
+  const transcriptStatus = useTranscriptStore((s) => s.status)
+  const resetTranscript = useTranscriptStore((s) => s.reset)
 
   const [inputText, setInputText] = useState('')
   const [isNearBottom, setIsNearBottom] = useState(true)
@@ -146,6 +148,7 @@ export function ChatPage() {
   const discoveryResultArmedRef = useRef(false) // armed while a discovery run is live; fires once on done
   const reelContentArmedRef = useRef(false) // armed while a reel run is live; harvests content once on synthesis done
   const repurposeArmedRef = useRef(false) // armed while a repurpose run is live; snapshots once on done
+  const transcriptArmedRef = useRef(false) // armed while a transcript run is live; snapshots once on done
 
   // Selection state — shared across competitor + discovery results
   const [selectedHandles, setSelectedHandles] = useState<string[]>([])
@@ -346,6 +349,40 @@ export function ChatPage() {
       resetRepurpose()
     }
   }, [repurposeStatus, addMessageTo, activeConversationId, resetRepurpose])
+
+  // Snapshot a finished transcript run into the conversation, then reset the store.
+  // Armed only while a real run is live so it fires once per run.
+  useEffect(() => {
+    if (transcriptStatus === 'running') {
+      transcriptArmedRef.current = true
+    } else if (transcriptStatus === 'done' && transcriptArmedRef.current) {
+      transcriptArmedRef.current = false
+      const s = useTranscriptStore.getState()
+      if (s.conversationId && s.result) {
+        addMessageTo(s.conversationId, {
+          role: 'assistant',
+          type: 'result',
+          content: 'Transcript ready.',
+          result: {
+            kind: 'transcript',
+            reelUrl: s.reelUrl ?? '',
+            transcript: s.result.transcript,
+            segments: s.result.segments,
+          },
+        })
+      }
+      resetTranscript()
+    } else if (transcriptStatus === 'failed' && transcriptArmedRef.current) {
+      transcriptArmedRef.current = false
+      const s = useTranscriptStore.getState()
+      addMessageTo(s.conversationId ?? activeConversationId, {
+        role: 'assistant',
+        type: 'error',
+        content: s.error || 'Could not transcribe that reel.',
+      })
+      resetTranscript()
+    }
+  }, [transcriptStatus, addMessageTo, activeConversationId, resetTranscript])
 
   // Reel → corpus content: when a reel run's synthesis finishes, harvest each analyzed reel
   // into the corpus as content tied to its creator (the "content" half of the corpus). Armed
@@ -674,6 +711,10 @@ export function ChatPage() {
                   // A finished repurpose run, snapshotted into this conversation. Renders
                   // statically from the persisted payload — survives reload.
                   <RepurposeResultMessage key={message.id} payload={message.result} />
+                ) : message.type === 'result' && message.result?.kind === 'transcript' ? (
+                  // A finished transcript run, snapshotted into this conversation. Renders
+                  // statically from the persisted payload — survives new runs and reload.
+                  <TranscriptResultMessage key={message.id} payload={message.result} />
                 ) : message.type === 'reel' ? (
                   // Reel block renders in place at the LATEST reel marker (the store holds one
                   // live run). Older markers + a restored marker with no live run no-op.

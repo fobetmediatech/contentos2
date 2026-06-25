@@ -11,6 +11,7 @@
 import { useState } from 'react'
 import { Copy, FileText, Video } from 'lucide-react'
 import { useTranscriptStore } from '../store/transcriptStore'
+import type { TranscriptResultPayload } from '../domain/chat'
 
 /** Seconds → m:ss (e.g. 75 → "1:15"). Negative / non-finite values clamp to 0:00. */
 function fmtTime(seconds: number): string {
@@ -20,15 +21,24 @@ function fmtTime(seconds: number): string {
   return `${m}:${rem.toString().padStart(2, '0')}`
 }
 
-export function TranscriptResultMessage() {
+interface Props {
+  /** When provided, renders statically from the persisted payload (results-as-messages). */
+  payload?: TranscriptResultPayload
+}
+
+export function TranscriptResultMessage({ payload }: Props = {}) {
   const status = useTranscriptStore((s) => s.status)
   const progress = useTranscriptStore((s) => s.progress)
-  const result = useTranscriptStore((s) => s.result)
+  const liveResult = useTranscriptStore((s) => s.result)
   const error = useTranscriptStore((s) => s.error)
+
+  // Static mode: render persisted payload without touching the store.
+  const result = payload ? { transcript: payload.transcript, segments: payload.segments } : liveResult
 
   const [copied, setCopied] = useState(false)
 
-  if (status === 'running') {
+  // In static mode, always render the done view directly.
+  if (!payload && status === 'running') {
     return (
       <div className="flex items-center gap-2.5 px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(245,237,214,0.08)] text-sm max-w-[80%]">
         <span className="relative flex h-2.5 w-2.5 flex-shrink-0">
@@ -40,7 +50,7 @@ export function TranscriptResultMessage() {
     )
   }
 
-  if (status === 'failed') {
+  if (!payload && status === 'failed') {
     return (
       <div className="flex items-start gap-2">
         <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(224,92,92,0.12)] flex items-center justify-center mt-0.5">
@@ -53,7 +63,7 @@ export function TranscriptResultMessage() {
     )
   }
 
-  if (status === 'done' && result) {
+  if ((payload || status === 'done') && result) {
     const hasTranscript = result.transcript.trim().length > 0
 
     const fullText =
