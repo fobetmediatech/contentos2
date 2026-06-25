@@ -17,6 +17,8 @@ import { PaymentsPage } from './pages/PaymentsPage'
 import { SignInPage } from './pages/SignInPage'
 import { TrackingListPage } from './pages/TrackingListPage'
 import { TrackingAccountPage } from './pages/TrackingAccountPage'
+import { TeamAccessPage } from './pages/TeamAccessPage'
+import { BreakGlassListener } from './components/BreakGlassListener'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -65,6 +67,8 @@ function ProtectedRoute() {
       {/* Clerk v6: <Show when="signed-in"> replaces <SignedIn> */}
       <Show when="signed-in">
         <AuthedBootstrap />
+        {/* App-wide: the Konami break-glass listener (recovery → admin) */}
+        <BreakGlassListener />
         <Outlet />
       </Show>
       <Show when="signed-out">
@@ -113,6 +117,9 @@ export default function App() {
                   (accounts come from the Dashboard's tracked_accounts) */}
               <Route path="calendar" element={<CalendarPage />} />
               <Route path="payments" element={<PaymentsPage />} />
+
+              {/* Team Access — admin-only finance-role management (reached from the account menu) */}
+              <Route path="team-access" element={<TeamAccessPage />} />
 
               {/* Instagram account tracking — list + per-account detail */}
               <Route path="tracking" element={<TrackingListPage />} />

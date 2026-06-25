@@ -1,10 +1,11 @@
 import { useEffect } from 'react'
-import { Link, Outlet, useLocation } from 'react-router-dom'
-import { Brain, FileText, MessageSquare, CalendarDays, Wallet, BarChart2, Clapperboard } from 'lucide-react'
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Brain, FileText, MessageSquare, CalendarDays, Wallet, BarChart2, Clapperboard, ShieldCheck } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { UserButton } from '@clerk/react'
 import { useCorpusStore } from '../store/corpusStore'
 import { useIsFinance } from '../hooks/useIsFinance'
+import { useIsAdmin } from '../hooks/useIsAdmin'
 
 /**
  * NAV_SECTIONS — single source of truth for app navigation (Phase 7 item 7.2).
@@ -38,8 +39,10 @@ interface AppLayoutProps {
 
 export function AppLayout({ noPadding = false }: AppLayoutProps) {
   const location = useLocation()
+  const navigate = useNavigate()
   const corpusCount = useCorpusStore((s) => s.count)
   const { isFinance } = useIsFinance()
+  const { isAdmin } = useIsAdmin()
   // Payments (financeOnly) is hidden in the nav unless the user has the finance role.
   const sections = NAV_SECTIONS.filter((s) => !s.financeOnly || isFinance)
 
@@ -158,7 +161,21 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
                 },
               },
             }}
-          />
+          >
+            {/* Account dropdown items. "Team Access" sits between Manage account and Sign out,
+                shown only to admins. The default items are listed explicitly to position it. */}
+            <UserButton.MenuItems>
+              <UserButton.Action label="manageAccount" />
+              {isAdmin && (
+                <UserButton.Action
+                  label="Team Access"
+                  labelIcon={<ShieldCheck size={15} />}
+                  onClick={() => navigate('/team-access')}
+                />
+              )}
+              <UserButton.Action label="signOut" />
+            </UserButton.MenuItems>
+          </UserButton>
         </div>
       </header>
 
