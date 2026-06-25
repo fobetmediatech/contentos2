@@ -27,6 +27,7 @@ export type AgentToolName =
   | 'discover_by_location'
   | 'analyze_reels'
   | 'analyze_single_reel'
+  | 'repurpose_reel'
   | 'answer_content'
 
 export type ToolValidation =
@@ -38,7 +39,7 @@ export type AgentAction =
   | { type: 'message'; text: string }
   | { type: 'ask'; question: string; options?: string[] }
   | { type: 'answer'; message: string }
-  | { type: 'dispatch'; name: 'discover_competitors' | 'discover_by_location' | 'analyze_reels' | 'analyze_single_reel'; args: Record<string, unknown> }
+  | { type: 'dispatch'; name: 'discover_competitors' | 'discover_by_location' | 'analyze_reels' | 'analyze_single_reel' | 'repurpose_reel'; args: Record<string, unknown> }
   | { type: 'repair'; detail: string }
 
 /** Normalize a handle list: strip @, lowercase, trim, drop empties + over-length. */
@@ -169,6 +170,41 @@ const TOOL_REGISTRY: Record<AgentToolName, ToolRecord> = {
       })
       .refine((d) => d.shortCode.length > 0, { message: 'a valid Instagram reel URL is required', path: ['reelUrl'] }),
     toAction: (args) => ({ type: 'dispatch', name: 'analyze_single_reel', args }),
+  },
+
+  repurpose_reel: {
+    description:
+      'Repurpose/rewrite a specific viral reel (given its URL) into a CLIENT\'s voice/tone. Use when the user gives a reel URL AND a client to rewrite it for (an @handle, or pasted scripts). Produces a full script package in the client\'s voice. NOT for plain analysis (use analyze_single_reel) and NOT for finding creators.',
+    parameters: {
+      type: 'object',
+      properties: {
+        sourceReelUrl: { type: 'string', description: 'The viral reel URL to repurpose (a /reel/, /reels/ or /p/ link).' },
+        clientHandle: { type: 'string', description: 'The client @handle whose voice to rewrite into. Omit only if the user pasted the client\'s scripts instead.' },
+        pastedScripts: { type: 'array', items: { type: 'string' }, description: 'Optional: 2-3 of the client\'s existing scripts/captions, used when no @handle is given.' },
+      },
+      required: ['sourceReelUrl'],
+    },
+    schema: z
+      .object({
+        sourceReelUrl: z.string().min(1),
+        clientHandle: z.string().optional(),
+        pastedScripts: z.array(z.string()).optional(),
+      })
+      .transform((d) => {
+        const parsed = parseReelUrl(d.sourceReelUrl)
+        const clientHandle = d.clientHandle ? normalizeHandles([d.clientHandle])[0] : undefined
+        return {
+          sourceReelUrl: parsed ? parsed.canonicalUrl : '',
+          shortCode: parsed ? parsed.shortCode : '',
+          clientHandle,
+          pastedScripts: d.pastedScripts ?? [],
+        }
+      })
+      .refine((d) => d.shortCode.length > 0, { message: 'a valid Instagram reel URL is required', path: ['sourceReelUrl'] })
+      .refine((d) => !!d.clientHandle || d.pastedScripts.length > 0, {
+        message: 'a client @handle or pasted scripts are required', path: ['clientHandle'],
+      }),
+    toAction: (args) => ({ type: 'dispatch', name: 'repurpose_reel', args }),
   },
 
   answer_content: {
@@ -320,7 +356,8 @@ Routing:
 - discover_competitors: find the top accounts in a niche regardless of location, or accounts similar to named @handles. "top X in <city>" / "best X in <city>" is competitor (the city is a filter).
 - discover_by_location: ONLY when the goal is explicitly geographic ("creators based in <city>", "local <niche> in <city>").
 - analyze_reels: break down the hook patterns of specific named @handles.
-- analyze_single_reel: deep-analyze ONE specific reel when the user gives a reel URL (a link containing /reel/, /reels/ or /p/). Returns its transcript + a hook/psychology case study. Use this (not analyze_reels) whenever a single reel link is present.
+- analyze_single_reel: deep-analyze ONE specific reel when the user gives a reel URL (a link containing /reel/, /reels/ or /p/). Returns its transcript + a hook/psychology case study. Use this (not analyze_reels) whenever a single reel link is present AND no client repurpose is requested.
+- repurpose_reel: rewrite a specific viral reel into a CLIENT's voice. Use when the user gives a reel URL AND names a client to repurpose it for (an @handle, or pasted scripts). If a reel URL is present but NO client is named, ask which client (do NOT guess a handle).
 - answer_content: content/strategy/how-to questions or generating content (hooks, captions, ideas) — no scraping.
 
 Prefer acting when confident; ask only when genuinely ambiguous. When @handles are present, always resolve — never ask for a niche.`
