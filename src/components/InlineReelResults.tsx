@@ -80,7 +80,7 @@ function SynthesisCard({ synthesis, onSuggest }: { synthesis: SynthesisOutput; o
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <h3 className="text-xs font-semibold text-[#A78BFA] uppercase tracking-wide mb-2">Replicate</h3>
+          <h3 className="text-xs font-semibold font-mono text-[#A78BFA] uppercase tracking-wide mb-2">Replicate</h3>
           <ul className="space-y-2">
             {synthesis.replicateTips.map((tip, i) => (
               <li key={i} className="flex items-start gap-2 text-sm text-[#C4A882]">
@@ -90,7 +90,7 @@ function SynthesisCard({ synthesis, onSuggest }: { synthesis: SynthesisOutput; o
           </ul>
         </div>
         <div>
-          <h3 className="text-xs font-semibold text-danger uppercase tracking-wide mb-2">Avoid</h3>
+          <h3 className="text-xs font-semibold font-mono text-danger uppercase tracking-wide mb-2">Avoid</h3>
           <ul className="space-y-2">
             {synthesis.avoidTips.map((tip, i) => (
               <li key={i} className="flex items-start gap-2 text-sm text-[#C4A882]">

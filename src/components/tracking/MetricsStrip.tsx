@@ -25,7 +25,7 @@ function MetricCard({ label, value, sub, info }: MetricCardProps) {
       {/* min-h reserves two lines so single- and two-line labels keep their
           values aligned across the strip (uniform card titles). */}
       <div className="flex items-start justify-between gap-1 min-h-[2.25rem]">
-        <span className="text-[#7A6A54] text-xs font-medium uppercase tracking-wider leading-tight">
+        <span className="text-[#7A6A54] text-xs font-medium font-mono uppercase tracking-wider leading-tight">
           {label}
         </span>
         {info && (
