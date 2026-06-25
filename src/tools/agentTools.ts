@@ -104,6 +104,7 @@ const TOOL_REGISTRY: Record<AgentToolName, ToolRecord> = {
         niche: { type: 'string', description: 'Creator niche, e.g. "vegan food creators". Optional if handles are given.' },
         knownHandles: { type: 'array', items: { type: 'string' }, description: 'Reference @handles to find similar accounts.' },
         segment: { type: 'string', enum: ['micro', 'macro', 'business', 'all'], description: 'Follower-size segment.' },
+        mode: { type: 'string', enum: ['precise', 'broad'], description: 'Set "broad" when the user wants a WIDE / comprehensive net or maximum recall ("broad", "comprehensive", "as many as possible", "every", "wide net"); otherwise omit (defaults to "precise" — strict niche match).' },
       },
     },
     schema: z
@@ -111,6 +112,7 @@ const TOOL_REGISTRY: Record<AgentToolName, ToolRecord> = {
         niche: z.string().nullish().transform((s) => (s ?? '').trim()),
         knownHandles: z.array(z.string()).nullish().transform(normalizeHandles),
         segment: z.enum(['micro', 'macro', 'business', 'all']).nullish().transform((s) => s ?? 'all'),
+        mode: z.enum(['precise', 'broad']).nullish().transform((s) => s ?? 'precise'),
       })
       .refine((d) => d.niche.length > 0 || d.knownHandles.length > 0, {
         message: 'a competitor search needs a niche or at least one handle',

@@ -48,6 +48,8 @@ export interface AnalysisParams {
   clientName: string
   /** Strategist-provided niche description. Optional — clarification step covers it when absent. */
   nicheContext: string
+  /** Ranking breadth: 'precise' (default — strict niche guards) or 'broad' (recall-first). */
+  mode?: 'precise' | 'broad'
 }
 
 /** Data held in the store during the clarification pause (between discovery and ranking). */

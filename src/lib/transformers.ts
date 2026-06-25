@@ -48,8 +48,11 @@ export interface ApifyProfileRaw {
  * 'hashtag'        → found via content-niche path: posts using reference account hashtags
  * 'relatedProfiles' → found via audience-adjacency: Instagram relatedProfiles graph (Round 2)
  * 'round3'         → found via audience-adjacency: relatedProfiles of R2 candidates (deeper hop)
+ * 'knowledge'      → NAMED by the AI seed generator (world knowledge + web grounding), then
+ *                    scrape-verified + identity-checked. Highest recall, lower trust → verified before use.
+ * 'search'         → found via Instagram keyword/account search (apify~instagram-scraper, searchType:'user')
  */
-export type DiscoverySource = 'input' | 'relatedProfiles' | 'hashtag' | 'round3'
+export type DiscoverySource = 'input' | 'relatedProfiles' | 'hashtag' | 'round3' | 'knowledge' | 'search'
 
 export interface NormalizedProfile {
   username: string

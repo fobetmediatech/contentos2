@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { buildCompetitorPrompt, buildClarificationPrompt, buildContentPrompt, buildPreferenceBlock } from './prompts'
+import { buildCompetitorPrompt, buildClarificationPrompt, buildContentPrompt, buildPreferenceBlock, buildNicheSeedPrompt } from './prompts'
 import type { NormalizedProfile } from '../lib/transformers'
 import type { PreferenceExemplars } from '../lib/corpus'
 
@@ -391,6 +391,77 @@ describe('buildContentPrompt', () => {
     const prompt = buildContentPrompt('write hooks')
     expect(prompt).toContain('content strategist')
     expect(prompt).toContain('clarifying question')
+  })
+})
+
+describe('buildCompetitorPrompt — knowledge/search source labels (hybrid recall)', () => {
+  it('labels knowledge-seed candidates as [KNOWLEDGE-SEED]', () => {
+    const candidate = makeProfile({ username: 'aiNamed', discoverySource: 'knowledge' })
+    const prompt = buildCompetitorPrompt([inputProfile], [candidate])
+    const line = prompt.split('\n').find((l) => l.includes('@aiNamed')) ?? ''
+    expect(line).toContain('[KNOWLEDGE-SEED: named by AI niche knowledge, scrape-verified]')
+  })
+
+  it('labels keyword-search candidates as [KEYWORD-SEARCH]', () => {
+    const candidate = makeProfile({ username: 'searchHit', discoverySource: 'search' })
+    const prompt = buildCompetitorPrompt([inputProfile], [candidate])
+    const line = prompt.split('\n').find((l) => l.includes('@searchHit')) ?? ''
+    expect(line).toContain('[KEYWORD-SEARCH: IG account-search match for the niche]')
+  })
+
+  it('explains the speculative sources as a CLAIM to verify in SOURCE PRIORITY (trust tiering)', () => {
+    const prompt = buildCompetitorPrompt([inputProfile], [makeProfile({ discoverySource: 'knowledge' })])
+    expect(prompt).toContain('[KNOWLEDGE-SEED]')
+    expect(prompt).toContain('[KEYWORD-SEARCH]')
+    expect(prompt).toContain('CONFIRM against the candidate')
+  })
+})
+
+describe('buildCompetitorPrompt — precise vs broad mode', () => {
+  it('precise mode (default) keeps the strict niche guards and no broad override', () => {
+    const prompt = buildCompetitorPrompt([inputProfile], [makeProfile()], 'fitness', undefined, undefined, undefined, 'precise')
+    expect(prompt).toContain('NICHE GATE IS ABSOLUTE')
+    expect(prompt).not.toContain('BROAD MODE OVERRIDE')
+  })
+
+  it('broad mode injects the recall-first override block', () => {
+    const prompt = buildCompetitorPrompt([inputProfile], [makeProfile()], 'fitness', undefined, undefined, undefined, 'broad')
+    expect(prompt).toContain('BROAD MODE OVERRIDE')
+    expect(prompt).toContain('RELAX the ADJACENT NICHE GUARD')
+  })
+
+  it('defaults to precise when mode is omitted (backwards-compatible, byte-identical)', () => {
+    const a = buildCompetitorPrompt([inputProfile], [makeProfile({ username: 'x' })])
+    const b = buildCompetitorPrompt([inputProfile], [makeProfile({ username: 'x' })], undefined, undefined, undefined, undefined, 'precise')
+    expect(a).toBe(b)
+  })
+
+  it('broad mode forces "exactly" count even with an explicit niche filter', () => {
+    const prompt = buildCompetitorPrompt([inputProfile], [makeProfile()], 'fitness', undefined, undefined, undefined, 'broad')
+    expect(prompt).toContain('select exactly')
+  })
+})
+
+describe('buildNicheSeedPrompt — knowledge seed generator (Components A + B)', () => {
+  it('requests real handles in the niche and emits the JSON-array contract', () => {
+    const prompt = buildNicheSeedPrompt('home-workout coaches', [], 20, 'precise')
+    expect(prompt).toContain('home-workout coaches')
+    expect(prompt).toContain('"handle"')
+    expect(prompt).toContain('Do NOT guess or invent handles')
+  })
+
+  it('includes reference accounts to anchor the niche and exclude themselves', () => {
+    const ref = makeProfile({ username: 'refcoach', biography: 'home workout plans' })
+    const prompt = buildNicheSeedPrompt('home-workout coaches', [ref], 20, 'precise')
+    expect(prompt).toContain('@refcoach')
+    expect(prompt).toContain('do NOT return these same handles')
+  })
+
+  it('broad mode allows adjacent niches; precise stays strict', () => {
+    const broad = buildNicheSeedPrompt('fitness', [], 20, 'broad')
+    const precise = buildNicheSeedPrompt('fitness', [], 20, 'precise')
+    expect(broad).toContain('Adjacent sub-niches that share the audience are acceptable')
+    expect(precise).toContain('Stay strictly within this exact sub-niche')
   })
 })
 

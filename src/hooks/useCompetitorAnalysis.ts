@@ -84,6 +84,7 @@ export function useCompetitorAnalysis() {
           apifyKeys,
           abort.signal,
           params.depth,
+          { niche: params.nicheContext, geminiKeys, mode: params.mode ?? 'precise' },
         )
 
         // Fail fast on an empty candidate pool. An invalid/too-sparse reference handle yields zero
@@ -169,6 +170,7 @@ export function useCompetitorAnalysis() {
       try {
         setStep(5)
         const { inputProfiles, candidateProfiles } = discovery
+        const mode = useAnalysisStore.getState().params?.mode ?? 'precise'
 
         // Load the per-conversation shown map (username → category) and filter out already-seen
         // profiles. Returns {} on first run or IDB unavailability — the filter is then a no-op.
@@ -228,6 +230,7 @@ export function useCompetitorAnalysis() {
           answer || undefined,
           preferenceExemplars,
           corpusArg,
+          mode,
         )
         const competitors = output.competitors.filter(inPool)
 
@@ -248,6 +251,7 @@ export function useCompetitorAnalysis() {
             undefined,
             preferenceExemplars,
             corpusArg,
+            mode,
           )
           const seen = new Set(competitors.map((c) => normHandle(c.username)))
           for (const c of relaxed.competitors) {
