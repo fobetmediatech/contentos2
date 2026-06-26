@@ -176,6 +176,36 @@ describe('buildCompetitorPrompt — clarificationAnswer injection', () => {
   })
 })
 
+describe('buildCompetitorPrompt — web research (niche briefing) injection', () => {
+  // nicheBriefing is the trailing 8th positional arg (after mode), so back-compat is preserved.
+  const briefing = 'Home-gym strength coaching; sub-niches: kettlebell flows, calisthenics progressions.'
+
+  it('injects a WEB RESEARCH block carrying the briefing when provided', () => {
+    const prompt = buildCompetitorPrompt(
+      [inputProfile], [makeProfile()], undefined, undefined, undefined, undefined, 'precise', briefing,
+    )
+    expect(prompt).toContain('WEB RESEARCH ON THIS NICHE')
+    expect(prompt).toContain(briefing)
+  })
+
+  it('does not inject the WEB RESEARCH block when briefing is empty/undefined', () => {
+    expect(buildCompetitorPrompt([inputProfile], [makeProfile()])).not.toContain('WEB RESEARCH ON THIS NICHE')
+    expect(
+      buildCompetitorPrompt([inputProfile], [makeProfile()], undefined, undefined, undefined, undefined, 'precise', '   '),
+    ).not.toContain('WEB RESEARCH ON THIS NICHE')
+  })
+
+  it('keeps the strategist EXPLICIT NICHE CONTEXT as the authoritative boundary (briefing appears after it)', () => {
+    const prompt = buildCompetitorPrompt(
+      [inputProfile], [makeProfile()], 'fitness coaching', undefined, undefined, undefined, 'precise', briefing,
+    )
+    const nichePos = prompt.indexOf('EXPLICIT NICHE CONTEXT')
+    const webPos = prompt.indexOf('WEB RESEARCH ON THIS NICHE')
+    expect(nichePos).toBeGreaterThan(-1)
+    expect(webPos).toBeGreaterThan(nichePos)
+  })
+})
+
 describe('buildCompetitorPrompt — count instruction (recall fix)', () => {
   // inputProfile carries topHashtags, but hashtags are an INFERRED signal and must
   // NOT relax the count. Only a human niche filter (context/answer) grants "up to".
@@ -462,6 +492,18 @@ describe('buildNicheSeedPrompt — knowledge seed generator (Components A + B)',
     const precise = buildNicheSeedPrompt('fitness', [], 20, 'precise')
     expect(broad).toContain('Adjacent sub-niches that share the audience are acceptable')
     expect(precise).toContain('Stay strictly within this exact sub-niche')
+  })
+
+  it('asks the model to web-research the sub-niche first and return a briefing + accounts object', () => {
+    const prompt = buildNicheSeedPrompt('home-workout coaches', [], 20, 'precise')
+    // Requests a niche briefing field (improves the ranking model's subniche understanding)...
+    expect(prompt).toContain('niche_brief')
+    // ...alongside the candidate accounts in an object wrapper (so the model reasons about the
+    // sub-niche before naming accounts — better-targeted candidates).
+    expect(prompt).toContain('"accounts"')
+    // Still asks for real handles with names (the identity gate depends on the name).
+    expect(prompt).toContain('"handle"')
+    expect(prompt).toContain('"name"')
   })
 })
 

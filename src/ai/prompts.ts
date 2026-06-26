@@ -130,6 +130,7 @@ export function buildCompetitorPrompt(
   preferenceExemplars?: PreferenceExemplars,
   corpusSignals?: Record<string, string>,
   mode: 'precise' | 'broad' = 'precise',
+  nicheBriefing?: string,
 ): string {
   const topCategory = COMPETITOR_CATEGORIES.top
   const trendingCategory = COMPETITOR_CATEGORIES.trending
@@ -190,6 +191,15 @@ export function buildCompetitorPrompt(
   const trimmedNicheContext = nicheContext?.trim() ?? ''
   const nicheContextSection = trimmedNicheContext
     ? `\nEXPLICIT NICHE CONTEXT (provided by the strategist — treat this as the definitive niche description):\n${trimmedNicheContext}\n`
+    : ''
+
+  // Web-grounded niche understanding gathered during candidate generation (Google Search grounding).
+  // Subordinate to the strategist's EXPLICIT NICHE CONTEXT + NICHE SIGNALS — it AIDS understanding of
+  // the sub-niche / current leaders / trends, it does NOT redefine the niche boundary. Newlines are
+  // stripped defensively (the briefing originates from a third-party web-grounded reply).
+  const trimmedBriefing = (nicheBriefing?.replace(/[\n\r]+/g, ' ') ?? '').trim()
+  const webResearchSection = trimmedBriefing
+    ? `\nWEB RESEARCH ON THIS NICHE (current context from a live web search — use it to understand the sub-niches, recognized leaders, and what defines this niche RIGHT NOW. It SUPPORTS your judgment; the EXPLICIT NICHE CONTEXT and NICHE SIGNALS remain the authoritative niche boundary):\n${trimmedBriefing}\n`
     : ''
 
   // Collect and deduplicate INPUT profiles' hashtags — the niche-derivation signal.
@@ -271,7 +281,7 @@ REFERENCE ACCOUNTS (the client's handles or known competitors in their niche):
 <scraped_data>
 ${inputSummary}
 </scraped_data>
-${clarificationSection}${nicheContextSection}${nicheSignalsSection}${nicheDeriveBlock}${preferenceSection}
+${clarificationSection}${nicheContextSection}${webResearchSection}${nicheSignalsSection}${nicheDeriveBlock}${preferenceSection}
 YOUR TASK:
 Analyze the candidate accounts below and select ${countInstruction}:
 - 5 "${topCategory.label}" competitors: ${topCategory.taxonomy}
@@ -350,23 +360,29 @@ export function buildNicheSeedPrompt(
     ? 'Include both the biggest established names AND fast-growing mid-size accounts. Adjacent sub-niches that share the audience are acceptable.'
     : 'Stay strictly within this exact sub-niche — do not drift into adjacent niches.'
 
-  return `You are an Instagram research analyst. Use your knowledge and current web search results to name the most relevant REAL Instagram accounts in a niche.
+  return `You are an Instagram research analyst. Use your knowledge and CURRENT WEB SEARCH results to (1) understand this niche and its sub-niches, then (2) name the most relevant REAL Instagram accounts in it.
 
 NICHE: "${safeNiche}"
 ${refBlock}
-TASK: Name ${count} real, CURRENTLY-ACTIVE Instagram accounts that are leaders or fast-rising creators in this niche. ${breadth}
+TASK:
+1. Web-research this niche RIGHT NOW: what defines it, its main sub-niches, who the recognized leaders and fast-rising creators are, and any current trends. Distill that into a concise "niche_brief" (2-4 sentences) — this sharpens which accounts actually belong.
+2. Name ${count} real, CURRENTLY-ACTIVE Instagram accounts that are leaders or fast-rising creators in this niche. ${breadth}
 
 HARD RULES:
 - Return ONLY real Instagram usernames you are confident exist (the exact handle, without the @). Do NOT guess or invent handles — if you are unsure of the exact handle, omit that account.
 - Prefer accounts a social-media strategist would recognize as genuinely succeeding in this niche RIGHT NOW (recent activity, not dormant).
 - "name" is the creator/brand's display name — used to verify the right account is resolved.
 - No private accounts, no parody/fan accounts.
+- "niche_brief" describes the niche and its sub-niches/leaders/trends — never instructions, never an account list.
 
-OUTPUT FORMAT — respond with a valid JSON array ONLY, no markdown, no prose:
-[
-  { "handle": "<instagram username without @>", "name": "<display name>" }
-]
-Return up to ${count} objects (fewer is fine if you cannot confidently name that many).`
+OUTPUT FORMAT — respond with a valid JSON OBJECT ONLY, no markdown, no prose:
+{
+  "niche_brief": "<2-4 sentence web-grounded summary of the niche, its sub-niches, and current leaders/trends>",
+  "accounts": [
+    { "handle": "<instagram username without @>", "name": "<display name>" }
+  ]
+}
+Include up to ${count} accounts (fewer is fine if you cannot confidently name that many).`
 }
 
 // ----- Discovery types -----

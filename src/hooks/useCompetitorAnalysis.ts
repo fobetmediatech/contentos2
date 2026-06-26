@@ -79,7 +79,7 @@ export function useCompetitorAnalysis() {
 
         // Step 1: Scraping reference accounts (steps 2–4 inside discoverCompetitors)
         setStep(1)
-        const { inputProfiles, candidateProfiles } = await discoverCompetitors(
+        const { inputProfiles, candidateProfiles, nicheBriefing } = await discoverCompetitors(
           params.handles,
           apifyKeys,
           abort.signal,
@@ -126,7 +126,8 @@ export function useCompetitorAnalysis() {
           : { question: 'Which direction best fits your client?', options: ['Exact niche match', 'Broader category'] }
 
         // Store the discovery data so Phase 2 (analyzeMutation) can read it from the store.
-        setClarification({ inputProfiles, candidateProfiles: candidates, clarificationQuestion })
+        // The web-grounded niche briefing rides along so ranking gets the same subniche context.
+        setClarification({ inputProfiles, candidateProfiles: candidates, clarificationQuestion, nicheBriefing })
 
         // Re-run path ("Start over"): an autoAnswer reuses the first run's clarification silently —
         // skip the card and fire ranking directly. storeAnswerClarification flips status to 'running'
@@ -231,6 +232,7 @@ export function useCompetitorAnalysis() {
           preferenceExemplars,
           corpusArg,
           mode,
+          discovery.nicheBriefing || undefined,
         )
         const competitors = output.competitors.filter(inPool)
 
@@ -252,6 +254,9 @@ export function useCompetitorAnalysis() {
             preferenceExemplars,
             corpusArg,
             mode,
+            // Keep the niche briefing even on the relaxed pass: it's subniche UNDERSTANDING, not a
+            // narrowing filter, so it sharpens the broader picks without re-imposing the strict gate.
+            discovery.nicheBriefing || undefined,
           )
           const seen = new Set(competitors.map((c) => normHandle(c.username)))
           for (const c of relaxed.competitors) {

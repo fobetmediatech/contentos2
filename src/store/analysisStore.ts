@@ -57,6 +57,9 @@ export interface PendingDiscovery {
   inputProfiles: NormalizedProfile[]
   candidateProfiles: NormalizedProfile[]
   clarificationQuestion: ClarificationQuestion
+  /** Web-grounded niche briefing from the scrape's knowledge-seed call — forwarded to the ranking
+   *  prompt so Phase 2 ranks with the same subniche context. Optional/absent on niche-less runs. */
+  nicheBriefing?: string
 }
 
 export interface AnalysisState {
