@@ -16,6 +16,7 @@ import { useConversationsStore } from '../store/conversationsStore'
 import { useCorpusStore } from '../store/corpusStore'
 import { useRepurposeStore } from '../store/repurposeStore'
 import { scrapeTopReels, NoReelsError } from '../lib/reelScraper'
+import { friendlyError } from '../lib/errorMessages'
 import { transcribeReels } from '../lib/reelTranscriber'
 import { scrapeSingleReel } from '../lib/singleReelClient'
 import { getCachedSingleReel, setCachedSingleReel } from '../lib/singleReelCache'
@@ -206,7 +207,7 @@ export function useRepurposeReel() {
       } catch (err) {
         if (signal?.aborted || (err as Error)?.name === 'AbortError') return
         devWarn('[repurpose] run failed', err)
-        useRepurposeStore.getState().setError((err as Error)?.message || 'Could not repurpose this reel.')
+        useRepurposeStore.getState().setError(friendlyError(err, 'Could not repurpose this reel.'))
       }
     },
     [analyzeSource, buildVoiceProfile, geminiKeys],

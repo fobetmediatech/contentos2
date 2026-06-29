@@ -4,6 +4,7 @@ import { useReelAnalysisStore } from '../store/reelAnalysisStore'
 import { useConversationsStore } from '../store/conversationsStore'
 import { useKeysStore } from '../store/keysStore'
 import { scrapeTopReels, NoReelsError } from '../lib/reelScraper'
+import { friendlyError } from '../lib/errorMessages'
 import { scrapeReelVideos } from '../lib/reelVideoClient'
 import { getCachedSingleReel, setCachedSingleReel } from '../lib/singleReelCache'
 import { devWarn } from '../lib/devLog'
@@ -79,7 +80,7 @@ async function runCreatorHookmapPipeline(
       // Instagram blocked the scrape, POLL_TIMEOUT = scrape exceeded the deadline, etc.).
       const e = err as { name?: string; code?: string; status?: number; message?: string }
       devWarn(`[hookmap] analysis failed for @${handle}:`, e?.code ?? e?.name, `status=${e?.status ?? '?'}`, e?.message, err)
-      store.setCreatorState(handle, { status: 'failed', error: 'Analysis failed — the account may be private, or try again.' })
+      store.setCreatorState(handle, { status: 'failed', error: friendlyError(err, 'Analysis failed — the account may be private, or try again.') })
     }
   }
 }

@@ -214,7 +214,7 @@ export function useLocationDiscovery() {
           err,
           abort.signal,
           pickKey,
-          'Discovery timed out after 150 seconds. Try Standard depth or check your Apify key.',
+          'Discovery timed out. Instagram may be temporarily blocking our data provider (Apify) — a known upstream issue that usually clears within a few hours. Try again later, or use Standard depth.',
         )
         setError(message)
         throw new Error(message, { cause: err })
