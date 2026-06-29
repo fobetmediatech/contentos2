@@ -66,6 +66,15 @@ const INDIA_GEO_BLOCK = `\nGEOGRAPHY — MANDATORY STRONG CONSTRAINT:
 - LOCAL PREFERENCE: if the reference accounts reveal a city, region, or language (from their bios above), prefer creators in that same city or region, or who post in that same regional language. When no local signal is discernible, prefer mainstream Indian home-market creators (Hindi, regional-language, and English-for-India) over diaspora or global accounts.
 - Focus strictly on the Indian market for this niche — India's sub-niches, the recognized Indian leaders, and current Indian trends, not the global scene.\n`
 
+// CREATOR TYPE preference: the web-search paths can't see a profile's video/thumbnail, so this is a
+// PROMPT-LEVEL steer (not verification) toward "talking-face" creators — real people who front their
+// account on camera with a named personal brand — and away from faceless meme/repost/aggregator and
+// brand/logo pages, which are poor competitor/benchmark references. Shared by the seed + fallback.
+const CREATOR_TYPE_BLOCK = `\nCREATOR TYPE — STRONG PREFERENCE:
+- Prefer INDIVIDUAL creators who appear ON CAMERA: talking-head / face-to-camera / pieces-to-camera creators built around a real, named PERSONAL BRAND (a recognizable person fronting the account).
+- Weight heavily toward a recognizable named personal brand — not an account that merely shows a face occasionally.
+- EXCLUDE faceless accounts: meme pages, repost / aggregator / curation accounts, quote or text-only pages, anonymous no-face pages, and pure brand / company / logo accounts.\n`
+
 function preferenceExemplarLine(e: PreferenceExemplar): string {
   const er = e.engagementRate != null ? `${e.engagementRate.toFixed(1)}%` : 'N/A'
   const verified = e.verified ? ', verified' : ''
@@ -377,7 +386,7 @@ export function buildNicheSeedPrompt(
   return `You are an Instagram research analyst. Use your knowledge and CURRENT WEB SEARCH results to (1) understand this niche and its sub-niches, then (2) name the most relevant REAL Instagram accounts in it.
 
 NICHE: "${safeNiche}"
-${refBlock}${INDIA_GEO_BLOCK}
+${refBlock}${INDIA_GEO_BLOCK}${CREATOR_TYPE_BLOCK}
 TASK:
 1. Web-research this niche RIGHT NOW: what defines it, its main sub-niches, who the recognized leaders and fast-rising creators are, and any current trends. Distill that into a concise "niche_brief" (2-4 sentences) — this sharpens which accounts actually belong.
 2. Name ${count} real, CURRENTLY-ACTIVE Instagram accounts that are leaders or fast-rising creators in this niche. ${breadth}
@@ -465,7 +474,7 @@ export function buildWebFallbackPrompt(
 
   return `You are an Instagram competitive-intelligence analyst for an Indian social-media agency. Live Instagram scraping is currently UNAVAILABLE, so use your knowledge and CURRENT WEB SEARCH to identify and rank the competitors DIRECTLY.
 
-${nicheLine}${handleBlock}${refBioBlock}${briefingBlock}${seedBlock}${INDIA_GEO_BLOCK}
+${nicheLine}${handleBlock}${refBioBlock}${briefingBlock}${seedBlock}${INDIA_GEO_BLOCK}${CREATOR_TYPE_BLOCK}
 TASK:
 Using web search, identify the most relevant REAL Indian Instagram creators competing in this niche, then split the best 10 into two tiers:
 - 5 "Top" — established, recognized leaders in this niche in India.

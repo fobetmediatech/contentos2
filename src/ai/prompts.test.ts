@@ -574,3 +574,20 @@ describe('buildWebFallbackPrompt — scrape-blocked web-only ranking', () => {
   })
 })
 
+describe('CREATOR TYPE (talking-face) preference — shared by the seed + fallback prompts', () => {
+  // Prefer on-camera, named personal-brand creators; exclude faceless meme/repost/aggregator/brand pages.
+  it('biases the niche seed toward on-camera personal-brand creators and excludes faceless pages', () => {
+    const prompt = buildNicheSeedPrompt('home-workout coaches', [], 20, 'precise').toLowerCase()
+    expect(prompt).toMatch(/on camera|face-to-camera|talking[- ]head/)
+    expect(prompt).toContain('personal brand')
+    expect(prompt).toMatch(/faceless|meme|aggregator|repost/)
+  })
+
+  it('biases the web fallback toward on-camera personal-brand creators and excludes faceless pages', () => {
+    const prompt = buildWebFallbackPrompt(['themoneylancer'], 'personal finance', {}).toLowerCase()
+    expect(prompt).toMatch(/on camera|face-to-camera|talking[- ]head/)
+    expect(prompt).toContain('personal brand')
+    expect(prompt).toMatch(/faceless|meme|aggregator|repost/)
+  })
+})
+
