@@ -23,7 +23,7 @@ const MODEL = import.meta.env.VITE_GEMINI_MODEL ?? 'gemini-2.5-flash'
 // quality directly drives result relevance/recall. Defaults to MODEL, so behavior is UNCHANGED
 // until VITE_GEMINI_PREMIUM_MODEL is set (e.g. 'gemini-3.5-flash'). This is the per-call split that
 // captures a stronger model where it pays off without paying its price on every cheap routing call.
-const PREMIUM_MODEL = import.meta.env.VITE_GEMINI_PREMIUM_MODEL ?? MODEL
+export const PREMIUM_MODEL = import.meta.env.VITE_GEMINI_PREMIUM_MODEL ?? MODEL
 
 /**
  * Shared request headers for every Gemini REST call.

@@ -202,6 +202,23 @@ export default function RepurposeResultMessage({
           }
         />
       )}
+
+      {/* Source reel transcript — reference material, collapsed by default so the rewrite stays
+          the focus. Already fetched in Stage 2; surfaced here so you can sanity-check the original. */}
+      {payload.sourceTranscript && payload.sourceTranscript.trim().length > 0 && (
+        <details className="rounded-lg bg-surface-raised border border-[rgba(245,237,214,0.08)] p-3 [&::-webkit-details-marker]:hidden">
+          <summary className="flex items-center justify-between cursor-pointer list-none text-sm font-medium text-primary [&::-webkit-details-marker]:hidden">
+            <span>Source reel transcript</span>
+            <span className="text-xs text-muted">tap to expand</span>
+          </summary>
+          <div className="mt-2 flex justify-end">
+            <CopyButton text={payload.sourceTranscript} />
+          </div>
+          <p className="mt-1 text-sm text-secondary whitespace-pre-wrap leading-relaxed">
+            {payload.sourceTranscript}
+          </p>
+        </details>
+      )}
     </div>
   )
 }

@@ -24,12 +24,18 @@ export interface VoiceProfile {
   personaConsistencyScore: number
   reelCount: number
   builtAt: number
+  /**
+   * 2–4 verbatim opener lines from the client's REAL content (reels/scripts). The rewrite prompt
+   * few-shots on these so it imitates actual cadence instead of an abstract description — the main
+   * fix for "AI slop". Code-attached (not LLM output); optional so older cached profiles still load.
+   */
+  exemplars?: string[]
 }
 
 /** The qualitative half the LLM returns; the rest is attached in code. */
 export type VoiceProfileDraft = Omit<
   VoiceProfile,
-  'handle' | 'displayName' | 'fromScripts' | 'reelCount' | 'builtAt'
+  'handle' | 'displayName' | 'fromScripts' | 'reelCount' | 'builtAt' | 'exemplars'
 >
 
 export const VOICE_PROFILE_SCHEMA = {
@@ -98,7 +104,7 @@ const str = (v: unknown, fallback = ''): string => (typeof v === 'string' ? v : 
 /** Coerce raw LLM output + attach code-owned fields. Never throws on bad shapes. */
 export function parseVoiceProfile(
   raw: unknown,
-  attach: { handle: string; displayName: string; reelCount: number; builtAt: number; fromScripts: boolean },
+  attach: { handle: string; displayName: string; reelCount: number; builtAt: number; fromScripts: boolean; exemplars?: string[] },
 ): VoiceProfile {
   const r = (raw ?? {}) as Record<string, unknown>
   const scoreNum = Number(r.personaConsistencyScore)

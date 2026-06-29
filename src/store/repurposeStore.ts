@@ -29,11 +29,14 @@ interface RepurposeState {
   clientHandle: string
   voiceProfile: VoiceProfile | null
   rewrite: ReelRewriteResult | null
+  /** Source reel's spoken transcript (from Stage 2) — surfaced on the result card. */
+  sourceTranscript: string
   error: string | null
   start: (conversationId: string, sourceReelUrl: string, clientHandle: string) => void
   setStatus: (status: RepurposeStatus) => void
   setVoiceProfile: (profile: VoiceProfile) => void
   setRewrite: (rewrite: ReelRewriteResult) => void
+  setSourceTranscript: (transcript: string) => void
   setError: (message: string) => void
   reset: () => void
 }
@@ -45,6 +48,7 @@ const initialState = {
   clientHandle: '',
   voiceProfile: null as VoiceProfile | null,
   rewrite: null as ReelRewriteResult | null,
+  sourceTranscript: '',
   error: null as string | null,
 }
 
@@ -55,6 +59,7 @@ export const useRepurposeStore = create<RepurposeState>()(persist((set) => ({
   setStatus: (status) => set({ status }),
   setVoiceProfile: (voiceProfile) => set({ voiceProfile }),
   setRewrite: (rewrite) => set({ rewrite }),
+  setSourceTranscript: (sourceTranscript) => set({ sourceTranscript }),
   setError: (message) => set({ status: 'error', error: message }),
   reset: () => set(initialState),
 }), {
@@ -68,6 +73,7 @@ export const useRepurposeStore = create<RepurposeState>()(persist((set) => ({
     clientHandle: s.clientHandle,
     voiceProfile: s.voiceProfile,
     rewrite: s.rewrite,
+    sourceTranscript: s.sourceTranscript,
   }),
   version: 1,
   migrate: (state) => state,

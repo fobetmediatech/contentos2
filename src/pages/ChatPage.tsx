@@ -334,6 +334,7 @@ export function ChatPage() {
             clientHandle: s.clientHandle,
             voiceProfile: s.voiceProfile,
             rewrite: s.rewrite,
+            sourceTranscript: s.sourceTranscript,
           },
         })
       }
