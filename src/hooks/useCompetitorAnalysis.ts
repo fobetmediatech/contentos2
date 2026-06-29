@@ -142,7 +142,7 @@ export function useCompetitorAnalysis() {
         // Superseded by the agent loop (latest-wins steer) — silent, not a failure.
         if (abort.wasSuperseded()) return undefined
         console.error('[analysis:discover] failed:', err)
-        const message = buildPipelineErrorMessage(err, abort.signal, pickKey, 'Analysis timed out after 150 seconds. Try with fewer handles or check your Apify key.')
+        const message = buildPipelineErrorMessage(err, abort.signal, pickKey, 'Scraping timed out. Instagram may be temporarily blocking our data provider (Apify) — a known upstream issue that usually clears within a few hours. Try again later, or with fewer handles.')
         setError(message)
         throw new Error(message, { cause: err })
       } finally {
@@ -280,7 +280,7 @@ export function useCompetitorAnalysis() {
       } catch (err) {
         if (abort.wasSuperseded()) return undefined
         console.error('[analysis:analyze] failed:', err)
-        const message = buildPipelineErrorMessage(err, abort.signal, () => null, 'Analysis timed out after 150 seconds. Try with fewer handles or check your Apify key.')
+        const message = buildPipelineErrorMessage(err, abort.signal, () => null, 'Scraping timed out. Instagram may be temporarily blocking our data provider (Apify) — a known upstream issue that usually clears within a few hours. Try again later, or with fewer handles.')
         setError(message)
         throw new Error(message, { cause: err })
       } finally {

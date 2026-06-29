@@ -12,14 +12,25 @@
 import { ApifyError } from './apifyCore'
 import { GeminiError } from '../ai/gemini'
 
+/**
+ * Shown when a scrape hangs, times out, or fails outright. During an Instagram-side
+ * anti-scraping block that's what every run does — it starts, then never finishes — and
+ * the old "try fewer handles" copy wrongly blamed the user's input (so they retried,
+ * adding load). True as a general explanation too: with our generous poll budgets a
+ * timeout/failure is almost always upstream, not the input. Safe to keep permanently;
+ * to drop the provider mention later, point the three codes below back at plain copy.
+ */
+export const PROVIDER_BLOCKED_MESSAGE =
+  'Instagram scraping is temporarily unavailable — our data provider (Apify) is being blocked by Instagram. This is a known upstream issue that usually clears within a few hours, not a problem with your input. Please try again later.'
+
 export const APIFY_FRIENDLY: Record<string, string> = {
   QUOTA_EXCEEDED: 'Apify monthly usage limit reached — add a key from another account to APIFY_KEY_N in the server environment, upgrade your plan, or wait for the monthly reset.',
   RUN_START_FAILED: 'Scraping failed to start — try again or check your Apify key.',
   POLL_FAILED: 'Lost connection to Apify while scraping — try again.',
-  RUN_FAILED: 'The scrape failed on Apify — try again with different handles.',
-  RUN_TIMEOUT: 'Scraping took too long on Apify — try again with fewer handles.',
+  RUN_FAILED: PROVIDER_BLOCKED_MESSAGE,
+  RUN_TIMEOUT: PROVIDER_BLOCKED_MESSAGE,
   RUN_ABORTED: 'The scrape was stopped — try again.',
-  POLL_TIMEOUT: 'Scraping took too long — try again with fewer handles.',
+  POLL_TIMEOUT: PROVIDER_BLOCKED_MESSAGE,
   DATASET_FETCH_FAILED: "Couldn't fetch results from Apify — try again.",
   ABORTED: 'Scraping was cancelled.',
 }
@@ -43,6 +54,18 @@ export function friendlyApify(code: string): string {
 /** Map a GeminiError code to a fixed, user-safe message (with a sane default). */
 export function friendlyGemini(code: string): string {
   return GEMINI_FRIENDLY[code] ?? 'AI analysis failed — try again.'
+}
+
+/**
+ * Map ANY thrown error to a fixed, user-safe message — ApifyError/GeminiError go through
+ * their code maps; everything else falls back to `fallback`. NEVER returns raw err.message
+ * (C2/H11: Apify/Gemini bodies can echo handles or key fragments). Use this anywhere a
+ * pipeline would otherwise surface `(err as Error).message` straight to the UI.
+ */
+export function friendlyError(err: unknown, fallback: string): string {
+  if (err instanceof ApifyError) return friendlyApify(err.code)
+  if (err instanceof GeminiError) return friendlyGemini(err.code)
+  return fallback
 }
 
 /**
