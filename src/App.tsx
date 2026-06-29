@@ -18,6 +18,7 @@ import { SignInPage } from './pages/SignInPage'
 import { TrackingListPage } from './pages/TrackingListPage'
 import { TrackingAccountPage } from './pages/TrackingAccountPage'
 import { TeamAccessPage } from './pages/TeamAccessPage'
+import { StrategyPage } from './pages/StrategyPage'
 import { BreakGlassListener } from './components/BreakGlassListener'
 
 const queryClient = new QueryClient({
@@ -120,6 +121,9 @@ export default function App() {
 
               {/* Team Access — admin-only finance-role management (reached from the account menu) */}
               <Route path="team-access" element={<TeamAccessPage />} />
+
+              {/* Content Strategizing — onboarding form → AI content strategy document (PDF) */}
+              <Route path="strategy" element={<StrategyPage />} />
 
               {/* Instagram account tracking — list + per-account detail */}
               <Route path="tracking" element={<TrackingListPage />} />
