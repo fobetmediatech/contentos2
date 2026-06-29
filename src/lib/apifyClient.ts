@@ -74,7 +74,7 @@ interface HashtagPostRaw {
  * Scrape a batch of Instagram handles and return normalized profiles.
  * Handles the full lifecycle: start → poll → fetch → normalize.
  */
-async function scrapeHandles(
+export async function scrapeHandles(
   handles: string[],
   apifyKeys: string[],
   signal?: AbortSignal,

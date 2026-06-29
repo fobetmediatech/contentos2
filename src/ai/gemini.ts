@@ -10,6 +10,9 @@
  */
 
 import { buildCompetitorPrompt, buildDiscoveryPrompt, buildClarificationPrompt, buildContentPrompt, type AnalysisOutput, type DiscoveryOutput, type ClarificationQuestion, type ContentContext } from './prompts'
+import { buildContentStrategyPrompt, CONTENT_STRATEGY_SCHEMA, parseContentStrategyDoc } from './prompts/contentStrategy'
+import type { StrategyBrief, ContentStrategyDoc, AnalyzedAccount } from '../domain/strategy'
+import type { CreatorHookSummary } from './prompts/creatorHookSummary'
 import type { NormalizedProfile } from '../lib/transformers'
 import type { PreferenceExemplars } from '../lib/corpus'
 import { getClerkSessionToken } from '../lib/clerkToken'
@@ -420,6 +423,30 @@ export async function analyzeCompetitors(
     { temperature: 0.3, maxOutputTokens: 16384, signal, model: PREMIUM_MODEL },
   )
   return validateAnalysisOutput(parsed)
+}
+
+// ----- Content strategy synthesis -----
+
+/**
+ * Synthesize a client-ready content strategy from the onboarding brief + the backend analysis
+ * (competitor metrics + per-creator HookMap summaries). Uses the premium model — this is the
+ * single high-leverage call whose quality is the whole deliverable.
+ */
+export async function analyzeContentStrategy(
+  geminiKey: string | string[],
+  brief: StrategyBrief,
+  accounts: AnalyzedAccount[],
+  hookSummaries: CreatorHookSummary[],
+  signal?: AbortSignal,
+): Promise<ContentStrategyDoc> {
+  const prompt = buildContentStrategyPrompt(brief, accounts, hookSummaries)
+  const parsed = await callGeminiWithSchema<unknown>(
+    geminiKey,
+    prompt,
+    CONTENT_STRATEGY_SCHEMA,
+    { temperature: 0.4, maxOutputTokens: 16384, signal, model: PREMIUM_MODEL },
+  )
+  return parseContentStrategyDoc(parsed)
 }
 
 // ----- Discovery analysis -----
