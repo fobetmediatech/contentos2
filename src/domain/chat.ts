@@ -22,6 +22,12 @@ export type CompetitorResultPayload = {
   niche: string
   profiles: NormalizedProfile[]
   didExpand: boolean
+  /**
+   * True when this result came from the scrape-blocked web fallback (Apify down): handles are
+   * web-sourced and UNVERIFIED, metrics are coarse estimates. Drives the warning banner + `~est`/`—`
+   * metric rendering. Optional/absent on the normal verified path and on legacy payloads.
+   */
+  unverified?: boolean
   /** Input reference handles — lets "Start over" re-run the same search (optional: absent on legacy payloads). */
   handles?: string[]
   /** Niche context, reused on re-run. */

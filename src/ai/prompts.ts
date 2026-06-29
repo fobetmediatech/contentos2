@@ -55,6 +55,17 @@ function fmtPreferenceFollowers(n: number): string {
 // of its line and inject prompt instructions (indirect prompt injection).
 const sanitizeForPrompt = (s: string, max: number) => s.replace(/[\n\r]/g, ' ').slice(0, max)
 
+// GEOGRAPHY is intentionally hardcoded to India: this is an Indian team's tool and the product
+// requirement is that web-search candidates are India-based, preferably local. It is a STRONG
+// prompt-level preference (not a hard code filter). "Local" layers two signals: same
+// city/region/language as the reference accounts when discernible, else India home-market over
+// diaspora. Shared by the knowledge-seed prompt and the scrape-blocked web fallback so both paths
+// carry the identical constraint.
+const INDIA_GEO_BLOCK = `\nGEOGRAPHY — MANDATORY STRONG CONSTRAINT:
+- Name ONLY India-based Instagram creators: people who live in India and create primarily for an Indian audience. Do NOT name global, US/UK, or Indian-diaspora/NRI accounts, even if they are large in this niche.
+- LOCAL PREFERENCE: if the reference accounts reveal a city, region, or language (from their bios above), prefer creators in that same city or region, or who post in that same regional language. When no local signal is discernible, prefer mainstream Indian home-market creators (Hindi, regional-language, and English-for-India) over diaspora or global accounts.
+- Focus strictly on the Indian market for this niche — India's sub-niches, the recognized Indian leaders, and current Indian trends, not the global scene.\n`
+
 function preferenceExemplarLine(e: PreferenceExemplar): string {
   const er = e.engagementRate != null ? `${e.engagementRate.toFixed(1)}%` : 'N/A'
   const verified = e.verified ? ', verified' : ''
@@ -360,16 +371,20 @@ export function buildNicheSeedPrompt(
     ? 'Include both the biggest established names AND fast-growing mid-size accounts. Adjacent sub-niches that share the audience are acceptable.'
     : 'Stay strictly within this exact sub-niche — do not drift into adjacent niches.'
 
+  // Broad mode widens the sub-niche, never the geography, so the India constraint (INDIA_GEO_BLOCK)
+  // sits OUTSIDE the mode branch. The niche_brief is kept India-focused so the downstream ranking
+  // WEB RESEARCH block inherits the geography too.
   return `You are an Instagram research analyst. Use your knowledge and CURRENT WEB SEARCH results to (1) understand this niche and its sub-niches, then (2) name the most relevant REAL Instagram accounts in it.
 
 NICHE: "${safeNiche}"
-${refBlock}
+${refBlock}${INDIA_GEO_BLOCK}
 TASK:
 1. Web-research this niche RIGHT NOW: what defines it, its main sub-niches, who the recognized leaders and fast-rising creators are, and any current trends. Distill that into a concise "niche_brief" (2-4 sentences) — this sharpens which accounts actually belong.
 2. Name ${count} real, CURRENTLY-ACTIVE Instagram accounts that are leaders or fast-rising creators in this niche. ${breadth}
 
 HARD RULES:
 - Return ONLY real Instagram usernames you are confident exist (the exact handle, without the @). Do NOT guess or invent handles — if you are unsure of the exact handle, omit that account.
+- GEOGRAPHY OVERRIDES BREADTH: every account must be India-based per the GEOGRAPHY constraint above. Widening to adjacent sub-niches NEVER widens the geography — drop a relevant global/diaspora account rather than include it.
 - Prefer accounts a social-media strategist would recognize as genuinely succeeding in this niche RIGHT NOW (recent activity, not dormant).
 - "name" is the creator/brand's display name — used to verify the right account is resolved.
 - No private accounts, no parody/fan accounts.
@@ -383,6 +398,96 @@ OUTPUT FORMAT — respond with a valid JSON OBJECT ONLY, no markdown, no prose:
   ]
 }
 Include up to ${count} accounts (fewer is fine if you cannot confidently name that many).`
+}
+
+// ----- Web fallback prompt (scrape-blocked competitor ranking) -----
+
+/** A seed candidate already named by the knowledge seed — handle + intended display name. */
+export interface WebFallbackSeed {
+  handle: string
+  name: string
+}
+
+/**
+ * Build the prompt for the SCRAPE-BLOCKED web fallback: when Instagram blocks Apify (timeout, rate
+ * limit, or an empty login-wall dataset), there is no scraped pool to rank. This prompt asks Gemini
+ * (with Google Search grounding, configured in the caller) to identify AND rank competitors DIRECTLY
+ * from web knowledge — returning a complete top5/trending5 with a coarse size band instead of real
+ * metrics (which we cannot verify without a scrape). Reuses INDIA_GEO_BLOCK so the fallback honours
+ * the same India + local constraint as the normal path.
+ *
+ * Robust to the niche-less HARD-block case (Round 1 reference scrape itself failed): when no niche is
+ * known it instructs the model to web-research the reference handles first to infer the niche. When a
+ * briefing / seed candidates survived from the (Gemini-side) knowledge seed, they are reused so the
+ * fallback builds on that research instead of redoing it.
+ *
+ * @param handles        Reference handles from the user's request (may be the only signal we have).
+ * @param niche          Niche text (explicit or derived). '' triggers the research-the-handles path.
+ * @param opts.briefing  Web-grounded niche briefing reused from the knowledge seed, if it ran.
+ * @param opts.seedCandidates  Handles the knowledge seed already named (unverified), to rank + extend.
+ * @param opts.refProfiles     Reference profiles IF Round 1 scraped before the block (for local signal).
+ * @param opts.mode      'precise' (strict sub-niche) or 'broad' (include big names + adjacents).
+ */
+export function buildWebFallbackPrompt(
+  handles: string[],
+  niche: string,
+  opts?: { briefing?: string; seedCandidates?: WebFallbackSeed[]; refProfiles?: NormalizedProfile[]; mode?: 'precise' | 'broad' },
+): string {
+  const safeNiche = (niche ?? '').replace(/[\n\r]/g, ' ').slice(0, 200).trim()
+  const safeHandles = handles.map((h) => sanitizeForPrompt(h.replace(/^@/, ''), 40)).filter(Boolean).slice(0, 5)
+  const handleList = safeHandles.map((h) => `@${h}`).join(', ')
+
+  const nicheLine = safeNiche ? `NICHE: "${safeNiche}"\n` : ''
+  const handleBlock = safeHandles.length > 0
+    ? `REFERENCE ACCOUNTS: ${handleList}\n${safeNiche ? '' : 'The niche is unknown — use web search to RESEARCH what these reference accounts are about, infer their niche, then find Indian competitors in it.\n'}`
+    : ''
+
+  const refBios = (opts?.refProfiles ?? [])
+    .slice(0, 5)
+    .map((p) => `@${sanitizeForPrompt(p.username, 40)} — "${sanitizeForPrompt(p.biography, 100).replace(/"/g, '\\"')}"`)
+    .join('\n')
+  const refBioBlock = refBios ? `REFERENCE ACCOUNT BIOS (for local/region signal):\n${refBios}\n` : ''
+
+  const trimmedBriefing = (opts?.briefing?.replace(/[\n\r]+/g, ' ') ?? '').trim()
+  const briefingBlock = trimmedBriefing ? `WEB RESEARCH ALREADY GATHERED on this niche (build on it):\n${trimmedBriefing}\n` : ''
+
+  const seeds = (opts?.seedCandidates ?? [])
+    .map((s) => sanitizeForPrompt(s.handle.replace(/^@/, ''), 40))
+    .filter(Boolean)
+    .slice(0, 24)
+  const seedBlock = seeds.length > 0
+    ? `CANDIDATES ALREADY IDENTIFIED (verify on the web, rank the real ones, and ADD more you find): ${seeds.map((h) => `@${h}`).join(', ')}\n`
+    : ''
+
+  const breadth = opts?.mode === 'broad'
+    ? 'Include both the biggest established Indian names AND fast-rising mid-size Indian accounts.'
+    : 'Stay within this exact sub-niche.'
+
+  return `You are an Instagram competitive-intelligence analyst for an Indian social-media agency. Live Instagram scraping is currently UNAVAILABLE, so use your knowledge and CURRENT WEB SEARCH to identify and rank the competitors DIRECTLY.
+
+${nicheLine}${handleBlock}${refBioBlock}${briefingBlock}${seedBlock}${INDIA_GEO_BLOCK}
+TASK:
+Using web search, identify the most relevant REAL Indian Instagram creators competing in this niche, then split the best 10 into two tiers:
+- 5 "Top" — established, recognized leaders in this niche in India.
+- 5 "Trending" — genuine fast-rising / high-momentum Indian creators in this niche.
+${breadth}
+
+HARD RULES:
+- Real Instagram handles only (the exact username, without @). Do NOT invent or guess handles — omit any you are unsure exist.
+- India-based creators only, per the GEOGRAPHY constraint above.
+- We CANNOT scrape to verify, so DO NOT fabricate or invent follower counts, engagement rates, or any precise metric. Express size ONLY as the coarse "size_band".
+- "size_band" is exactly one of: ESTABLISHED (huge, category-defining), LARGE (well-known), MID (solid mid-size), RISING (small but fast-growing).
+- "rationale" is one sentence (max 120 chars) on why this account fits the niche and tier.
+
+OUTPUT FORMAT — respond with a valid JSON OBJECT ONLY, no markdown, no prose:
+{
+  "niche": "<2-4 word niche label>",
+  "summary": "<2 sentences on the competitive landscape in this Indian niche>",
+  "competitors": [
+    { "handle": "<username without @>", "name": "<display name>", "category": "top", "rank": 1, "rationale": "<why>", "size_band": "ESTABLISHED" },
+    { "handle": "<username without @>", "name": "<display name>", "category": "trending", "rank": 1, "rationale": "<why>", "size_band": "RISING" }
+  ]
+}`
 }
 
 // ----- Discovery types -----

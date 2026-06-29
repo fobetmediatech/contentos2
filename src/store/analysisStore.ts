@@ -91,6 +91,12 @@ export interface AnalysisState {
   stepProgressDetail: string
   /** True when the competitor pipeline found < 8 candidates (sparse niche indicator). */
   didExpand: boolean
+  /**
+   * True when these results came from the SCRAPE-BLOCKED web fallback (Apify down) rather than a
+   * verified scrape. Drives the "web-sourced, unverified" banner + `~est`/`—` metric display, and
+   * suppresses corpus harvest. Default false (the normal verified path).
+   */
+  unverified: boolean
 
   // Actions
   startAnalysis: (params: AnalysisParams, runConversationId?: string) => void
@@ -99,7 +105,7 @@ export interface AnalysisState {
   setClarification: (data: PendingDiscovery) => void
   /** Stores the user's clarification answer and transitions back to 'running'. */
   answerClarification: (answer: string) => void
-  setResults: (output: AnalysisOutput, inputProfiles: NormalizedProfile[], candidateCount: number, candidateProfiles?: NormalizedProfile[]) => void
+  setResults: (output: AnalysisOutput, inputProfiles: NormalizedProfile[], candidateCount: number, candidateProfiles?: NormalizedProfile[], unverified?: boolean) => void
   setError: (message: string) => void
   setStepProgressDetail: (detail: string) => void
   setDidExpand: (value: boolean) => void
@@ -126,6 +132,7 @@ const initialState = {
   candidateCount: 0,
   stepProgressDetail: '',
   didExpand: false,
+  unverified: false,
 }
 
 export const useAnalysisStore = create<AnalysisState>()((set) => ({
@@ -144,7 +151,7 @@ export const useAnalysisStore = create<AnalysisState>()((set) => ({
   answerClarification: (answer) =>
     set({ status: 'running', clarificationAnswer: answer }),
 
-  setResults: (output, inputProfiles, candidateCount, candidateProfiles = []) =>
+  setResults: (output, inputProfiles, candidateCount, candidateProfiles = [], unverified = false) =>
     set({
       status: 'done',
       competitors: output.competitors,
@@ -153,6 +160,7 @@ export const useAnalysisStore = create<AnalysisState>()((set) => ({
       inputProfiles,
       candidateProfiles,
       candidateCount,
+      unverified,
     }),
 
   setStepProgressDetail: (detail) => set({ stepProgressDetail: detail }),

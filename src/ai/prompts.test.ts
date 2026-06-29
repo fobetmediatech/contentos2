@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { buildCompetitorPrompt, buildClarificationPrompt, buildContentPrompt, buildPreferenceBlock, buildNicheSeedPrompt } from './prompts'
+import { buildCompetitorPrompt, buildClarificationPrompt, buildContentPrompt, buildPreferenceBlock, buildNicheSeedPrompt, buildWebFallbackPrompt } from './prompts'
 import type { NormalizedProfile } from '../lib/transformers'
 import type { PreferenceExemplars } from '../lib/corpus'
 
@@ -504,6 +504,73 @@ describe('buildNicheSeedPrompt — knowledge seed generator (Components A + B)',
     // Still asks for real handles with names (the identity gate depends on the name).
     expect(prompt).toContain('"handle"')
     expect(prompt).toContain('"name"')
+  })
+})
+
+describe('buildNicheSeedPrompt — India + local geography constraint', () => {
+  it('constrains candidates to India-based creators and excludes diaspora/global accounts', () => {
+    const prompt = buildNicheSeedPrompt('home-workout coaches', [], 20, 'precise')
+    // Only India-based creators are eligible (strong prompt-level constraint).
+    expect(prompt).toContain('India-based')
+    // Global / NRI / Indian-diaspora accounts are explicitly out of scope, even if large.
+    expect(prompt).toMatch(/diaspora|NRI/)
+  })
+
+  it('prefers creators local to the reference accounts (same city/region/language)', () => {
+    const ref = makeProfile({ username: 'refcoach', biography: 'Mumbai home workout plans' })
+    const prompt = buildNicheSeedPrompt('home-workout coaches', [ref], 20, 'precise')
+    expect(prompt.toLowerCase()).toContain('local')
+    expect(prompt).toMatch(/same (city|region)/i)
+    expect(prompt.toLowerCase()).toContain('language')
+  })
+
+  it('scopes the niche_brief to the Indian market for this niche, not the global scene', () => {
+    const prompt = buildNicheSeedPrompt('home-workout coaches', [], 20, 'precise')
+    expect(prompt).toContain('Indian market')
+  })
+
+  // The India constraint must hold in BOTH modes — broad widens the sub-niche, not the geography.
+  it('keeps the India constraint in broad mode', () => {
+    const prompt = buildNicheSeedPrompt('fitness', [], 20, 'broad')
+    expect(prompt).toContain('India-based')
+  })
+})
+
+describe('buildWebFallbackPrompt — scrape-blocked web-only ranking', () => {
+  it('asks the model to rank competitors directly via web search and emits the JSON contract', () => {
+    const prompt = buildWebFallbackPrompt(['themoneylancer'], 'personal finance', {})
+    expect(prompt).toContain('personal finance')
+    // Top/Trending split + per-account fields, including the coarse size band (no fabricated metrics).
+    expect(prompt).toContain('"category"')
+    expect(prompt).toContain('"size_band"')
+    expect(prompt).toContain('"handle"')
+    expect(prompt).toContain('"rationale"')
+  })
+
+  it('reuses the India + local geography constraint', () => {
+    const prompt = buildWebFallbackPrompt(['themoneylancer'], 'personal finance', {})
+    expect(prompt).toContain('India-based')
+    expect(prompt).toMatch(/diaspora|NRI/)
+  })
+
+  it('forbids fabricating follower/engagement metrics (we cannot scrape to verify)', () => {
+    const prompt = buildWebFallbackPrompt(['themoneylancer'], 'personal finance', {})
+    expect(prompt.toLowerCase()).toMatch(/do not (fabricate|invent|make up).{0,40}(metric|follower|engagement|number)/)
+  })
+
+  it('handles the niche-less hard-block case: tells the model to research the reference handles', () => {
+    const prompt = buildWebFallbackPrompt(['themoneylancer'], '', {})
+    expect(prompt).toContain('@themoneylancer')
+    expect(prompt.toLowerCase()).toContain('research')
+  })
+
+  it('reuses an existing briefing and already-named seed candidates when present', () => {
+    const prompt = buildWebFallbackPrompt(['themoneylancer'], 'personal finance', {
+      briefing: 'Indian personal-finance creators; sub-niches: stock-market basics, tax saving.',
+      seedCandidates: [{ handle: 'ca.rachana', name: 'CA Rachana' }],
+    })
+    expect(prompt).toContain('stock-market basics')
+    expect(prompt).toContain('ca.rachana')
   })
 })
 
