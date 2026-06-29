@@ -10,7 +10,7 @@
 import type { SingleReelResult } from '../../store/singleReelStore'
 import type { VoiceProfile } from './voiceProfile'
 
-export const REEL_REWRITE_PROMPT_VERSION = 2
+export const REEL_REWRITE_PROMPT_VERSION = 3
 
 export interface ReelRewriteResult {
   spokenHook: string
@@ -66,9 +66,17 @@ function beatsBlock(source: SingleReelResult): string {
     .join('\n')
 }
 
+/** Verbatim exemplar lines from the client's real content — few-shot fuel so the model imitates
+ *  actual cadence, not the abstract voice description. Empty profiles fall back to the profile. */
+function exemplarsBlock(v: VoiceProfile): string {
+  const ex = (v.exemplars ?? []).map((s) => s.trim()).filter(Boolean)
+  if (!ex.length) return '(no verbatim samples available — lean on the voice profile above)'
+  return ex.map((e) => `- "${e.replace(/"/g, '\\"')}"`).join('\n')
+}
+
 export function buildReelRewritePrompt(source: SingleReelResult, voice: VoiceProfile): string {
   const verbatimHook = source.segments?.[0]?.text ?? source.transcript.slice(0, 120)
-  return `You are a short-form scriptwriter. Repurpose a viral reel so it sounds like the creator @${voice.handle}, while KEEPING the source reel's structure that made it work.
+  return `You are a short-form scriptwriter. Rewrite a viral reel so it sounds like @${voice.handle} ACTUALLY talking — keep the source reel's structure that made it work, but say it in their real voice. The output must sound like a human said it out loud in one take, NOT like AI wrote it.
 
 ## SOURCE reel structure (preserve this skeleton)
 
@@ -87,14 +95,29 @@ ${source.markdown}
 
 ${voiceBlock(voice)}
 
+### How @${voice.handle} ACTUALLY talks — match THIS cadence and energy (copy the rhythm, NEVER the topic):
+${exemplarsBlock(voice)}
+
+## WRITE FOR THE EAR — flow + no AI slop (this is what makes or breaks it)
+
+- FLOW: write the whole script as ONE continuous spoken take. Each beat must run into the next like someone talking without stopping — natural verbal hand-offs, momentum carried forward. No line may read as a standalone bullet or a fresh start.
+- SOUND SPOKEN, not written: short sentences and fragments, contractions, the rhythm of real speech, one idea per breath. Read each line back — if it sounds like an essay or a caption, rewrite it until it sounds SAID.
+- USE THE SAMPLES above: borrow @${voice.handle}'s real words, fillers, and energy. If their samples are punchy and casual, be punchy and casual.
+- BANNED — these are the AI tells that make a script feel like slop; do NOT use them:
+  • em-dashes used as dramatic pauses
+  • filler openers: "here's the thing", "let's dive in", "but here's the kicker", "the truth is", "in today's video", "we need to talk about"
+  • listicle scaffolding: "number one… number two", "reason one"
+  • over-explaining or restating the same point twice
+  • hedge words: "kind of", "sort of", "arguably", "essentially"
+  • essay/corporate transitions: "furthermore", "moreover", "that said", "in conclusion"
+- Every single line must pass: "Could @${voice.handle} have said this out loud, in one take, without it sounding written?"
+
 ## Rules
 
 - LANGUAGE & SCRIPT (strict): write EVERY field in Latin/Roman script only. If @${voice.handle}'s voice is Hindi or a Hindi-English mix, write it in HINGLISH — Hindi spelled phonetically in English letters ("Dekho, yeh viral ho gaya", NOT "देखो, ये वायरल हो गया"). English voices stay in English. NEVER output Devanagari or any non-Latin script in any field.
-- Preserve the source's beat structure EXACTLY: same number of beats, same beat functions, same CTA placement.
-- Replace ONLY the words and energy so they match @${voice.handle}'s voice. NEVER copy the source's wording.
-- Every line must pass the test: "Could @${voice.handle} have said this?"
+- Preserve the source's beat structure EXACTLY: same number of beats, same beat functions, same CTA placement. Replace ONLY the words and energy — NEVER copy the source's wording.
 - spokenHook: the rewritten opening line (verbatim, ready to say to camera).
-- beatScript: one entry per source beat — beatLabel (its function), script (what they say), onScreenText (the overlay).
+- beatScript: one entry per source beat — beatLabel (its function), script (what they say, flowing on from the previous beat), onScreenText (the overlay).
 - caption: an Instagram caption in their voice.
 - cta: a single call-to-action in their voice.
 - onScreenText: 2-5 punchy overlay lines for the whole reel.

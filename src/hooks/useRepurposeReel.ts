@@ -21,7 +21,7 @@ import { scrapeSingleReel } from '../lib/singleReelClient'
 import { getCachedSingleReel, setCachedSingleReel } from '../lib/singleReelCache'
 import { getClerkSessionToken } from '../lib/clerkToken'
 import { parseReelUrl } from '../lib/reelUrl'
-import { callGeminiWithSchema } from '../ai/gemini'
+import { callGeminiWithSchema, PREMIUM_MODEL } from '../ai/gemini'
 import { devWarn } from '../lib/devLog'
 import {
   buildVoiceProfilePrompt, parseVoiceProfile, VOICE_PROFILE_SCHEMA,
@@ -31,7 +31,7 @@ import {
   buildReelRewritePrompt, parseReelRewrite, REEL_REWRITE_SCHEMA,
   type ReelRewriteResult,
 } from '../ai/prompts/reelRewrite'
-import { prepareScriptCorpus, scriptsProfileKey } from '../lib/repurposeHelpers'
+import { prepareScriptCorpus, scriptsProfileKey, pickExemplars } from '../lib/repurposeHelpers'
 import type { SingleReelResult } from '../store/singleReelStore'
 
 const PROFILE_REEL_COUNT = 8
@@ -122,6 +122,7 @@ export function useRepurposeReel() {
         )
         const profile = parseVoiceProfile(draft, {
           handle: key, displayName: 'Pasted voice', reelCount: 0, builtAt: Date.now(), fromScripts: true,
+          exemplars: pickExemplars(scripts),
         })
         await useCorpusStore.getState().setVoiceProfile(key, profile)
         return profile
@@ -142,6 +143,7 @@ export function useRepurposeReel() {
             )
             const profile = parseVoiceProfile(draft, {
               handle, displayName: `@${handle}`, reelCount: 0, builtAt: Date.now(), fromScripts: true,
+              exemplars: pickExemplars(scripts),
             })
             await useCorpusStore.getState().setVoiceProfile(handle, profile)
             return profile
@@ -164,6 +166,7 @@ export function useRepurposeReel() {
       if (signal?.aborted) throw new DOMException('aborted', 'AbortError')
       const profile = parseVoiceProfile(draft, {
         handle, displayName: `@${handle}`, reelCount: reels.length, builtAt: Date.now(), fromScripts: false,
+        exemplars: pickExemplars(transcripts),
       })
       await useCorpusStore.getState().setVoiceProfile(handle, profile)
       return profile
@@ -189,12 +192,13 @@ export function useRepurposeReel() {
         // Stage 2
         const source = await analyzeSource(args.sourceReelUrl, signal)
         if (signal?.aborted) return
+        useRepurposeStore.getState().setSourceTranscript(source.transcript)
         useRepurposeStore.getState().setStatus('rewriting')
 
-        // Stage 3
+        // Stage 3 — premium model (the rewrite is the creative-quality call; joins the split).
         const raw = await callGeminiWithSchema<ReelRewriteResult>(
           geminiKeys, buildReelRewritePrompt(source, profile),
-          REEL_REWRITE_SCHEMA, { temperature: 0.7, thinkingBudget: 3000, signal },
+          REEL_REWRITE_SCHEMA, { temperature: 0.7, thinkingBudget: 3000, signal, model: PREMIUM_MODEL },
         )
         if (signal?.aborted) return
         useRepurposeStore.getState().setRewrite(parseReelRewrite(raw))

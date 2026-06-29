@@ -57,6 +57,8 @@ export type RepurposeResultPayload = {
   clientHandle: string
   voiceProfile: VoiceProfile
   rewrite: ReelRewriteResult
+  /** Source reel's spoken transcript — optional so older persisted payloads still render. */
+  sourceTranscript?: string
 }
 
 export type TranscriptResultPayload = {

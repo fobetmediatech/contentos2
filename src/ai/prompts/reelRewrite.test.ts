@@ -60,4 +60,23 @@ describe('reelRewrite', () => {
     expect(p).toMatch(/Latin/i)
     expect(p).toMatch(/Devanagari/i)
   })
+
+  it('few-shots on the voice exemplars when present (the anti-slop fix)', () => {
+    const voiceWithExemplars: VoiceProfile = { ...VOICE, exemplars: ['Bro main bata raha hoon, yeh game-changer hai.'] }
+    const p = buildReelRewritePrompt(SOURCE, voiceWithExemplars)
+    expect(p).toContain('Bro main bata raha hoon')     // verbatim exemplar injected
+    expect(p).toMatch(/ACTUALLY talks/i)
+  })
+
+  it('falls back to the voice profile when no exemplars are present', () => {
+    const p = buildReelRewritePrompt(SOURCE, VOICE)      // VOICE has no exemplars
+    expect(p).toContain('no verbatim samples available')
+  })
+
+  it('includes the flow + anti-slop guardrails', () => {
+    const p = buildReelRewritePrompt(SOURCE, VOICE)
+    expect(p).toMatch(/ONE continuous spoken take/i)     // FLOW rule
+    expect(p).toMatch(/BANNED/)                          // anti-slop list present
+    expect(p).toContain("let's dive in")                 // a named AI tell to avoid
+  })
 })
