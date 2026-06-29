@@ -30,6 +30,13 @@ export const SEARCH_RESULT_CAP = 20
  * the intended creator, not an impostor.
  */
 export const IDENTITY_FOLLOWER_FLOOR = 10_000
+/**
+ * A name-token match is only trusted ABOVE this floor. Below it, a matching name on a tiny/empty
+ * account is far more likely a squatter/placeholder at the named handle than the notable creator the
+ * model intended — live validation caught a 360-follower, empty-bio account passing on a name match
+ * alone. The model only names accounts with real audiences, so a genuine name-match clears this easily.
+ */
+export const NAME_MATCH_FLOOR = 3_000
 
 export interface SeedCandidate {
   /** Sanitized Instagram username (no @, lowercased). */
@@ -101,6 +108,10 @@ export function matchesIntendedIdentity(profile: NormalizedProfile, seed: SeedCa
   if (profile.followersCount >= IDENTITY_FOLLOWER_FLOOR) return true
   const wanted = nameTokens(seed.name)
   if (wanted.length === 0) return false
+  // Name-match is the weakest signal — only trust it on a non-trivial account. Without this floor a
+  // squatter/placeholder sitting at the named handle passes on a token match alone (CR-2 false
+  // positive, seen live: a 360-follower empty account named "Anant Ladha" slipped through).
+  if (profile.followersCount < NAME_MATCH_FLOOR) return false
   const have = new Set([...nameTokens(profile.fullName), ...nameTokens(profile.username)])
   return wanted.some((t) => have.has(t))
 }

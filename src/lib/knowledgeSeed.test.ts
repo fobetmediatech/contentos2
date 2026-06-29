@@ -91,9 +91,16 @@ describe('matchesIntendedIdentity (CR-2 identity gate)', () => {
     expect(matchesIntendedIdentity(p, seed)).toBe(true)
   })
 
-  it('accepts a small account when the scraped name shares a token with the intended name', () => {
-    const p = makeProfile({ username: 'johnsmith', fullName: 'John Smith', followersCount: 900, verified: false })
+  it('accepts a name-matched account above the name-match floor', () => {
+    const p = makeProfile({ username: 'johnsmith', fullName: 'John Smith', followersCount: 5_000, verified: false })
     expect(matchesIntendedIdentity(p, seed)).toBe(true)
+  })
+
+  it('REJECTS a name-matched but tiny placeholder below the name-match floor (live-caught squatter)', () => {
+    // @anantladha: 360 followers, empty bio, name token matches — passed the OLD gate. A placeholder
+    // at the named handle is a squatter, not the notable creator the model meant.
+    const p = makeProfile({ username: 'anantladha', fullName: 'Anant Ladha', followersCount: 360, verified: false })
+    expect(matchesIntendedIdentity(p, { handle: 'anantladha', name: 'Anant Ladha' })).toBe(false)
   })
 
   it('REJECTS a small, unverified, name-mismatched account (the wrong-person namesquatter)', () => {
