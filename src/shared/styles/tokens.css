@@ -21,12 +21,12 @@
   --ai-rgb: 167, 139, 250;       /* violet (AI tint) */
 
   /* ── Surfaces ─────────────────────────────────────────────────────── */
-  --color-bg: #2C2119;              /* warm mocha — the background (lifted, not near-black) */
-  --color-surface: #382B21;         /* terracotta-stained card base — gentle lift off bg */
-  --color-surface-raised: #463629; /* raised / hover state */
-  --color-surface-elevated: #534234;
-  --color-border: rgba(var(--border-rgb), 0.10);
-  --color-border-strong: rgba(var(--border-rgb), 0.20);
+  --color-bg: #1D1510;              /* deep warm espresso — real depth behind the surfaces */
+  --color-surface: #2B2019;         /* terracotta-stained card base — clear lift off bg */
+  --color-surface-raised: #38291F; /* raised / hover state */
+  --color-surface-elevated: #47362A;
+  --color-border: rgba(var(--border-rgb), 0.12);
+  --color-border-strong: rgba(var(--border-rgb), 0.22);
 
   /* ── Text ─────────────────────────────────────────────────────────── */
   --color-text-primary: #F5DFC5;    /* almond */
@@ -67,8 +67,8 @@
   --color-info: #A1B5A8;
 
   /* ── Shadows ──────────────────────────────────────────────────────── */
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
-  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--color-border);
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.5);
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--color-border);
 
   /* ── Border radius ────────────────────────────────────────────────── */
   --radius-sm: 0.375rem;   /* 6px */
@@ -76,8 +76,10 @@
   --radius-lg: 0.875rem;   /* 14px */
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
+/* Light mode — applied when <html> gets data-theme="light" (set pre-paint by the inline
+   script in index.html, or at runtime by themeStore). 'system' resolves to light/dark there,
+   so this file never needs a prefers-color-scheme query. Dark is the :root default above. */
+:root[data-theme='light'] {
     color-scheme: light;
 
     --border-rgb: 58, 34, 24;        /* redwood-brown */
@@ -118,5 +120,4 @@
     --color-error-subtle: rgba(176, 70, 58, 0.10);
 
     --color-info: #5C7D6E;
-  }
 }

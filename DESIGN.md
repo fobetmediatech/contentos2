@@ -12,7 +12,7 @@
 Every design decision should reinforce that someone who lives in the creator economy made this — not an enterprise SaaS team.
 
 ## Aesthetic Direction
-- **Direction:** Terracotta — warm earthen surfaces (espresso-brown in dark, almond-cream in light), almond/redwood text, a fawn→redwood accent, with cambridge-blue sage as the cool counterpoint. Mediterranean, sun-warmed, editorial. Ships with **both dark (default) and light** modes that flip automatically via `prefers-color-scheme`.
+- **Direction:** Terracotta — warm earthen surfaces (espresso-brown in dark, almond-cream in light), almond/redwood text, a fawn→redwood accent, with cambridge-blue sage as the cool counterpoint. Mediterranean, sun-warmed, editorial. Ships with **both dark (default) and light** modes — a manual sun/moon toggle in the nav (persisted), defaulting to follow the OS.
 - **Decoration level:** Intentional — warm tonal surface depth, DM Mono precision as a deliberate contrast signal, one warm accent that pops and one sage for info.
 - **Mood:** Warm, grounded, precise. A research tool that feels like a sunlit terracotta courtyard — the data feels real because the surface is warm and unhurried.
 - **The rule:** Surfaces are warm earth tones, the accent is fawn (dark) / redwood (light) used sparingly, sage cambridge-blue carries "info". All colors are CSS variables (tokens.css); never hardcode a hex that won't flip with the mode (the only exceptions: Clerk `appearance.variables` and Recharts/SVG presentation attributes, which can't read `var()`).
@@ -59,15 +59,15 @@ Every design decision should reinforce that someone who lives in the creator eco
 
 **Palette anchors:** Cambridge blue `#A1B5A8` · Khaki `#CBB093` · Fawn `#DFA477` · Redwood `#A4624D` · Almond `#F5DFC5`.
 
-Every color is a CSS variable in `src/shared/styles/tokens.css`. Dark is the default `:root`; light overrides inside `@media (prefers-color-scheme: light)`. Translucent borders/tints flip via the `--border-rgb` / `--accent-rgb` / `--ai-rgb` channel vars. Tailwind tokens (`tailwind.config.js`) and `[var(--…)]` arbitrary classes both read from here — so the whole app flips with the OS theme. **Never hardcode a hex in a component** (the two exceptions that need literals: Clerk `appearance.variables`, which Clerk derives shades from in JS, and SVG/Recharts presentation attributes, where `var()` doesn't resolve).
+Every color is a CSS variable in `src/shared/styles/tokens.css`. Dark is the default `:root`; light overrides under `:root[data-theme="light"]`. The active scheme is written to `data-theme` on `<html>` by a pre-paint script in `index.html` (no flash) and by `src/store/themeStore.ts` at runtime; the preference is `light` / `dark` / `system` (default), persisted in `localStorage`. Translucent borders/tints flip via the `--border-rgb` / `--accent-rgb` / `--ai-rgb` channel vars. Tailwind tokens (`tailwind.config.js`) and `[var(--…)]` arbitrary classes both read from here — so the whole app flips with the OS theme. **Never hardcode a hex in a component** (the two exceptions that need literals: Clerk `appearance.variables`, which Clerk derives shades from in JS, and SVG/Recharts presentation attributes, where `var()` doesn't resolve).
 
 ### Dark mode (default)
 ```css
---color-bg: #221913;             /* warm espresso — background */
---color-surface: #2E221A;        /* terracotta-stained card base */
---color-surface-raised: #3B2C21;
---color-surface-elevated: #483728;
---color-border: rgba(var(--border-rgb), 0.10);   /* --border-rgb: 245,223,197 (almond) */
+--color-bg: #1D1510;             /* deep warm espresso — real depth behind the surfaces */
+--color-surface: #2B2019;        /* terracotta-stained card base — clear lift off bg */
+--color-surface-raised: #38291F;
+--color-surface-elevated: #47362A;
+--color-border: rgba(var(--border-rgb), 0.12);   /* --border-rgb: 245,223,197 (almond) */
 --color-text-primary: #F5DFC5;   /* almond */
 --color-text-secondary: #CBB093; /* khaki */
 --color-text-muted: #A89177;     /* muted khaki — WCAG AA on espresso */
@@ -78,7 +78,7 @@ Every color is a CSS variable in `src/shared/styles/tokens.css`. Dark is the def
 --color-info: #A1B5A8;     --color-ai-tint: #A78BFA;  /* AI-generated content ONLY */
 ```
 
-### Light mode (`prefers-color-scheme: light`)
+### Light mode (`:root[data-theme="light"]`)
 ```css
 --color-bg: #F4E4CE;             /* warm almond */
 --color-surface: #FFFCF6;
@@ -177,3 +177,5 @@ color: var(--color-text-muted);
 | 2026-06-30 | Chai Dark → Lotus Pond + light/dark | Full palette pivot to pond-green/beige/rosy-brown, driven entirely by CSS vars so the app flips between dark (default) and light via `prefers-color-scheme`. Accent moved saffron → rosy brown. Clerk + Recharts keep fixed hex (can't take vars). |
 | 2026-06-30 | Lotus Pond → Terracotta | Green scheme rejected. Adopted the terracotta palette: warm earth surfaces, almond/redwood text, fawn→redwood accent, cambridge-blue sage for info. Same var-driven light/dark machinery — only token values + the fixed Clerk/Recharts literals changed. |
 | 2026-06-30 | Spotlight nav split | Active tab centers; the rest keep fixed order, split half-left / half-right around it (was: all clustered at the end). |
+| 2026-06-30 | Manual light/dark toggle | Theme was OS-only (`prefers-color-scheme`). Added a persisted preference (light/dark/system) driven via `data-theme` on `<html>` + a sun/moon toggle in the nav, so users can override the OS. Pre-paint script in `index.html` prevents a flash. `useColorScheme` now reads the effective (toggled) scheme so Clerk surfaces follow it. |
+| 2026-06-30 | Deepen dark surfaces | Dark mode read "dull" — bg `#2C2119` sat too close to the surfaces (low contrast, flat brown wash). Deepened bg → `#1D1510` and widened the surface-elevation ramp so cards lift and the almond text + fawn accent pop. Light mode unchanged. |

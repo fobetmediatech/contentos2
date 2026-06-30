@@ -8,6 +8,20 @@
     <!-- Preconnect reduces font load latency; the stylesheet is loaded by tokens.css -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Apply the persisted theme BEFORE first paint (resolving 'system' via the OS) so there's
+         no light/dark flash on load. Mirrors resolve() in src/store/themeStore.ts. -->
+    <script>
+      (function () {
+        try {
+          var pref = localStorage.getItem('theme') || 'system'
+          var osLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches
+          var resolved = pref === 'light' || (pref === 'system' && osLight) ? 'light' : 'dark'
+          document.documentElement.setAttribute('data-theme', resolved)
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'dark')
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>
