@@ -36,6 +36,7 @@ import { PIPELINE_REGISTRY } from '../tools/registry'
 import type { NormalizedProfile } from '../lib/transformers'
 import type { ChatMessage as ChatMessageData } from '../store/analysisStore'
 import { useCorpusStore } from '../store/corpusStore'
+import { toast } from '../lib/toast'
 import { harvestCompetitors, harvestDiscovery, harvestReelContent } from '../lib/corpusHarvest'
 import { buildReelResultPayload } from '../lib/reelSnapshot'
 import { addShownProfiles, getShownProfiles } from '../lib/competitorCache'
@@ -152,7 +153,6 @@ export function ChatPage() {
 
   // Selection state — shared across competitor + discovery results
   const [selectedHandles, setSelectedHandles] = useState<string[]>([])
-  const [selectionWarning, setSelectionWarning] = useState<string | null>(null)
 
   // Phase 1: keys are server-side — isReady() always returns true; the !ready banner is removed.
   // Kept as a local const to avoid touching canSend / disabled props throughout.
@@ -527,8 +527,7 @@ export function ChatPage() {
     setSelectedHandles((prev) => {
       if (prev.includes(handle)) return prev.filter((h) => h !== handle)
       if (prev.length >= 5) {
-        setSelectionWarning('Select up to 5 creators at a time')
-        setTimeout(() => setSelectionWarning(null), 2500)
+        toast('Select up to 5 creators at a time')
         return prev
       }
       return [...prev, handle]
@@ -611,13 +610,6 @@ export function ChatPage() {
         onDelete={handleDeleteConversation}
       />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-      {/* Selection warning toast */}
-      {selectionWarning && (
-        <div role="alert" className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 bg-[#2C2118] border border-[#E07B3A]/40 rounded-xl text-sm text-[#E07B3A] shadow-lg pointer-events-none">
-          {selectionWarning}
-        </div>
-      )}
-
       {/* ── Message area ──────────────────────────────────────────────── */}
       {!isNearBottom && (
         <button
