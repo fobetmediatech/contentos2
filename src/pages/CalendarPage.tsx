@@ -7,7 +7,7 @@
  */
 import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, Plus, X, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, X, Trash2, CalendarDays } from 'lucide-react'
 import {
   listAccounts,
   listScheduledPosts,
@@ -16,6 +16,7 @@ import {
   deleteScheduledPost,
 } from '../lib/calendarRepo'
 import { SearchablePicker } from '../components/SearchablePicker'
+import { EmptyState } from '../components/EmptyState'
 import type { ContentType, PostStatus, ScheduledPost } from '../domain/calendar'
 
 const CONTENT_TYPES: ContentType[] = ['reel', 'post', 'story', 'carousel']
@@ -388,10 +389,15 @@ export function CalendarPage() {
         </button>
       </div>
 
-      {accounts.length === 0 && (
-        <p className="text-muted text-sm mb-3">Add accounts in the Dashboard first, then you can schedule posts for them.</p>
-      )}
-
+      {accounts.length === 0 ? (
+        <EmptyState
+          icon={CalendarDays}
+          title="No accounts to schedule for"
+          description="The calendar plans posts for accounts you track. Add one in the Dashboard, then come back to start scheduling."
+          action={{ label: 'Go to Dashboard', to: '/tracking' }}
+        />
+      ) : (
+      <>
       {/* Status legend */}
       <div className="flex flex-wrap items-center gap-1.5 mb-3">
         <span className="text-[11px] font-mono uppercase tracking-wide text-muted mr-1">Status</span>
@@ -526,6 +532,8 @@ export function CalendarPage() {
         Hover a day and click + to add · drag a post to move it · click a post to edit.
       </p>
       </div>
+      </>
+      )}
 
       {draft && renderModal(draft)}
     </div>

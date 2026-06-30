@@ -8,6 +8,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Lock, UserPlus, Trash2, ShieldCheck } from 'lucide-react'
 import { useIsAdmin } from '../hooks/useIsAdmin'
 import { listFinanceMembers, grantFinanceByEmail, revokeFinance, type GrantReason } from '../lib/teamAccess'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 
 const GRANT_ERROR: Record<GrantReason, string> = {
   not_found: 'No account found for that email — ask them to sign in once, then try again.',
@@ -24,6 +25,7 @@ export function TeamAccessPage() {
   const qc = useQueryClient()
   const [email, setEmail] = useState('')
   const [notice, setNotice] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
+  const [confirmTarget, setConfirmTarget] = useState<{ userId: string; name: string } | null>(null)
 
   const { data: members = [] } = useQuery({
     queryKey: ['finance-members'],
@@ -138,12 +140,10 @@ export function TeamAccessPage() {
                 </div>
               </div>
               <button
-                onClick={() => {
-                  if (window.confirm(`Remove finance access for ${m.label || m.userId}?`)) revoke.mutate(m.userId)
-                }}
+                onClick={() => setConfirmTarget({ userId: m.userId, name: m.label || m.userId })}
                 disabled={revoke.isPending}
                 aria-label="Remove finance access"
-                className="flex-shrink-0 text-muted hover:text-danger disabled:opacity-50 transition-colors p-1"
+                className="flex-shrink-0 flex items-center justify-center w-9 h-9 -my-1 text-muted hover:text-danger disabled:opacity-50 transition-colors"
               >
                 <Trash2 size={15} />
               </button>
@@ -151,6 +151,20 @@ export function TeamAccessPage() {
           ))}
         </ul>
       )}
+
+      <ConfirmDialog
+        open={!!confirmTarget}
+        title="Remove finance access?"
+        description={confirmTarget ? `${confirmTarget.name} will lose access to the Payments section.` : ''}
+        confirmLabel="Remove"
+        destructive
+        busy={revoke.isPending}
+        onConfirm={() => {
+          if (confirmTarget) revoke.mutate(confirmTarget.userId)
+          setConfirmTarget(null)
+        }}
+        onCancel={() => setConfirmTarget(null)}
+      />
     </div>
   )
 }

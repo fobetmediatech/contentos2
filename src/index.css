@@ -32,6 +32,18 @@ body {
   to { transform: translateX(0); }
 }
 
+/* Skeleton shimmer — warm chai surfaces sliding (see components/Skeleton.tsx).
+   prefers-reduced-motion below flattens this to a static surface. */
+.skeleton {
+  background: linear-gradient(90deg, #2C2218 25%, #3D3025 50%, #2C2218 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

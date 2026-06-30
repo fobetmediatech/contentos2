@@ -8,12 +8,13 @@
  */
 import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Lock, Plus, Trash2, Users } from 'lucide-react'
+import { Lock, Plus, Trash2, Users, Wallet } from 'lucide-react'
 import { useIsFinance } from '../hooks/useIsFinance'
 import { listPaymentClients, listPayments, createPayment, updatePayment, deletePayment } from '../lib/calendarRepo'
 import { PaymentsCalendar } from '../components/PaymentsCalendar'
 import { PaymentClientsManager } from '../components/PaymentClientsManager'
 import { SearchablePicker } from '../components/SearchablePicker'
+import { EmptyState } from '../components/EmptyState'
 import { fetchRatesToInr, FALLBACK_RATES_TO_INR, toInr } from '../lib/fxRates'
 import type { PaymentStatus } from '../domain/calendar'
 
@@ -252,7 +253,16 @@ export function PaymentsPage() {
       {view === 'calendar' ? (
         <PaymentsCalendar payments={payments} clientLabel={clientLabel} />
       ) : payments.length === 0 ? (
-        <p className="text-muted text-sm">No payments logged yet.</p>
+        <EmptyState
+          icon={Wallet}
+          title="No payments logged yet"
+          description={
+            clients.length === 0
+              ? 'Add a client with “Manage clients”, then log your first payment using the form above.'
+              : 'Log your first payment using the form above — it’ll show up here with running INR totals.'
+          }
+          compact
+        />
       ) : (
         <ul className="space-y-2">
           {payments.map((p) => (

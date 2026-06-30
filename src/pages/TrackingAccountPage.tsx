@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Loader2, AlertCircle, LineChart } from 'lucide-react'
 import {
   getTrackedAccount,
   getAccountSnapshots,
@@ -14,6 +14,7 @@ import { MetricsStrip } from '../components/tracking/MetricsStrip'
 import { TrendChart } from '../components/tracking/TrendChart'
 import { ExpandableChartCard } from '../components/tracking/ExpandableChartCard'
 import { ControlsPanel } from '../components/tracking/ControlsPanel'
+import { EmptyState } from '../components/EmptyState'
 import type { AccountSnapshot, ReelSnapshot } from '../lib/trackingDb'
 
 // ---------- Chart data derivation ----------
@@ -269,9 +270,13 @@ export function TrackingAccountPage() {
 
       {/* Empty state */}
       {snapshots.length === 0 && (
-        <div className="text-center py-8 text-[#7A6A54] text-sm font-mono">
-          First fetch pending — click "Fetch now" to get data.
-        </div>
+        <EmptyState
+          icon={LineChart}
+          title="No data yet"
+          description="Run the first fetch to pull this account's followers, engagement, and top reels. Come back anytime to track how they change."
+          action={{ label: isFetching ? 'Fetching…' : 'Fetch now', onClick: handleFetchNow }}
+          compact
+        />
       )}
 
       {/* Charts — each expands to a modal on click */}

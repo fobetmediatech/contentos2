@@ -11,6 +11,8 @@ import {
 import { runAccountFetch } from '../lib/trackingClient'
 import { useTrackingStore } from '../store/trackingStore'
 import { AccountRow } from '../components/tracking/AccountRow'
+import { ListRowSkeleton } from '../components/Skeleton'
+import { EmptyState } from '../components/EmptyState'
 
 export function TrackingListPage() {
   const qc = useQueryClient()
@@ -120,21 +122,22 @@ export function TrackingListPage() {
       </form>
 
       {addError && (
-        <p className="text-red-400 text-sm font-mono -mt-4">{addError}</p>
+        <p className="text-danger text-sm font-mono -mt-4">{addError}</p>
       )}
 
       {/* Account list */}
       {isLoading ? (
-        <div className="flex items-center justify-center py-16 text-[#7A6A54]">
-          <Loader2 size={20} className="animate-spin mr-3" />
-          <span className="font-mono text-sm">Loading accounts…</span>
+        <div className="space-y-2">
+          {Array.from({ length: 4 }, (_, i) => (
+            <ListRowSkeleton key={i} />
+          ))}
         </div>
       ) : accounts.length === 0 ? (
-        <div className="text-center py-20 space-y-3">
-          <BarChart2 size={32} className="mx-auto text-[#3D3025]" />
-          <p className="text-[#7A6A54] text-sm">No accounts tracked yet.</p>
-          <p className="text-[#7A6A54] text-xs">Add a username above to start monitoring.</p>
-        </div>
+        <EmptyState
+          icon={BarChart2}
+          title="No accounts tracked yet"
+          description="Add an Instagram username above to start monitoring its followers, engagement, and top reels over time."
+        />
       ) : (
         <div className="space-y-2">
           {accounts.map((account) => {

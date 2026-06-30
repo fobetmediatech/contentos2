@@ -20,6 +20,8 @@ import {
 } from 'lucide-react'
 import { corpus } from '../lib/corpusIdb'
 import type { ContentRecord } from '../lib/corpus'
+import { ReelCardSkeleton } from '../components/Skeleton'
+import { EmptyState } from '../components/EmptyState'
 
 function formatCount(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
@@ -82,12 +84,19 @@ export function GalleryPage() {
           : `${reels.length} reel${reels.length !== 1 ? 's' : ''} scraped across your searches.`}
       </p>
 
-      {loading ? null : reels.length === 0 ? (
-        <div className="text-center py-16">
-          <p className="text-sm text-[#7A6A54]">
-            No reels yet — analyze a creator's reels and they show up here.
-          </p>
+      {loading ? (
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }, (_, i) => (
+            <ReelCardSkeleton key={i} />
+          ))}
         </div>
+      ) : reels.length === 0 ? (
+        <EmptyState
+          icon={Clapperboard}
+          title="No reels yet"
+          description="Analyze a creator's reels in chat and every one shows up here, with its metrics, caption, and transcript."
+          action={{ label: 'Analyze a creator', to: '/' }}
+        />
       ) : (
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           {reels.map((reel) => (
