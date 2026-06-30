@@ -75,6 +75,59 @@ function exemplarsBlock(v: VoiceProfile): string {
   return ex.map((e) => `- "${e.replace(/"/g, '\\"')}"`).join('\n')
 }
 
+export type TargetLanguage = 'english' | 'hinglish'
+
+// Common ROMANIZED Hindi function words that mark Hinglish speech. High-precision tokens only —
+// we skip ones that collide with English ("to", "is", "main", "are") so an English script never
+// trips the heuristic.
+const HINGLISH_MARKERS = [
+  'hai', 'hain', 'kya', 'kyun', 'kyu', 'nahi', 'nahin', 'yeh', 'woh', 'toh', 'aur', 'aap', 'tum',
+  'mera', 'meri', 'tera', 'teri', 'humein', 'bhai', 'karo', 'karna', 'karein', 'raha', 'rahe', 'rahi',
+  'gaya', 'gayi', 'liye', 'sirf', 'bahut', 'matlab', 'chahiye', 'dekho', 'suno', 'acha', 'theek',
+  'kaise', 'kaisa', 'kuch', 'sab', 'abhi', 'phir', 'wala', 'wali', 'hoga', 'hota', 'jata', 'samajh',
+]
+const MARKER_RE = new RegExp(`\\b(${HINGLISH_MARKERS.join('|')})\\b`, 'gi')
+
+/** Heuristic: does this sample read as Hinglish? ~6%+ romanized-Hindi function words and enough text. */
+function looksHinglish(text: string): boolean {
+  const words = text.toLowerCase().match(/[a-z]+/g) ?? []
+  if (words.length < 8) return false // too little signal to call it
+  const hits = (text.match(MARKER_RE) ?? []).length
+  return hits / words.length >= 0.06
+}
+
+/**
+ * Decide the repurposed OUTPUT language deterministically — in code, not by asking the model to
+ * infer it (which kept losing to the Hindi-heavy source transcript sitting in the prompt):
+ *   1. explicit user override (Memory → Voices)
+ *   2. the profile's `language` field, when present
+ *   3. a heuristic over the client's own exemplars + vocabulary (covers stale pre-override profiles)
+ *   4. default ENGLISH — never silently Hinglish-ify when the signal is unclear.
+ */
+export function resolveTargetLanguage(voice: VoiceProfile): TargetLanguage {
+  if (voice.outputLanguage === 'english') return 'english'
+  if (voice.outputLanguage === 'hinglish') return 'hinglish'
+
+  const field = (voice.language ?? '').toLowerCase()
+  if (field) {
+    // "English" / "mostly English with occasional Hindi" → english; "heavy Hinglish" / "half-and-half" → hinglish.
+    if (/\benglish\b/.test(field) && /(mostly|mainly|primarily|occasional|few|some|light|minimal)/.test(field)) return 'english'
+    if (/hinglish|hindi|half|mix/.test(field)) return 'hinglish'
+    if (/\benglish\b/.test(field)) return 'english'
+  }
+
+  const sample = [...(voice.exemplars ?? []), ...(voice.vocabulary ?? [])].join(' ')
+  return sample && looksHinglish(sample) ? 'hinglish' : 'english'
+}
+
+/** Hard, non-negotiable language rule for the rewrite — computed, not left to the model to judge. */
+function languageDirective(voice: VoiceProfile): string {
+  if (resolveTargetLanguage(voice) === 'hinglish') {
+    return `- LANGUAGE (NON-NEGOTIABLE): Write EVERY field in natural HINGLISH — the Hindi+English mix @${voice.handle} actually speaks (match the balance in their exemplar lines above). Romanize all Hindi in Latin letters; NEVER Devanagari.`
+  }
+  return `- LANGUAGE (NON-NEGOTIABLE): Write EVERY field in ENGLISH. @${voice.handle} speaks English. The SOURCE reel is in Hindi/Hinglish — IGNORE that completely; do NOT carry its Hindi words or sentence shapes across, and do NOT turn this into Hinglish. (Keep a Hindi word ONLY if it actually appears in @${voice.handle}'s own exemplar lines above.)`
+}
+
 export function buildReelRewritePrompt(source: SingleReelResult, voice: VoiceProfile): string {
   const verbatimHook = source.segments?.[0]?.text ?? source.transcript.slice(0, 120)
   return `You are a short-form scriptwriter. Rewrite a viral reel so it sounds like @${voice.handle} ACTUALLY talking — keep the source reel's structure that made it work, but say it in their real voice. The output must sound like a human said it out loud in one take, NOT like AI wrote it.
@@ -115,7 +168,7 @@ ${exemplarsBlock(voice)}
 
 ## Rules
 
-- LANGUAGE — match the CLIENT, NOT the source reel: write in the SAME language and the SAME English↔Hindi mix that @${voice.handle} actually uses (judge from their Language field + the exemplar lines above). If their samples are mostly or fully English, write in English and only drop in Hindi words to the SAME small degree they do — do NOT turn an English-speaking creator into Hinglish. If their samples are genuinely heavy Hinglish, match that. When the client's mix is unclear, DEFAULT TO ENGLISH. The source reel's own language is IRRELEVANT — only the client's voice decides this.
+${languageDirective(voice)}
 - SCRIPT: Latin/Roman letters only. Romanize any Hindi as Hinglish ("yeh viral ho gaya"), and NEVER output Devanagari or any non-Latin script in any field.
 - Preserve the source's beat structure EXACTLY: same number of beats, same beat functions, same CTA placement. Replace ONLY the words and energy — NEVER copy the source's wording.
 - spokenHook: the rewritten opening line (verbatim, ready to say to camera).

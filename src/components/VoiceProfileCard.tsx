@@ -12,10 +12,16 @@
 
 import { useState } from 'react'
 import { useCorpusStore } from '../store/corpusStore'
-import type { VoiceProfile } from '../ai/prompts/voiceProfile'
+import type { VoiceProfile, VoiceLanguageMode } from '../ai/prompts/voiceProfile'
 
 const inputCls =
   'w-full bg-[#3D3025] border border-[rgba(245,237,214,0.08)] rounded-md px-3 py-2 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-[#E07B3A]'
+
+const LANG_OPTIONS: { value: VoiceLanguageMode; label: string }[] = [
+  { value: 'auto', label: 'Auto' },
+  { value: 'english', label: 'English' },
+  { value: 'hinglish', label: 'Hinglish' },
+]
 
 interface Props {
   profile: VoiceProfile
@@ -29,6 +35,14 @@ export default function VoiceProfileCard({ profile, onRebuild }: Props) {
   const [saving, setSaving] = useState(false)
   const [rebuilding, setRebuilding] = useState(false)
   const [rebuildError, setRebuildError] = useState<string | null>(null)
+  const [langSaving, setLangSaving] = useState(false)
+
+  const currentLang: VoiceLanguageMode = profile.outputLanguage ?? 'auto'
+  const setLang = (mode: VoiceLanguageMode) => {
+    if (mode === currentLang || langSaving) return
+    setLangSaving(true)
+    void setVoiceProfile(profile.handle, { ...profile, outputLanguage: mode }).finally(() => setLangSaving(false))
+  }
 
   const rebuild = () => {
     setRebuildError(null)
@@ -198,6 +212,36 @@ export default function VoiceProfileCard({ profile, onRebuild }: Props) {
       {rebuildError && (
         <div className="mt-2 text-xs text-[#E07B3A]">{rebuildError}</div>
       )}
+
+      <div className="mt-3">
+        <div className="text-[11px] font-mono uppercase tracking-wide text-muted mb-1">
+          Output language
+        </div>
+        <div className="flex gap-1" role="group" aria-label="Repurposed output language">
+          {LANG_OPTIONS.map((o) => {
+            const active = currentLang === o.value
+            return (
+              <button
+                key={o.value}
+                type="button"
+                disabled={langSaving}
+                aria-pressed={active}
+                onClick={() => setLang(o.value)}
+                className={`text-xs px-2.5 py-1 rounded-md border transition-colors disabled:opacity-50 ${
+                  active
+                    ? 'bg-[#E07B3A] text-[#1A1410] border-[#E07B3A] font-medium'
+                    : 'border-[rgba(245,237,214,0.12)] text-muted hover:text-primary hover:border-[#E07B3A]'
+                }`}
+              >
+                {o.label}
+              </button>
+            )
+          })}
+        </div>
+        {currentLang === 'auto' && (
+          <div className="text-[11px] text-muted mt-1">Auto-detects from this creator&rsquo;s reels.</div>
+        )}
+      </div>
 
       {profile.toneDescriptors.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1">
