@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Brain, MessageSquare, CalendarDays, Wallet, BarChart2, Clapperboard, ShieldCheck, Target, Menu, X } from 'lucide-react'
+import { Brain, MessageSquare, CalendarDays, Wallet, BarChart2, Clapperboard, ShieldCheck, Target, Menu, X, Sun, Moon } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { UserButton } from '@clerk/react'
 import { useCorpusStore } from '../store/corpusStore'
 import { useIsFinance } from '../hooks/useIsFinance'
 import { useIsAdmin } from '../hooks/useIsAdmin'
 import { useColorScheme } from '../hooks/useColorScheme'
+import { useThemeStore } from '../store/themeStore'
 import { clerkVariables } from '../lib/clerkTheme'
 
 /**
@@ -46,6 +47,7 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
   const { isFinance } = useIsFinance()
   const { isAdmin } = useIsAdmin()
   const scheme = useColorScheme()
+  const toggleTheme = useThemeStore((s) => s.toggle)
   const [drawerOpen, setDrawerOpen] = useState(false)
   // Payments (financeOnly) is hidden in the nav unless the user has the finance role.
   const sections = NAV_SECTIONS.filter((s) => !s.financeOnly || isFinance)
@@ -156,9 +158,20 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
             </div>
           </nav>
 
-          {/* User avatar — Clerk's UserButton. variables need real hex (Clerk derives
-              shades in JS) so they're scheme-keyed; element colors use CSS vars and flip. */}
-          <UserButton
+          {/* Right cluster: theme toggle + Clerk avatar. */}
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              aria-label={scheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={scheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              className="flex items-center justify-center w-9 h-9 rounded-full text-secondary hover:text-primary hover:bg-surface-raised transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              {scheme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+            </button>
+            {/* User avatar — Clerk's UserButton. variables need real hex (Clerk derives
+                shades in JS) so they're scheme-keyed; element colors use CSS vars and flip. */}
+            <UserButton
             appearance={{
               variables: clerkVariables(scheme),
               elements: {
@@ -224,7 +237,8 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
               )}
               <UserButton.Action label="signOut" />
             </UserButton.MenuItems>
-          </UserButton>
+            </UserButton>
+          </div>
         </div>
       </header>
 
