@@ -164,6 +164,10 @@ export function CalendarPage() {
   }
 
   const todayKey = ymd(new Date())
+  // Mobile "New post" defaults to today if we're viewing this month, else the 1st.
+  const monthAddDate = sameMonth(new Date(), month)
+    ? new Date()
+    : new Date(month.getFullYear(), month.getMonth(), 1)
   const thisYear = new Date().getFullYear()
   const displayedYear = month.getFullYear()
   const minYear = Math.min(thisYear - 3, displayedYear)
@@ -398,6 +402,67 @@ export function CalendarPage() {
         ))}
       </div>
 
+      {/* Mobile agenda — list view (the 7-col grid is unreadable under ~380px) */}
+      <div className="sm:hidden">
+        <button
+          onClick={() => openCreate(monthAddDate)}
+          disabled={accounts.length === 0}
+          className="w-full flex items-center justify-center gap-1.5 bg-[#E07B3A] hover:bg-[#C4612A] disabled:opacity-50 text-white text-sm font-medium rounded-md py-3 mb-4 transition-colors"
+        >
+          <Plus size={16} /> New post
+        </button>
+        {(() => {
+          const monthDays = cells.filter((d) => sameMonth(d, month))
+          const daysWithPosts = monthDays.filter((d) => (byDay[ymd(d)] ?? []).length > 0)
+          if (daysWithPosts.length === 0) {
+            return (
+              <p className="text-muted text-sm text-center py-8">
+                No posts planned this month yet. Tap “New post” to add one.
+              </p>
+            )
+          }
+          return (
+            <div className="flex flex-col gap-4">
+              {daysWithPosts.map((d) => {
+                const key = ymd(d)
+                const dayPosts = byDay[key] ?? []
+                const isToday = key === todayKey
+                return (
+                  <div key={key}>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className={`text-xs font-mono uppercase tracking-wide ${isToday ? 'text-[#E07B3A] font-semibold' : 'text-muted'}`}>
+                        {WEEKDAYS[d.getDay()]} {d.getDate()}
+                      </span>
+                      <button
+                        onClick={() => openCreate(d)}
+                        aria-label={`Add post on ${MONTH_NAMES[d.getMonth()]} ${d.getDate()}`}
+                        className="flex items-center justify-center w-8 h-8 -my-1 text-muted hover:text-[#E07B3A] transition-colors"
+                      >
+                        <Plus size={15} />
+                      </button>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      {dayPosts.map((p) => (
+                        <button
+                          key={p.id}
+                          onClick={() => openEdit(p)}
+                          className={`text-left text-sm rounded-md px-3 py-2.5 ${STATUS_STYLES[p.status]}`}
+                        >
+                          {accountFilter === 'all' && <span className="opacity-70">{accountLabel(p.accountUsername)}: </span>}
+                          {p.title || p.contentType}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })()}
+      </div>
+
+      {/* Desktop month grid (hidden on phones in favor of the agenda above) */}
+      <div className="hidden sm:block">
       {/* Weekday header */}
       <div className="grid grid-cols-7 gap-px mb-px">
         {WEEKDAYS.map((w) => (
@@ -460,6 +525,7 @@ export function CalendarPage() {
       <p className="text-muted text-xs mt-3">
         Hover a day and click + to add · drag a post to move it · click a post to edit.
       </p>
+      </div>
 
       {draft && renderModal(draft)}
     </div>

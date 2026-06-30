@@ -27,7 +27,7 @@ const STATUS_BADGE: Record<PaymentStatus, string> = {
 }
 
 const inputCls =
-  'bg-[#3D3025] border border-[rgba(245,237,214,0.08)] rounded-md px-3 py-2 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-[#E07B3A]'
+  'bg-[#3D3025] border border-[rgba(245,237,214,0.08)] rounded-md px-3 py-2.5 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-[#E07B3A]'
 
 const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 })
 
@@ -225,7 +225,7 @@ export function PaymentsPage() {
           <button
             onClick={addPayment}
             disabled={!paymentClientId || !amount || !note.trim() || create.isPending}
-            className="flex items-center justify-center gap-1.5 bg-[#E07B3A] hover:bg-[#C4612A] disabled:opacity-50 text-white text-sm font-medium rounded-md px-4 py-2 transition-colors"
+            className="col-span-2 sm:col-span-1 flex items-center justify-center gap-1.5 bg-[#E07B3A] hover:bg-[#C4612A] disabled:opacity-50 text-white text-sm font-medium rounded-md px-4 py-2.5 transition-colors"
           >
             <Plus size={15} /> {create.isPending ? 'Adding…' : 'Add'}
           </button>
@@ -258,7 +258,7 @@ export function PaymentsPage() {
           {payments.map((p) => (
             <li
               key={p.id}
-              className="flex items-center gap-3 bg-surface border border-[rgba(245,237,214,0.08)] rounded-lg px-4 py-3"
+              className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 bg-surface border border-[rgba(245,237,214,0.08)] rounded-lg px-4 py-3"
             >
               <div className="min-w-0 flex-1">
                 <div className="text-primary text-sm font-medium truncate">{clientLabel(p.paymentClientId)}</div>
@@ -267,35 +267,38 @@ export function PaymentsPage() {
                   {p.note ? ` · ${p.note}` : ''}
                 </div>
               </div>
-              <div className="text-primary font-mono text-sm whitespace-nowrap">
-                {p.currency} {fmt(p.amount)}
-              </div>
-              <select
-                value={p.status}
-                onChange={(e) => changeStatus.mutate({ id: p.id, s: e.target.value as PaymentStatus })}
-                aria-label="Payment status"
-                className={`text-[11px] font-mono uppercase tracking-wide rounded px-1.5 py-1 focus:outline-none ${STATUS_BADGE[p.status]}`}
-              >
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-              {confirmDeleteId === p.id ? (
-                <span className="flex-shrink-0 flex items-center gap-1.5 text-xs">
-                  <button onClick={() => { remove.mutate(p.id); setConfirmDeleteId(null) }} disabled={remove.isPending} aria-label="Confirm delete payment" className="text-danger font-medium hover:underline disabled:opacity-50">Delete?</button>
-                  <button onClick={() => setConfirmDeleteId(null)} aria-label="Cancel delete" className="text-muted hover:text-secondary transition-colors">Cancel</button>
-                </span>
-              ) : (
-                <button
-                  onClick={() => setConfirmDeleteId(p.id)}
-                  aria-label="Delete payment"
-                  className="flex-shrink-0 text-muted hover:text-danger transition-colors p-1"
+              {/* Amount + status + delete: a single justified row so nothing overflows on mobile */}
+              <div className="flex items-center justify-between sm:justify-end gap-3 flex-shrink-0">
+                <div className="text-primary font-mono text-sm whitespace-nowrap">
+                  {p.currency} {fmt(p.amount)}
+                </div>
+                <select
+                  value={p.status}
+                  onChange={(e) => changeStatus.mutate({ id: p.id, s: e.target.value as PaymentStatus })}
+                  aria-label="Payment status"
+                  className={`text-[11px] font-mono uppercase tracking-wide rounded px-1.5 py-1 focus:outline-none ${STATUS_BADGE[p.status]}`}
                 >
-                  <Trash2 size={15} />
-                </button>
-              )}
+                  {STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+                {confirmDeleteId === p.id ? (
+                  <span className="flex items-center gap-1.5 text-xs">
+                    <button onClick={() => { remove.mutate(p.id); setConfirmDeleteId(null) }} disabled={remove.isPending} aria-label="Confirm delete payment" className="text-danger font-medium hover:underline disabled:opacity-50">Delete?</button>
+                    <button onClick={() => setConfirmDeleteId(null)} aria-label="Cancel delete" className="text-muted hover:text-secondary transition-colors">Cancel</button>
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => setConfirmDeleteId(p.id)}
+                    aria-label="Delete payment"
+                    className="flex items-center justify-center w-9 h-9 -my-1 text-muted hover:text-danger transition-colors"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                )}
+              </div>
             </li>
           ))}
         </ul>

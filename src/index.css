@@ -22,6 +22,16 @@ body {
   min-height: 100vh;
 }
 
+/* Mobile nav drawer transitions (respect prefers-reduced-motion below) */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slideInLeft {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

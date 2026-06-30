@@ -34,9 +34,9 @@ export function ChatSidebar({ conversations, activeId, onSwitch, onNew, onDelete
       <button
         onClick={() => setMobileOpen(true)}
         aria-label="Open chat history"
-        className={`md:hidden fixed top-16 left-3 z-30 p-2 rounded-lg bg-[#2C2218] border border-[rgba(245,237,214,0.08)] text-[#C4A882] hover:text-[#F5EDD6] transition-colors shadow-lg ${mobileOpen ? 'hidden' : ''}`}
+        className={`md:hidden fixed top-16 left-3 z-30 flex items-center justify-center w-11 h-11 rounded-lg bg-[#2C2218] border border-[rgba(245,237,214,0.08)] text-[#C4A882] hover:text-[#F5EDD6] transition-colors shadow-lg ${mobileOpen ? 'hidden' : ''}`}
       >
-        <Menu size={16} aria-hidden="true" />
+        <Menu size={18} aria-hidden="true" />
       </button>
 
       {/* Mobile: backdrop behind the drawer */}
@@ -73,10 +73,10 @@ export function ChatSidebar({ conversations, activeId, onSwitch, onNew, onDelete
               {/* Mobile close */}
               <button
                 onClick={() => setMobileOpen(false)}
-                className="md:hidden p-1 rounded-lg text-[#7A6A54] hover:text-[#C4A882] hover:bg-[#3D3025] transition-colors"
+                className="md:hidden flex items-center justify-center w-10 h-10 -mr-1.5 rounded-lg text-[#7A6A54] hover:text-[#C4A882] hover:bg-[#3D3025] transition-colors"
                 aria-label="Close chat history"
               >
-                <X size={16} aria-hidden="true" />
+                <X size={18} aria-hidden="true" />
               </button>
             </div>
 
@@ -117,10 +117,10 @@ export function ChatSidebar({ conversations, activeId, onSwitch, onNew, onDelete
                     </button>
                     <button
                       onClick={() => onDelete(c.id)}
-                      className="flex-shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-[#7A6A54] hover:text-[#E05C5C] transition-opacity rounded focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#E05C5C]"
+                      className="flex-shrink-0 flex items-center justify-center w-8 h-8 -my-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 text-[#7A6A54] hover:text-[#E05C5C] transition-opacity rounded focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#E05C5C]"
                       aria-label={`Delete "${c.title}"`}
                     >
-                      <Trash2 size={12} aria-hidden="true" />
+                      <Trash2 size={14} aria-hidden="true" />
                     </button>
                   </div>
                 )

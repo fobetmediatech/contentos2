@@ -1,6 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Brain, FileText, MessageSquare, CalendarDays, Wallet, BarChart2, Clapperboard, ShieldCheck, Target } from 'lucide-react'
+import { Brain, FileText, MessageSquare, CalendarDays, Wallet, BarChart2, Clapperboard, ShieldCheck, Target, Menu, X } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { UserButton } from '@clerk/react'
 import { useCorpusStore } from '../store/corpusStore'
@@ -44,6 +44,7 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
   const corpusCount = useCorpusStore((s) => s.count)
   const { isFinance } = useIsFinance()
   const { isAdmin } = useIsAdmin()
+  const [drawerOpen, setDrawerOpen] = useState(false)
   // Payments (financeOnly) is hidden in the nav unless the user has the finance role.
   const sections = NAV_SECTIONS.filter((s) => !s.financeOnly || isFinance)
 
@@ -59,21 +60,47 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
     void useCorpusStore.getState().hydrate().catch(() => {})
   }, [])
 
+  // Escape closes the drawer; lock body scroll while it's open.
+  useEffect(() => {
+    if (!drawerOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDrawerOpen(false)
+    }
+    document.addEventListener('keydown', onKey)
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = ''
+    }
+  }, [drawerOpen])
+
   return (
     <div className={`${noPadding ? 'h-[100dvh] flex flex-col overflow-hidden' : 'min-h-screen'} bg-chai`}>
       {/* Top navigation bar */}
       <header className="sticky top-0 z-10 bg-surface border-b border-[rgba(245,237,214,0.08)] flex-shrink-0">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 h-14 flex items-center justify-between gap-2">
-          {/* Brand — Instrument Serif italic */}
-          <Link
-            to="/"
-            className="font-serif italic text-lg text-primary hover:text-[#F4A97B] transition-colors tracking-tight"
-          >
-            Content OS
-          </Link>
+          {/* Left group: mobile hamburger + brand */}
+          <div className="flex items-center gap-1.5 min-w-0">
+            <button
+              type="button"
+              onClick={() => setDrawerOpen(true)}
+              aria-label="Open navigation menu"
+              aria-expanded={drawerOpen}
+              className="md:hidden flex items-center justify-center w-11 h-11 -ml-2 rounded-md text-secondary hover:text-primary hover:bg-surface-raised transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <Menu size={20} />
+            </button>
+            {/* Brand — Instrument Serif italic */}
+            <Link
+              to="/"
+              className="font-serif italic text-lg text-primary hover:text-[#F4A97B] transition-colors tracking-tight"
+            >
+              Content OS
+            </Link>
+          </div>
 
-          {/* Nav links — derived from NAV_SECTIONS */}
-          <nav aria-label="Main" className="flex items-center gap-1 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {/* Nav links — derived from NAV_SECTIONS. Desktop only; mobile uses the drawer. */}
+          <nav aria-label="Main" className="hidden md:flex items-center gap-1 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {sections.map((s) => {
               const Icon = s.icon
               const active = isActive(s)
@@ -180,6 +207,63 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
           </UserButton>
         </div>
       </header>
+
+      {/* Mobile nav drawer — slides in from the left below the md breakpoint */}
+      {drawerOpen && (
+        <div className="md:hidden fixed inset-0 z-30">
+          {/* Backdrop */}
+          <button
+            type="button"
+            aria-label="Close navigation menu"
+            onClick={() => setDrawerOpen(false)}
+            className="absolute inset-0 bg-black/50 animate-[fadeIn_200ms_ease-out]"
+          />
+          {/* Panel */}
+          <nav
+            aria-label="Main"
+            className="absolute inset-y-0 left-0 w-[78%] max-w-xs bg-surface border-r border-[rgba(245,237,214,0.08)] flex flex-col animate-[slideInLeft_240ms_ease-out]"
+          >
+            <div className="h-14 flex items-center justify-between px-4 border-b border-[rgba(245,237,214,0.08)]">
+              <span className="font-serif italic text-lg text-primary tracking-tight">Content OS</span>
+              <button
+                type="button"
+                onClick={() => setDrawerOpen(false)}
+                aria-label="Close navigation menu"
+                className="flex items-center justify-center w-11 h-11 -mr-2 rounded-md text-secondary hover:text-primary hover:bg-surface-raised transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-0.5">
+              {sections.map((s) => {
+                const Icon = s.icon
+                const active = isActive(s)
+                return (
+                  <Link
+                    key={s.path}
+                    to={s.path}
+                    onClick={() => setDrawerOpen(false)}
+                    aria-current={active ? 'page' : undefined}
+                    className={`flex items-center gap-3 px-3 py-3 rounded-md text-[15px] transition-colors ${
+                      active
+                        ? 'bg-accent-subtle text-accent-light font-medium'
+                        : 'text-secondary hover:text-primary hover:bg-surface-raised'
+                    }`}
+                  >
+                    <Icon size={18} className={s.path === '/memory' ? 'text-[#E07B3A]' : undefined} />
+                    {s.label}
+                    {s.path === '/memory' && corpusCount > 0 && (
+                      <span className="ml-auto text-[11px] font-medium tabular-nums px-1.5 py-0.5 rounded-full bg-[rgba(224,123,58,0.15)] text-[#F4A97B]">
+                        {corpusCount}
+                      </span>
+                    )}
+                  </Link>
+                )
+              })}
+            </div>
+          </nav>
+        </div>
+      )}
 
       {/* Page content */}
       {noPadding ? (
