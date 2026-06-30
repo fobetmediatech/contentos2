@@ -15,8 +15,8 @@
  * that reel skipped). Direct reel URLs avoid the IG block that profile scrapes hit.
  */
 
-import { startRun, pollRun, fetchDataset, ApifyError, apifyRunLimiter, withKeyFailover, chunk } from './apifyCore'
-import { ACTORS, buildReelVideoScraperInput } from './actors'
+import { startRun, pollRun, fetchDataset, ApifyError, apifyRunLimiter, withKeyFailover, chunk } from './apifyCore.js'
+import { ACTORS, buildReelVideoScraperInput } from './actors.js'
 
 // Video download is slower than a list scrape — give each run a wide poll budget.
 const VIDEO_POLL_MS = 240_000

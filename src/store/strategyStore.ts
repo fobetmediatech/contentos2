@@ -40,11 +40,24 @@ export const useStrategyStore = create<StrategyState>()(
     }),
     {
       name: 'content-strategy',
-      version: 1,
+      version: 3,
       storage: safePersistStorage,
       // Persist only the brief + last result; transient run state is not persisted.
       partialize: (s) => ({ brief: s.brief, result: s.result }),
-      migrate: (state) => state as StrategyState,
+      // v2 added brief.theme — spread EMPTY_BRIEF first so any new field is backfilled on older
+      // persisted state and the form/deck never read undefined. (A now-removed brief.imageKeyword
+      // may linger on old persisted state; it's unused and harmless.)
+      migrate: (persisted) => {
+        const s = (persisted ?? {}) as Partial<StrategyState>
+        return {
+          ...s,
+          brief: {
+            ...EMPTY_BRIEF,
+            ...(s.brief ?? {}),
+            theme: { ...EMPTY_BRIEF.theme, ...(s.brief?.theme ?? {}) },
+          },
+        } as StrategyState
+      },
     },
   ),
 )

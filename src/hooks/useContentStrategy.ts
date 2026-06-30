@@ -39,6 +39,7 @@ function toAccount(p: NormalizedProfile, source: AnalyzedAccount['source']): Ana
     engagementRate: p.engagementRate,
     verified: p.verified,
     source,
+    profilePicUrl: p.profilePicUrl,
   }
 }
 

@@ -7,6 +7,7 @@ const brief: StrategyBrief = {
   offer: 'Dubai relocation consultancy', language: 'hinglish', audience: 'HNIs worldwide',
   competitors: ['propertytalkswithad'], aspirational: ['rizwan.sajan'], brandColors: '',
   dislikes: 'no cringe videos', offLimits: 'nothing negative about Dubai',
+  theme: { preset: 'black-gold', accent: '', bg: '' },
 }
 
 describe('parseContentStrategyDoc', () => {
@@ -38,7 +39,7 @@ describe('parseContentStrategyDoc', () => {
 describe('buildContentStrategyPrompt', () => {
   it('injects the offer, language rule, and off-limits constraint', () => {
     const accounts: AnalyzedAccount[] = [
-      { username: 'propertytalkswithad', fullName: 'Akash', followers: 50000, engagementRate: 3.2, verified: false, source: 'competitor' },
+      { username: 'propertytalkswithad', fullName: 'Akash', followers: 50000, engagementRate: 3.2, verified: false, source: 'competitor', profilePicUrl: '' },
     ]
     const prompt = buildContentStrategyPrompt(brief, accounts, [])
     expect(prompt).toContain('Dubai relocation consultancy')

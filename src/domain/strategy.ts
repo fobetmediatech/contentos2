@@ -11,6 +11,15 @@ import type { CreatorHookSummary } from '../ai/prompts/creatorHookSummary'
 
 export type ContentLanguage = 'english' | 'hindi' | 'hinglish'
 
+/** Per-client deck look. preset picks the base palette; accent (hex, optional) overrides from brand colors. */
+export type DeckPreset = 'black-gold' | 'cream-yellow' | 'chai' | 'light'
+export interface DeckTheme {
+  preset: DeckPreset
+  accent: string // hex override; '' = preset/brand-color accent
+  bg: string     // hex override for the slide background; '' = preset background
+}
+export const DEFAULT_THEME: DeckTheme = { preset: 'black-gold', accent: '', bg: '' }
+
 /** The onboarding form — user-provided business context + seed handles. */
 export interface StrategyBrief {
   brandName: string
@@ -21,15 +30,16 @@ export interface StrategyBrief {
   audience: string
   competitors: string[]         // up to 5 direct-competitor @handles (analysis seeds)
   aspirational: string[]        // up to 4 aspirational @handles (style to replicate)
-  brandColors: string           // optional — hex/names, used to tint the doc
+  brandColors: string           // optional — hex/names; also used as the deck accent
   dislikes: string              // topics/styles the client dislikes
   offLimits: string             // off-limits topics (legal / sensitivity)
+  theme: DeckTheme              // per-client deck look (presentation only)
 }
 
 export const EMPTY_BRIEF: StrategyBrief = {
   brandName: '', primaryNiche: '', subNiche: '', offer: '', language: 'hinglish',
   audience: '', competitors: ['', '', '', '', ''], aspirational: ['', '', '', ''],
-  brandColors: '', dislikes: '', offLimits: '',
+  brandColors: '', dislikes: '', offLimits: '', theme: { ...DEFAULT_THEME },
 }
 
 /** The synthesized strategy (Gemini output, schema-validated). */
@@ -37,6 +47,8 @@ export interface ContentStrategyDoc {
   positioning: string
   audienceInsight: string
   competitiveSummary: string
+  /** Romanized (Latin-Hinglish) bullets synthesizing the winning hooks — never Devanagari. */
+  whatsWorking: string[]
   contentPillars: Array<{ name: string; description: string }>
   hookFormulas: Array<{ name: string; template: string; example: string }>
   contentIdeas: Array<{ title: string; hook: string; format: string; pillar: string }>
@@ -55,6 +67,7 @@ export interface AnalyzedAccount {
   engagementRate: number | null
   verified: boolean
   source: 'competitor' | 'discovered' | 'aspirational'
+  profilePicUrl: string  // IG CDN url — shown via /api/image-proxy with an initials fallback
 }
 
 /** Everything the printable document needs: the brief, the analysis, and the synthesized strategy. */

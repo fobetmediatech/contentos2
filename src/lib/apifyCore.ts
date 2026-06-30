@@ -10,7 +10,7 @@
  */
 
 import pLimit from 'p-limit'
-import { getClerkSessionToken } from './clerkToken'
+import { getClerkSessionToken } from './clerkToken.js'
 
 export const BASE_URL = '/api/apify'
 // 6.7: exponential poll backoff — start at 2s, multiply by 1.5 each poll, cap at 8s.
