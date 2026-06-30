@@ -12,10 +12,10 @@
 Every design decision should reinforce that someone who lives in the creator economy made this — not an enterprise SaaS team.
 
 ## Aesthetic Direction
-- **Direction:** Chai Dark — warm near-black background (the color of strong chai held to light), not clinical dark mode. Creator-studio energy. Editorial but not fashion-y.
-- **Decoration level:** Intentional — warm undertones everywhere, subtle card depth, DM Mono precision as a deliberate contrast signal
-- **Mood:** Warm, authoritative, precise. A research tool that feels like it was designed at a studio run by creators. The data feels real because the warmth makes you trust it.
-- **The rule:** Every neutral must have a warm undertone. No pure Tailwind slate grays (#94A3B8, #CBD5E1, etc.) — if a neutral doesn't have amber/brown in it, reject it.
+- **Direction:** Terracotta — warm earthen surfaces (espresso-brown in dark, almond-cream in light), almond/redwood text, a fawn→redwood accent, with cambridge-blue sage as the cool counterpoint. Mediterranean, sun-warmed, editorial. Ships with **both dark (default) and light** modes — a manual sun/moon toggle in the nav (persisted), defaulting to follow the OS.
+- **Decoration level:** Intentional — warm tonal surface depth, DM Mono precision as a deliberate contrast signal, one warm accent that pops and one sage for info.
+- **Mood:** Warm, grounded, precise. A research tool that feels like a sunlit terracotta courtyard — the data feels real because the surface is warm and unhurried.
+- **The rule:** Surfaces are warm earth tones, the accent is fawn (dark) / redwood (light) used sparingly, sage cambridge-blue carries "info". All colors are CSS variables (tokens.css); never hardcode a hex that won't flip with the mode (the only exceptions: Clerk `appearance.variables` and Recharts/SVG presentation attributes, which can't read `var()`).
 
 ## Competitive Differentiation
 - **Later.com:** Warm cream + bold editorial (light). We go warm dark — unclaimed territory.
@@ -57,51 +57,41 @@ Every design decision should reinforce that someone who lives in the creator eco
 
 ## Color System
 
-### Approach: Chai Dark (primary)
+**Palette anchors:** Cambridge blue `#A1B5A8` · Khaki `#CBB093` · Fawn `#DFA477` · Redwood `#A4624D` · Almond `#F5DFC5`.
 
+Every color is a CSS variable in `src/shared/styles/tokens.css`. Dark is the default `:root`; light overrides under `:root[data-theme="light"]`. The active scheme is written to `data-theme` on `<html>` by a pre-paint script in `index.html` (no flash) and by `src/store/themeStore.ts` at runtime; the preference is `light` / `dark` / `system` (default), persisted in `localStorage`. Translucent borders/tints flip via the `--border-rgb` / `--accent-rgb` / `--ai-rgb` channel vars. Tailwind tokens (`tailwind.config.js`) and `[var(--…)]` arbitrary classes both read from here — so the whole app flips with the OS theme. **Never hardcode a hex in a component** (the two exceptions that need literals: Clerk `appearance.variables`, which Clerk derives shades from in JS, and SVG/Recharts presentation attributes, where `var()` doesn't resolve).
+
+### Dark mode (default)
 ```css
-/* Surfaces */
---color-bg: #1A1410;             /* chai warm near-black — the background */
---color-surface: #2C2218;        /* card base — floats off bg, no shadow needed */
---color-surface-raised: #3D3025; /* hover states, secondary surfaces */
---color-surface-elevated: #4A3C2E; /* tooltips, dropdowns */
-
-/* Borders */
---color-border: rgba(245, 237, 214, 0.08);    /* subtle warm border */
---color-border-strong: rgba(245, 237, 214, 0.15); /* focus states, card hovers */
-
-/* Text */
---color-text-primary: #F5EDD6;   /* aged paper warm white — NOT pure white */
---color-text-secondary: #C4A882; /* warm muted text */
---color-text-muted: #7A6A54;     /* labels, placeholders, captions */
-
-/* Accent — Saffron Orange */
---color-accent: #E07B3A;         /* marigold energy — CTAs, active states, links */
---color-accent-hover: #C4612A;   /* darker on hover */
---color-accent-subtle: rgba(224, 123, 58, 0.12); /* accent backgrounds, tinted surfaces */
---color-accent-light: #F4A97B;   /* lighter accent for text on dark accent bg */
-
-/* AI Insight Tint — ONLY for Gemini-generated content */
---color-ai-tint: #A78BFA;        /* soft violet — signals "this came from AI, not raw data" */
---color-ai-subtle: rgba(167, 139, 250, 0.10);
-
-/* Semantic */
---color-success: #4CAF7D;        /* warm-lean green — high ER, confirmed location */
---color-success-subtle: rgba(76, 175, 125, 0.10);
---color-warning: #D97706;        /* amber — "likely" location badges */
---color-warning-bg: rgba(217, 119, 6, 0.10);
---color-error: #E05C5C;          /* error states, low ER warning */
-
-/* Shadows */
---shadow-card: 0 1px 3px rgba(0,0,0,0.4), 0 0 0 1px var(--color-border);
+--color-bg: #1D1510;             /* deep warm espresso — real depth behind the surfaces */
+--color-surface: #2B2019;        /* terracotta-stained card base — clear lift off bg */
+--color-surface-raised: #38291F;
+--color-surface-elevated: #47362A;
+--color-border: rgba(var(--border-rgb), 0.12);   /* --border-rgb: 245,223,197 (almond) */
+--color-text-primary: #F5DFC5;   /* almond */
+--color-text-secondary: #CBB093; /* khaki */
+--color-text-muted: #A89177;     /* muted khaki — WCAG AA on espresso */
+--color-accent: #DFA477;         /* fawn — CTAs, active states, links */
+--color-accent-hover: #C9885C;
+--color-accent-light: #ECC09B;
+--color-success: #8FB088;  --color-warning: #D8923F;  --color-error: #CB5F4F;
+--color-info: #A1B5A8;     --color-ai-tint: #A78BFA;  /* AI-generated content ONLY */
 ```
 
-### Alternative: Warm Cream (light mode, if ever needed)
-- Background: `#FAFAF8` (warm bone, not clinical white)
-- Surface: `#FFFFFF`
-- Text primary: `#1C1410` (warm near-black)
-- Text secondary: `#5C4A30`
-- All accents remain identical (saffron orange, DM Mono, etc.)
+### Light mode (`:root[data-theme="light"]`)
+```css
+--color-bg: #F4E4CE;             /* warm almond */
+--color-surface: #FFFCF6;
+--color-surface-raised: #EFE0C8;
+--color-border: rgba(var(--border-rgb), 0.12);   /* --border-rgb: 58,34,24 (redwood-brown) */
+--color-text-primary: #3A2218;   /* deep redwood-brown */
+--color-text-secondary: #7A5544;
+--color-text-muted: #876F54;     /* muted khaki — WCAG AA on almond */
+--color-accent: #A4624D;         /* redwood (deepened fawn for contrast on cream) */
+--color-accent-light: #C97E5E;
+--color-success: #5E7A4A;  --color-warning: #B57A12;  --color-error: #B0463A;
+--color-info: #5C7D6E;     --color-ai-tint: #6D5BC4;
+```
 
 ## Spacing
 - **Base unit:** 8px
@@ -183,3 +173,9 @@ color: var(--color-text-muted);
 | 2026-06-01 | Saffron orange (#E07B3A) as accent | Marigold energy. Completely absent from competitor palette (all use blue/indigo/purple). |
 | 2026-06-01 | AI insight tint violet (#A78BFA) | Semantic signal: this color only appears on Gemini-generated content. Users learn to read it. |
 | 2026-06-01 | Warm undertone rule for all neutrals | Discipline that makes the whole system feel coherent vs. assembled from parts. |
+| 2026-06-30 | Muted text #7A6A54 → #8B7D6B | Old value sat at the WCAG AA contrast floor on the chai bg. Lightened a touch while keeping the warm brown undertone. |
+| 2026-06-30 | Chai Dark → Lotus Pond + light/dark | Full palette pivot to pond-green/beige/rosy-brown, driven entirely by CSS vars so the app flips between dark (default) and light via `prefers-color-scheme`. Accent moved saffron → rosy brown. Clerk + Recharts keep fixed hex (can't take vars). |
+| 2026-06-30 | Lotus Pond → Terracotta | Green scheme rejected. Adopted the terracotta palette: warm earth surfaces, almond/redwood text, fawn→redwood accent, cambridge-blue sage for info. Same var-driven light/dark machinery — only token values + the fixed Clerk/Recharts literals changed. |
+| 2026-06-30 | Spotlight nav split | Active tab centers; the rest keep fixed order, split half-left / half-right around it (was: all clustered at the end). |
+| 2026-06-30 | Manual light/dark toggle | Theme was OS-only (`prefers-color-scheme`). Added a persisted preference (light/dark/system) driven via `data-theme` on `<html>` + a sun/moon toggle in the nav, so users can override the OS. Pre-paint script in `index.html` prevents a flash. `useColorScheme` now reads the effective (toggled) scheme so Clerk surfaces follow it. |
+| 2026-06-30 | Deepen dark surfaces | Dark mode read "dull" — bg `#2C2119` sat too close to the surfaces (low contrast, flat brown wash). Deepened bg → `#1D1510` and widened the surface-elevation ramp so cards lift and the almond text + fawn accent pop. Light mode unchanged. |

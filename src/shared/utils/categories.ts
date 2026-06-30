@@ -27,8 +27,8 @@ export const COMPETITOR_CATEGORIES: Record<string, CategoryDef> = {
     sectionLabel: 'Top 5 — Established Authority',
     taxonomy:
       'Established authority accounts with large follower bases (typically 100K+), high absolute engagement numbers, consistent posting history, and strong brand recognition in the niche. These are the dominant players.',
-    badgeBg: 'bg-[rgba(224,123,58,0.10)]',
-    badgeText: 'text-[#F4A97B]',
+    badgeBg: 'bg-[rgba(var(--accent-rgb),0.10)]',
+    badgeText: 'text-[var(--color-accent-light)]',
   },
   trending: {
     id: 'trending',
@@ -36,8 +36,8 @@ export const COMPETITOR_CATEGORIES: Record<string, CategoryDef> = {
     sectionLabel: 'Trending 5 — Rising Niche Accounts',
     taxonomy:
       'Rising creators with real traction in the SAME niche as the reference accounts — roughly 10K–500K followers. Niche membership is REQUIRED first — engagement rate is only the tiebreaker WITHIN the niche, never a substitute for it. Among niche-relevant accounts, prioritise those whose ER outpaces what is typical for their follower tier, signalling active momentum. EXCLUDE nano/micro accounts under ~10K followers: their ER is inflated by a tiny follower count and they are not meaningful competitors. 500K+ accounts are established players (Top) regardless of ER. NEVER include an off-niche or nano account here just because its engagement is high.',
-    badgeBg: 'bg-[rgba(224,123,58,0.12)]',
-    badgeText: 'text-[#E07B3A]',
+    badgeBg: 'bg-[rgba(var(--accent-rgb),0.12)]',
+    badgeText: 'text-[var(--color-accent)]',
   },
 }
 
@@ -58,8 +58,8 @@ export const DISCOVERY_CATEGORIES: Record<string, CategoryDef> = {
     sectionLabel: 'Established Authority',
     taxonomy:
       'Established authority in this city+niche: large follower base (typically 100K+), consistent posting, and strong community trust. These are the dominant voices in the local scene.',
-    badgeBg: 'bg-[rgba(224,123,58,0.10)]',
-    badgeText: 'text-[#F4A97B]',
+    badgeBg: 'bg-[rgba(var(--accent-rgb),0.10)]',
+    badgeText: 'text-[var(--color-accent-light)]',
   },
   trending: {
     id: 'trending',
@@ -67,8 +67,8 @@ export const DISCOVERY_CATEGORIES: Record<string, CategoryDef> = {
     sectionLabel: 'Growing Voices',
     taxonomy:
       'Growth-phase creators: ER significantly exceeds their follower-tier average, signalling active momentum in the local scene. Typically under 500K followers. Accounts with 500K+ must go to Top.',
-    badgeBg: 'bg-[rgba(224,123,58,0.12)]',
-    badgeText: 'text-[#E07B3A]',
+    badgeBg: 'bg-[rgba(var(--accent-rgb),0.12)]',
+    badgeText: 'text-[var(--color-accent)]',
   },
 }
 

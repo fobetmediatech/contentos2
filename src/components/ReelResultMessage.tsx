@@ -26,13 +26,13 @@ export function ReelResultMessage({ payload, onSuggest, onStartOver }: Props) {
     <>
       {/* Completion bubble — mirrors the competitor/discovery result header. */}
       <div className="flex items-start gap-2">
-        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(167,139,250,0.12)] flex items-center justify-center mt-0.5">
-          <Video size={14} className="text-[#A78BFA]" />
+        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(var(--ai-rgb),0.12)] flex items-center justify-center mt-0.5">
+          <Video size={14} className="text-[var(--color-ai-tint)]" />
         </div>
         <div className="flex flex-col gap-2 max-w-[80%]">
-          <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(245,237,214,0.08)] text-sm leading-relaxed">
+          <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(var(--border-rgb),0.08)] text-sm leading-relaxed">
             <div className="flex items-center gap-2 mb-1">
-              <Bot size={14} className="text-[#A78BFA] flex-shrink-0" />
+              <Bot size={14} className="text-[var(--color-ai-tint)] flex-shrink-0" />
               <span className="font-semibold text-primary">Reel breakdown</span>
             </div>
             <p className="text-secondary">
@@ -41,7 +41,7 @@ export function ReelResultMessage({ payload, onSuggest, onStartOver }: Props) {
           </div>
           <button
             onClick={onStartOver}
-            className="self-start px-4 py-2 text-sm text-secondary border border-[rgba(245,237,214,0.10)] rounded-xl hover:bg-surface-raised transition-colors"
+            className="self-start px-4 py-2 text-sm text-secondary border border-[rgba(var(--border-rgb),0.10)] rounded-xl hover:bg-surface-raised transition-colors"
           >
             Start over
           </button>

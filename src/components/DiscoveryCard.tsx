@@ -39,7 +39,7 @@ function formatFollowers(n: number): string {
 function LocationBadge({ confidence }: { confidence: DiscoveryResult['locationConfidence'] }) {
   if (confidence === 'confirmed') {
     return (
-      <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-[#1A2E1A] text-[#4DB88A] border border-[#2A4A2A]">
+      <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-surface)] text-[var(--color-success)] border border-[var(--color-surface-raised)]">
         <MapPin size={10} />
         Confirmed
       </span>
@@ -47,14 +47,14 @@ function LocationBadge({ confidence }: { confidence: DiscoveryResult['locationCo
   }
   if (confidence === 'likely') {
     return (
-      <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-transparent text-[#C4862A] border border-[#C4862A]/60">
+      <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-transparent text-[var(--color-accent-hover)] border border-[rgba(var(--accent-rgb),0.60)]">
         <MapPin size={10} />
         Likely
       </span>
     )
   }
   return (
-    <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-[#3D3025] text-[#7A6A54] opacity-70">
+    <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-surface-raised)] text-[var(--color-text-muted)] opacity-70">
       <MapPin size={10} />
       Unconfirmed
     </span>
@@ -83,11 +83,11 @@ export const DiscoveryCard = memo(function DiscoveryCard({ result, profile, coho
       role={onSelect ? 'checkbox' : undefined}
       aria-checked={onSelect ? isSelected : undefined}
       tabIndex={onSelect ? 0 : undefined}
-      className={`bg-[#2C2218] rounded-xl p-4 relative transition-colors ${
+      className={`bg-[var(--color-surface)] rounded-xl p-4 relative transition-colors ${
         isSelected
-          ? 'border-0 ring-2 ring-[#E07B3A] ring-offset-1 ring-offset-[#1A1410]'
-          : 'border border-[rgba(245,237,214,0.08)] hover:border-[rgba(245,237,214,0.15)]'
-      } ${onSelect ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E07B3A]' : ''} ${dismissed ? 'opacity-60 hover:opacity-100' : ''}`}
+          ? 'border-0 ring-2 ring-[var(--color-accent)] ring-offset-1 ring-offset-[var(--color-bg)]'
+          : 'border border-[rgba(var(--border-rgb),0.08)] hover:border-[rgba(var(--border-rgb),0.15)]'
+      } ${onSelect ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]' : ''} ${dismissed ? 'opacity-60 hover:opacity-100' : ''}`}
       onClick={onSelect ? () => onSelect(result.username) : undefined}
       onKeyDown={onSelect ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(result.username) } } : undefined}
     >
@@ -95,9 +95,9 @@ export const DiscoveryCard = memo(function DiscoveryCard({ result, profile, coho
       {onSelect && (
         <div className="absolute top-3 left-3">
           {isSelected ? (
-            <CheckSquare size={18} className="text-[#E07B3A]" />
+            <CheckSquare size={18} className="text-[var(--color-accent)]" />
           ) : (
-            <Square size={18} className="text-[#7A6A54]" />
+            <Square size={18} className="text-[var(--color-text-muted)]" />
           )}
         </div>
       )}
@@ -116,7 +116,7 @@ export const DiscoveryCard = memo(function DiscoveryCard({ result, profile, coho
           <img
             src={profile.profilePicUrl}
             alt={`@${result.username}`}
-            className="w-12 h-12 rounded-full object-cover flex-shrink-0 bg-[#3D3025]"
+            className="w-12 h-12 rounded-full object-cover flex-shrink-0 bg-[var(--color-surface-raised)]"
             referrerPolicy="no-referrer"
             loading="lazy"
             onError={(e) => {
@@ -128,7 +128,7 @@ export const DiscoveryCard = memo(function DiscoveryCard({ result, profile, coho
         ) : null}
         {/* Initials fallback */}
         <div
-          className={`w-12 h-12 rounded-full bg-[#3D3025] flex items-center justify-center flex-shrink-0 text-[#C4A882] font-semibold text-sm ${
+          className={`w-12 h-12 rounded-full bg-[var(--color-surface-raised)] flex items-center justify-center flex-shrink-0 text-[var(--color-text-secondary)] font-semibold text-sm ${
             profile?.profilePicUrl ? 'hidden' : ''
           }`}
         >
@@ -144,16 +144,16 @@ export const DiscoveryCard = memo(function DiscoveryCard({ result, profile, coho
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => e.stopPropagation()}
-              className="font-semibold text-[#F5EDD6] text-sm hover:text-[#E07B3A] hover:underline transition-colors"
+              className="font-semibold text-[var(--color-text-primary)] text-sm hover:text-[var(--color-accent)] hover:underline transition-colors"
             >@{result.username}</a>
             {profile?.verified && (
-              <BadgeCheck size={14} className="text-[#C4A882] flex-shrink-0" />
+              <BadgeCheck size={14} className="text-[var(--color-text-secondary)] flex-shrink-0" />
             )}
             <LocationBadge confidence={result.locationConfidence} />
             {seen && (
               <span
                 title={seen.detail ? `Seen in ${seen.detail}` : undefined}
-                className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-[rgba(224,123,58,0.12)] text-[#F4A97B] border border-[rgba(224,123,58,0.20)]"
+                className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-[rgba(var(--accent-rgb),0.12)] text-[var(--color-accent-light)] border border-[rgba(var(--accent-rgb),0.20)]"
               >
                 <History size={10} />
                 {seen.label}
@@ -161,7 +161,7 @@ export const DiscoveryCard = memo(function DiscoveryCard({ result, profile, coho
             )}
           </div>
           {profile?.fullName && profile.fullName !== result.username && (
-            <p className="text-xs text-[#C4A882] mt-0.5 truncate">{profile.fullName}</p>
+            <p className="text-xs text-[var(--color-text-secondary)] mt-0.5 truncate">{profile.fullName}</p>
           )}
           {profile && (
             <p className="text-xs text-secondary mt-0.5">
@@ -193,7 +193,7 @@ export const DiscoveryCard = memo(function DiscoveryCard({ result, profile, coho
           {result.specialties.map((s) => (
             <span
               key={s}
-              className="text-xs px-2 py-0.5 rounded-full bg-[#1A2520] text-[#4DB894] border border-[#2A3D35]"
+              className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-surface)] text-[var(--color-success)] border border-[var(--color-surface-raised)]"
             >
               {s}
             </span>
@@ -204,13 +204,13 @@ export const DiscoveryCard = memo(function DiscoveryCard({ result, profile, coho
       {/* Content focus + partnership ready */}
       <div className="mt-2 flex items-center gap-3">
         {result.contentFocus && (
-          <span className="inline-flex items-center gap-1 text-xs text-[#C4A882]">
-            <Video size={11} className="text-[#7A6A54]" />
+          <span className="inline-flex items-center gap-1 text-xs text-[var(--color-text-secondary)]">
+            <Video size={11} className="text-[var(--color-text-muted)]" />
             {result.contentFocus}
           </span>
         )}
         {result.partnershipReady && (
-          <span className="inline-flex items-center gap-1 text-xs text-[#E07B3A] font-medium">
+          <span className="inline-flex items-center gap-1 text-xs text-[var(--color-accent)] font-medium">
             <Mail size={11} />
             Partnership ready
           </span>
@@ -218,13 +218,13 @@ export const DiscoveryCard = memo(function DiscoveryCard({ result, profile, coho
       </div>
 
       {/* AI rationale */}
-      <p className="mt-3 text-sm text-[#C4A882] leading-relaxed">
+      <p className="mt-3 text-sm text-[var(--color-text-secondary)] leading-relaxed">
         {result.rationale}
       </p>
 
       {/* Feedback (Phase 3) — save/dismiss trains future rankings toward your taste. */}
-      <div className="mt-3 pt-2 border-t border-[rgba(245,237,214,0.06)] flex items-center justify-between">
-        <span className="text-[11px] text-[#7A6A54]">More like this?</span>
+      <div className="mt-3 pt-2 border-t border-[rgba(var(--border-rgb),0.06)] flex items-center justify-between">
+        <span className="text-[11px] text-[var(--color-text-muted)]">More like this?</span>
         <FeedbackControl username={result.username} />
       </div>
     </div>

@@ -7,7 +7,7 @@
  */
 import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, Plus, X, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, X, Trash2, CalendarDays } from 'lucide-react'
 import {
   listAccounts,
   listScheduledPosts,
@@ -16,6 +16,7 @@ import {
   deleteScheduledPost,
 } from '../lib/calendarRepo'
 import { SearchablePicker } from '../components/SearchablePicker'
+import { EmptyState } from '../components/EmptyState'
 import type { ContentType, PostStatus, ScheduledPost } from '../domain/calendar'
 
 const CONTENT_TYPES: ContentType[] = ['reel', 'post', 'story', 'carousel']
@@ -28,15 +29,15 @@ const MONTH_NAMES = [
 
 // Distinct hues per status so day chips are easy to tell apart: grey → yellow → orange → green → red.
 const STATUS_STYLES: Record<PostStatus, string> = {
-  idea: 'bg-[rgba(122,106,84,0.22)] text-[#C4A882]',
+  idea: 'bg-[rgba(122,106,84,0.22)] text-[var(--color-text-secondary)]',
   draft: 'bg-[rgba(232,197,71,0.16)] text-[#E8C547]',
-  scheduled: 'bg-[rgba(224,123,58,0.22)] text-[#F4A97B]',
-  posted: 'bg-[rgba(76,175,125,0.20)] text-[#5FBF94]',
+  scheduled: 'bg-[rgba(var(--accent-rgb),0.22)] text-[var(--color-accent-light)]',
+  posted: 'bg-[rgba(76,175,125,0.20)] text-[var(--color-success)]',
   skipped: 'bg-[rgba(224,92,92,0.13)] text-[#C98A8A] line-through',
 }
 
 const inputCls =
-  'mt-1 w-full bg-[#3D3025] border border-[rgba(245,237,214,0.08)] rounded-md px-3 py-2 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-[#E07B3A]'
+  'mt-1 w-full bg-[var(--color-surface-raised)] border border-[rgba(var(--border-rgb),0.08)] rounded-md px-3 py-2 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-[var(--color-accent)]'
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
@@ -164,6 +165,10 @@ export function CalendarPage() {
   }
 
   const todayKey = ymd(new Date())
+  // Mobile "New post" defaults to today if we're viewing this month, else the 1st.
+  const monthAddDate = sameMonth(new Date(), month)
+    ? new Date()
+    : new Date(month.getFullYear(), month.getMonth(), 1)
   const thisYear = new Date().getFullYear()
   const displayedYear = month.getFullYear()
   const minYear = Math.min(thisYear - 3, displayedYear)
@@ -175,7 +180,7 @@ export function CalendarPage() {
     return (
       <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4" onClick={closeModal}>
         <div
-          className="bg-surface border border-[rgba(245,237,214,0.12)] rounded-lg w-full max-w-md p-5 max-h-[90vh] overflow-y-auto"
+          className="bg-surface border border-[rgba(var(--border-rgb),0.12)] rounded-lg w-full max-w-md p-5 max-h-[90vh] overflow-y-auto"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-between mb-4">
@@ -301,7 +306,7 @@ export function CalendarPage() {
               <button
                 onClick={() => save.mutate(d)}
                 disabled={!canSave || save.isPending}
-                className="bg-[#E07B3A] hover:bg-[#C4612A] disabled:opacity-50 text-white text-sm font-medium rounded-md px-4 py-2 transition-colors"
+                className="bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] disabled:opacity-50 text-white text-sm font-medium rounded-md px-4 py-2 transition-colors"
               >
                 {save.isPending ? 'Saving…' : 'Save'}
               </button>
@@ -352,7 +357,7 @@ export function CalendarPage() {
             value={month.getMonth()}
             onChange={(e) => setMonth(new Date(month.getFullYear(), Number(e.target.value), 1))}
             aria-label="Month"
-            className="ml-2 bg-[#3D3025] border border-[rgba(245,237,214,0.08)] rounded-md px-2 py-1 text-sm text-primary focus:outline-none focus:border-[#E07B3A]"
+            className="ml-2 bg-[var(--color-surface-raised)] border border-[rgba(var(--border-rgb),0.08)] rounded-md px-2 py-1 text-sm text-primary focus:outline-none focus:border-[var(--color-accent)]"
           >
             {MONTH_NAMES.map((m, i) => (
               <option key={m} value={i}>
@@ -364,7 +369,7 @@ export function CalendarPage() {
             value={month.getFullYear()}
             onChange={(e) => setMonth(new Date(Number(e.target.value), month.getMonth(), 1))}
             aria-label="Year"
-            className="bg-[#3D3025] border border-[rgba(245,237,214,0.08)] rounded-md px-2 py-1 text-sm text-primary focus:outline-none focus:border-[#E07B3A]"
+            className="bg-[var(--color-surface-raised)] border border-[rgba(var(--border-rgb),0.08)] rounded-md px-2 py-1 text-sm text-primary focus:outline-none focus:border-[var(--color-accent)]"
           >
             {years.map((y) => (
               <option key={y} value={y}>
@@ -378,16 +383,21 @@ export function CalendarPage() {
             const n = new Date()
             setMonth(new Date(n.getFullYear(), n.getMonth(), 1))
           }}
-          className="text-xs text-secondary hover:text-primary border border-[rgba(245,237,214,0.12)] rounded-md px-2.5 py-1 transition-colors"
+          className="text-xs text-secondary hover:text-primary border border-[rgba(var(--border-rgb),0.12)] rounded-md px-2.5 py-1 transition-colors"
         >
           Today
         </button>
       </div>
 
-      {accounts.length === 0 && (
-        <p className="text-muted text-sm mb-3">Add accounts in the Dashboard first, then you can schedule posts for them.</p>
-      )}
-
+      {accounts.length === 0 ? (
+        <EmptyState
+          icon={CalendarDays}
+          title="No accounts to schedule for"
+          description="The calendar plans posts for accounts you track. Add one in the Dashboard, then come back to start scheduling."
+          action={{ label: 'Go to Dashboard', to: '/tracking' }}
+        />
+      ) : (
+      <>
       {/* Status legend */}
       <div className="flex flex-wrap items-center gap-1.5 mb-3">
         <span className="text-[11px] font-mono uppercase tracking-wide text-muted mr-1">Status</span>
@@ -398,6 +408,67 @@ export function CalendarPage() {
         ))}
       </div>
 
+      {/* Mobile agenda — list view (the 7-col grid is unreadable under ~380px) */}
+      <div className="sm:hidden">
+        <button
+          onClick={() => openCreate(monthAddDate)}
+          disabled={accounts.length === 0}
+          className="w-full flex items-center justify-center gap-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] disabled:opacity-50 text-white text-sm font-medium rounded-md py-3 mb-4 transition-colors"
+        >
+          <Plus size={16} /> New post
+        </button>
+        {(() => {
+          const monthDays = cells.filter((d) => sameMonth(d, month))
+          const daysWithPosts = monthDays.filter((d) => (byDay[ymd(d)] ?? []).length > 0)
+          if (daysWithPosts.length === 0) {
+            return (
+              <p className="text-muted text-sm text-center py-8">
+                No posts planned this month yet. Tap “New post” to add one.
+              </p>
+            )
+          }
+          return (
+            <div className="flex flex-col gap-4">
+              {daysWithPosts.map((d) => {
+                const key = ymd(d)
+                const dayPosts = byDay[key] ?? []
+                const isToday = key === todayKey
+                return (
+                  <div key={key}>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className={`text-xs font-mono uppercase tracking-wide ${isToday ? 'text-[var(--color-accent)] font-semibold' : 'text-muted'}`}>
+                        {WEEKDAYS[d.getDay()]} {d.getDate()}
+                      </span>
+                      <button
+                        onClick={() => openCreate(d)}
+                        aria-label={`Add post on ${MONTH_NAMES[d.getMonth()]} ${d.getDate()}`}
+                        className="flex items-center justify-center w-8 h-8 -my-1 text-muted hover:text-[var(--color-accent)] transition-colors"
+                      >
+                        <Plus size={15} />
+                      </button>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      {dayPosts.map((p) => (
+                        <button
+                          key={p.id}
+                          onClick={() => openEdit(p)}
+                          className={`text-left text-sm rounded-md px-3 py-2.5 ${STATUS_STYLES[p.status]}`}
+                        >
+                          {accountFilter === 'all' && <span className="opacity-70">{accountLabel(p.accountUsername)}: </span>}
+                          {p.title || p.contentType}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })()}
+      </div>
+
+      {/* Desktop month grid (hidden on phones in favor of the agenda above) */}
+      <div className="hidden sm:block">
       {/* Weekday header */}
       <div className="grid grid-cols-7 gap-px mb-px">
         {WEEKDAYS.map((w) => (
@@ -408,7 +479,7 @@ export function CalendarPage() {
       </div>
 
       {/* Day grid */}
-      <div className="grid grid-cols-7 gap-px bg-[rgba(245,237,214,0.06)] rounded-lg overflow-hidden">
+      <div className="grid grid-cols-7 gap-px bg-[rgba(var(--border-rgb),0.06)] rounded-lg overflow-hidden">
         {cells.map((d) => {
           const key = ymd(d)
           const dayPosts = byDay[key] ?? []
@@ -425,13 +496,13 @@ export function CalendarPage() {
               className={`group min-h-[92px] p-1.5 bg-chai flex flex-col gap-1 ${inMonth ? '' : 'opacity-40'}`}
             >
               <div className="flex items-center justify-between">
-                <span className={`text-xs font-mono ${isToday ? 'text-[#E07B3A] font-semibold' : 'text-muted'}`}>
+                <span className={`text-xs font-mono ${isToday ? 'text-[var(--color-accent)] font-semibold' : 'text-muted'}`}>
                   {d.getDate()}
                 </span>
                 <button
                   onClick={() => openCreate(d)}
                   aria-label="Add post"
-                  className="opacity-0 group-hover:opacity-100 focus:opacity-100 text-muted hover:text-[#E07B3A] transition-opacity"
+                  className="opacity-0 group-hover:opacity-100 focus:opacity-100 text-muted hover:text-[var(--color-accent)] transition-opacity"
                 >
                   <Plus size={13} />
                 </button>
@@ -460,6 +531,9 @@ export function CalendarPage() {
       <p className="text-muted text-xs mt-3">
         Hover a day and click + to add · drag a post to move it · click a post to edit.
       </p>
+      </div>
+      </>
+      )}
 
       {draft && renderModal(draft)}
     </div>

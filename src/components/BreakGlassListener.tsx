@@ -92,12 +92,12 @@ export function BreakGlassListener() {
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4" onClick={close}>
       <div
-        className="bg-surface border border-[rgba(245,237,214,0.14)] rounded-lg w-full max-w-sm p-5"
+        className="bg-surface border border-[rgba(var(--border-rgb),0.14)] rounded-lg w-full max-w-sm p-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-primary text-lg font-medium flex items-center gap-2">
-            <ShieldCheck size={18} className="text-[#E07B3A]" /> Recovery access
+            <ShieldCheck size={18} className="text-[var(--color-accent)]" /> Recovery access
           </h2>
           <button onClick={close} aria-label="Close" className="text-muted hover:text-primary">
             <X size={18} />
@@ -119,7 +119,7 @@ export function BreakGlassListener() {
               }}
               placeholder="Recovery code"
               disabled={locked}
-              className="w-full bg-[#3D3025] border border-[rgba(245,237,214,0.08)] rounded-md px-3 py-2 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-[#E07B3A] disabled:opacity-50"
+              className="w-full bg-[var(--color-surface-raised)] border border-[rgba(var(--border-rgb),0.08)] rounded-md px-3 py-2 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-[var(--color-accent)] disabled:opacity-50"
             />
             {status === 'error' && !locked && <p className="text-danger text-xs mt-2">Incorrect code.</p>}
             {locked && <p className="text-danger text-xs mt-2">Too many attempts — wait a moment and try again.</p>}
@@ -130,7 +130,7 @@ export function BreakGlassListener() {
               <button
                 onClick={() => void submit()}
                 disabled={!code.trim() || status === 'submitting' || locked}
-                className="bg-[#E07B3A] hover:bg-[#C4612A] disabled:opacity-50 text-white text-sm font-medium rounded-md px-4 py-2 transition-colors"
+                className="bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] disabled:opacity-50 text-white text-sm font-medium rounded-md px-4 py-2 transition-colors"
               >
                 {status === 'submitting' ? 'Checking…' : 'Unlock'}
               </button>

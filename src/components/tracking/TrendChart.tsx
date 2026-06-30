@@ -34,14 +34,14 @@ function compactNumber(n: number): string {
   return `${n}`
 }
 
-const GRID_COLOR = 'rgba(245,237,214,0.06)'
-const AXIS_COLOR = '#7A6A54'
+const GRID_COLOR = 'rgba(245,223,197,0.06)'
+const AXIS_COLOR = '#A89177'
 
 const tooltipStyle: React.CSSProperties = {
-  backgroundColor: '#2C2218',
-  border: '1px solid rgba(245,237,214,0.12)',
+  backgroundColor: '#382B21',
+  border: '1px solid rgba(245,223,197,0.12)',
   borderRadius: '8px',
-  color: '#F5EDD6',
+  color: '#F5DFC5',
   fontFamily: '"DM Mono", monospace',
   fontSize: '11px',
   padding: '8px 12px',
@@ -55,7 +55,7 @@ const axisStyle = {
 
 function NoData({ message }: { message: string }) {
   return (
-    <div className="flex items-center justify-center h-full text-[#7A6A54] font-mono text-xs">
+    <div className="flex items-center justify-center h-full text-[var(--color-text-muted)] font-mono text-xs">
       {message}
     </div>
   )
@@ -64,7 +64,7 @@ function NoData({ message }: { message: string }) {
 export function TrendChart({
   data,
   label,
-  color = '#E07B3A',
+  color = '#DFA477',
   type = 'line',
   formatter,
   axisFormatter,
@@ -125,8 +125,8 @@ export function TrendChart({
             contentStyle={tooltipStyle}
             formatter={tooltipFormatter}
             labelFormatter={labelForIndex}
-            labelStyle={{ color: '#C4A882', marginBottom: 4 }}
-            cursor={{ fill: 'rgba(224,123,58,0.06)' }}
+            labelStyle={{ color: '#CBB093', marginBottom: 4 }}
+            cursor={{ fill: 'rgba(223,164,119,0.06)' }}
           />
           <Bar dataKey="value" fill={color} radius={[3, 3, 0, 0]} maxBarSize={32} />
         </BarChart>
@@ -142,7 +142,7 @@ export function TrendChart({
           contentStyle={tooltipStyle}
           formatter={tooltipFormatter}
           labelFormatter={labelForIndex}
-          labelStyle={{ color: '#C4A882', marginBottom: 4 }}
+          labelStyle={{ color: '#CBB093', marginBottom: 4 }}
         />
         <Line
           type="monotone"
@@ -150,7 +150,7 @@ export function TrendChart({
           stroke={color}
           strokeWidth={2}
           dot={false}
-          activeDot={{ r: 4, fill: color, stroke: '#1A1410', strokeWidth: 2 }}
+          activeDot={{ r: 4, fill: color, stroke: '#2C2119', strokeWidth: 2 }}
         />
       </LineChart>
     </ResponsiveContainer>

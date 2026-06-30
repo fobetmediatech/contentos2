@@ -45,16 +45,16 @@ export function ConversationSwitcher({ conversations, activeId, onSwitch, onNew,
           onClick={() => setOpen((o) => !o)}
           aria-haspopup="listbox"
           aria-expanded={open}
-          className="flex items-center gap-1.5 max-w-[55vw] px-3 py-1.5 text-sm rounded-xl bg-[#2C2218] border border-[rgba(245,237,214,0.08)] text-[#C4A882] hover:text-[#F5EDD6] hover:border-[rgba(245,237,214,0.15)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E07B3A] transition-colors"
+          className="flex items-center gap-1.5 max-w-[55vw] px-3 py-1.5 text-sm rounded-xl bg-[var(--color-surface)] border border-[rgba(var(--border-rgb),0.08)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:border-[rgba(var(--border-rgb),0.15)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] transition-colors"
           aria-label="Switch conversation"
         >
-          <MessageSquare size={14} className="flex-shrink-0 text-[#7A6A54]" />
+          <MessageSquare size={14} className="flex-shrink-0 text-[var(--color-text-muted)]" />
           <span className="truncate">{active?.title ?? 'Chat'}</span>
-          <ChevronDown size={14} className="flex-shrink-0 text-[#7A6A54]" />
+          <ChevronDown size={14} className="flex-shrink-0 text-[var(--color-text-muted)]" />
         </button>
 
         {open && (
-          <div className="absolute left-0 z-20 mt-1.5 w-72 max-h-80 overflow-y-auto bg-[#3D3025] border border-[rgba(245,237,214,0.12)] rounded-xl shadow-lg py-1.5">
+          <div className="absolute left-0 z-20 mt-1.5 w-72 max-h-80 overflow-y-auto bg-[var(--color-surface-raised)] border border-[rgba(var(--border-rgb),0.12)] rounded-xl shadow-lg py-1.5">
             {conversations.map((c) => (
               <div
                 key={c.id}
@@ -62,12 +62,12 @@ export function ConversationSwitcher({ conversations, activeId, onSwitch, onNew,
                   onSwitch(c.id)
                   setOpen(false)
                 }}
-                className={`group flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-[#4A3C2E] transition-colors ${
-                  c.id === activeId ? 'text-[#F5EDD6]' : 'text-[#C4A882]'
+                className={`group flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-[var(--color-surface-elevated)] transition-colors ${
+                  c.id === activeId ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)]'
                 }`}
               >
                 {c.id === activeId ? (
-                  <Check size={13} className="flex-shrink-0 text-[#E07B3A]" />
+                  <Check size={13} className="flex-shrink-0 text-[var(--color-accent)]" />
                 ) : (
                   <span className="w-[13px] flex-shrink-0" />
                 )}
@@ -77,7 +77,7 @@ export function ConversationSwitcher({ conversations, activeId, onSwitch, onNew,
                     e.stopPropagation()
                     onDelete(c.id)
                   }}
-                  className="flex-shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-[#7A6A54] hover:text-[#E05C5C] focus-visible:text-[#E05C5C] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#E05C5C] rounded transition-opacity"
+                  className="flex-shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-[var(--color-text-muted)] hover:text-[var(--color-error)] focus-visible:text-[var(--color-error)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-error)] rounded transition-opacity"
                   aria-label={`Delete conversation: ${c.title}`}
                 >
                   <Trash2 size={13} />
@@ -90,7 +90,7 @@ export function ConversationSwitcher({ conversations, activeId, onSwitch, onNew,
 
       <button
         onClick={onNew}
-        className="flex items-center gap-1.5 flex-shrink-0 px-3 py-1.5 text-sm font-medium rounded-xl bg-[#2C2218] border border-[rgba(245,237,214,0.08)] text-[#C4A882] hover:text-[#F5EDD6] hover:border-[#E07B3A]/40 transition-colors"
+        className="flex items-center gap-1.5 flex-shrink-0 px-3 py-1.5 text-sm font-medium rounded-xl bg-[var(--color-surface)] border border-[rgba(var(--border-rgb),0.08)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:border-[rgba(var(--accent-rgb),0.40)] transition-colors"
       >
         <Plus size={14} />
         New chat

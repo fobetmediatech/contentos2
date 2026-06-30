@@ -8,12 +8,13 @@
  */
 import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Lock, Plus, Trash2, Users } from 'lucide-react'
+import { Lock, Plus, Trash2, Users, Wallet } from 'lucide-react'
 import { useIsFinance } from '../hooks/useIsFinance'
 import { listPaymentClients, listPayments, createPayment, updatePayment, deletePayment } from '../lib/calendarRepo'
 import { PaymentsCalendar } from '../components/PaymentsCalendar'
 import { PaymentClientsManager } from '../components/PaymentClientsManager'
 import { SearchablePicker } from '../components/SearchablePicker'
+import { EmptyState } from '../components/EmptyState'
 import { fetchRatesToInr, FALLBACK_RATES_TO_INR, toInr } from '../lib/fxRates'
 import type { PaymentStatus } from '../domain/calendar'
 
@@ -27,7 +28,7 @@ const STATUS_BADGE: Record<PaymentStatus, string> = {
 }
 
 const inputCls =
-  'bg-[#3D3025] border border-[rgba(245,237,214,0.08)] rounded-md px-3 py-2 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-[#E07B3A]'
+  'bg-[var(--color-surface-raised)] border border-[rgba(var(--border-rgb),0.08)] rounded-md px-3 py-2.5 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-[var(--color-accent)]'
 
 const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 })
 
@@ -123,7 +124,7 @@ export function PaymentsPage() {
   if (!isFinance) {
     return (
       <div className="max-w-4xl mx-auto">
-        <div className="bg-surface border border-[rgba(245,237,214,0.08)] rounded-lg p-12 text-center">
+        <div className="bg-surface border border-[rgba(var(--border-rgb),0.08)] rounded-lg p-12 text-center">
           <Lock size={28} className="mx-auto text-muted mb-3" />
           <h1 className="text-primary text-lg font-medium mb-1">Payments are restricted</h1>
           <p className="text-secondary text-sm">Only finance team members can view this section.</p>
@@ -142,7 +143,7 @@ export function PaymentsPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowClients(true)}
-            className="flex items-center gap-1.5 text-sm text-secondary hover:text-primary border border-[rgba(245,237,214,0.12)] rounded-md px-3 py-2 transition-colors"
+            className="flex items-center gap-1.5 text-sm text-secondary hover:text-primary border border-[rgba(var(--border-rgb),0.12)] rounded-md px-3 py-2 transition-colors"
           >
             <Users size={15} /> Manage clients
           </button>
@@ -166,7 +167,7 @@ export function PaymentsPage() {
       {/* Totals — consolidated to INR (each payment converted at current rates) */}
       <div className="grid grid-cols-3 gap-3 mb-2">
         {STATUSES.map((s) => (
-          <div key={s} className="bg-surface border border-[rgba(245,237,214,0.08)] rounded-lg p-3">
+          <div key={s} className="bg-surface border border-[rgba(var(--border-rgb),0.08)] rounded-lg p-3">
             <div className="flex items-center justify-between">
               <span className={`text-[11px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded ${STATUS_BADGE[s]}`}>
                 {s}
@@ -183,7 +184,7 @@ export function PaymentsPage() {
       </p>
 
       {/* Add payment */}
-      <div className="bg-surface border border-[rgba(245,237,214,0.08)] rounded-lg p-4 mb-6">
+      <div className="bg-surface border border-[rgba(var(--border-rgb),0.08)] rounded-lg p-4 mb-6">
         <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
           <SearchablePicker
             items={clientItems}
@@ -197,18 +198,19 @@ export function PaymentsPage() {
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             placeholder="Amount"
+            aria-label="Amount"
             min="0"
             className={inputCls}
           />
-          <select value={currency} onChange={(e) => setCurrency(e.target.value)} className={inputCls}>
+          <select value={currency} onChange={(e) => setCurrency(e.target.value)} aria-label="Currency" className={inputCls}>
             {CURRENCIES.map((c) => (
               <option key={c} value={c}>
                 {c}
               </option>
             ))}
           </select>
-          <input type="date" value={paidOn} onChange={(e) => setPaidOn(e.target.value)} className={inputCls} />
-          <select value={status} onChange={(e) => setStatus(e.target.value as PaymentStatus)} className={inputCls}>
+          <input type="date" value={paidOn} onChange={(e) => setPaidOn(e.target.value)} aria-label="Payment date" className={inputCls} />
+          <select value={status} onChange={(e) => setStatus(e.target.value as PaymentStatus)} aria-label="Status" className={inputCls}>
             {STATUSES.map((s) => (
               <option key={s} value={s}>
                 {s}
@@ -219,13 +221,14 @@ export function PaymentsPage() {
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="Note *"
+            aria-label="Note"
             maxLength={200}
             className={`${inputCls} col-span-2 sm:col-span-5`}
           />
           <button
             onClick={addPayment}
             disabled={!paymentClientId || !amount || !note.trim() || create.isPending}
-            className="flex items-center justify-center gap-1.5 bg-[#E07B3A] hover:bg-[#C4612A] disabled:opacity-50 text-white text-sm font-medium rounded-md px-4 py-2 transition-colors"
+            className="col-span-2 sm:col-span-1 flex items-center justify-center gap-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] disabled:opacity-50 text-white text-sm font-medium rounded-md px-4 py-2.5 transition-colors"
           >
             <Plus size={15} /> {create.isPending ? 'Adding…' : 'Add'}
           </button>
@@ -252,13 +255,22 @@ export function PaymentsPage() {
       {view === 'calendar' ? (
         <PaymentsCalendar payments={payments} clientLabel={clientLabel} />
       ) : payments.length === 0 ? (
-        <p className="text-muted text-sm">No payments logged yet.</p>
+        <EmptyState
+          icon={Wallet}
+          title="No payments logged yet"
+          description={
+            clients.length === 0
+              ? 'Add a client with “Manage clients”, then log your first payment using the form above.'
+              : 'Log your first payment using the form above — it’ll show up here with running INR totals.'
+          }
+          compact
+        />
       ) : (
         <ul className="space-y-2">
           {payments.map((p) => (
             <li
               key={p.id}
-              className="flex items-center gap-3 bg-surface border border-[rgba(245,237,214,0.08)] rounded-lg px-4 py-3"
+              className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 bg-surface border border-[rgba(var(--border-rgb),0.08)] rounded-lg px-4 py-3"
             >
               <div className="min-w-0 flex-1">
                 <div className="text-primary text-sm font-medium truncate">{clientLabel(p.paymentClientId)}</div>
@@ -267,35 +279,38 @@ export function PaymentsPage() {
                   {p.note ? ` · ${p.note}` : ''}
                 </div>
               </div>
-              <div className="text-primary font-mono text-sm whitespace-nowrap">
-                {p.currency} {fmt(p.amount)}
-              </div>
-              <select
-                value={p.status}
-                onChange={(e) => changeStatus.mutate({ id: p.id, s: e.target.value as PaymentStatus })}
-                aria-label="Payment status"
-                className={`text-[11px] font-mono uppercase tracking-wide rounded px-1.5 py-1 focus:outline-none ${STATUS_BADGE[p.status]}`}
-              >
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-              {confirmDeleteId === p.id ? (
-                <span className="flex-shrink-0 flex items-center gap-1.5 text-xs">
-                  <button onClick={() => { remove.mutate(p.id); setConfirmDeleteId(null) }} disabled={remove.isPending} aria-label="Confirm delete payment" className="text-danger font-medium hover:underline disabled:opacity-50">Delete?</button>
-                  <button onClick={() => setConfirmDeleteId(null)} aria-label="Cancel delete" className="text-muted hover:text-secondary transition-colors">Cancel</button>
-                </span>
-              ) : (
-                <button
-                  onClick={() => setConfirmDeleteId(p.id)}
-                  aria-label="Delete payment"
-                  className="flex-shrink-0 text-muted hover:text-danger transition-colors p-1"
+              {/* Amount + status + delete: a single justified row so nothing overflows on mobile */}
+              <div className="flex items-center justify-between sm:justify-end gap-3 flex-shrink-0">
+                <div className="text-primary font-mono text-sm whitespace-nowrap">
+                  {p.currency} {fmt(p.amount)}
+                </div>
+                <select
+                  value={p.status}
+                  onChange={(e) => changeStatus.mutate({ id: p.id, s: e.target.value as PaymentStatus })}
+                  aria-label="Payment status"
+                  className={`text-[11px] font-mono uppercase tracking-wide rounded px-1.5 py-1 focus:outline-none ${STATUS_BADGE[p.status]}`}
                 >
-                  <Trash2 size={15} />
-                </button>
-              )}
+                  {STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+                {confirmDeleteId === p.id ? (
+                  <span className="flex items-center gap-1.5 text-xs">
+                    <button onClick={() => { remove.mutate(p.id); setConfirmDeleteId(null) }} disabled={remove.isPending} aria-label="Confirm delete payment" className="text-danger font-medium hover:underline disabled:opacity-50">Delete?</button>
+                    <button onClick={() => setConfirmDeleteId(null)} aria-label="Cancel delete" className="text-muted hover:text-secondary transition-colors">Cancel</button>
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => setConfirmDeleteId(p.id)}
+                    aria-label="Delete payment"
+                    className="flex items-center justify-center w-9 h-9 -my-1 text-muted hover:text-danger transition-colors"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                )}
+              </div>
             </li>
           ))}
         </ul>

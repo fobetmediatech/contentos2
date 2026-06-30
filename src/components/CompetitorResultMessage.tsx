@@ -9,7 +9,7 @@
  */
 
 import { useState } from 'react'
-import { Bot, CheckCircle, Check, Clipboard, Download, Video, X } from 'lucide-react'
+import { Bot, CheckCircle, Check, Clipboard, Download, Video, X, AlertTriangle } from 'lucide-react'
 import type { CompetitorResultPayload } from '../store/analysisStore'
 import { CompetitorCard } from './CompetitorCard'
 import { COMPETITOR_CATEGORIES } from '../shared/utils/categories'
@@ -36,7 +36,7 @@ export function CompetitorResultMessage({
   onStartOver,
   reelActive,
 }: Props) {
-  const { competitors, summary, niche, didExpand } = payload
+  const { competitors, summary, niche, didExpand, unverified } = payload
   const { profileMap, cohortAvgER, top, trending } = deriveCompetitorView(payload)
   const [copied, setCopied] = useState(false)
 
@@ -55,11 +55,11 @@ export function CompetitorResultMessage({
     <>
       {/* Completion bubble */}
       <div className="flex items-start gap-2">
-        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(224,123,58,0.12)] flex items-center justify-center mt-0.5">
-          <Bot size={14} className="text-[#E07B3A]" />
+        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(var(--accent-rgb),0.12)] flex items-center justify-center mt-0.5">
+          <Bot size={14} className="text-[var(--color-accent)]" />
         </div>
         <div className="flex flex-col gap-2 max-w-[80%]">
-          <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(245,237,214,0.08)] text-sm leading-relaxed">
+          <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(var(--border-rgb),0.08)] text-sm leading-relaxed">
             <div className="flex items-center gap-2 mb-1">
               <CheckCircle size={14} className="text-success flex-shrink-0" />
               <span className="font-semibold text-primary">Analysis complete</span>
@@ -67,9 +67,11 @@ export function CompetitorResultMessage({
             <p className="text-secondary">
               Found {competitors.length} competitor{competitors.length !== 1 ? 's' : ''}
               {niche ? ` in the ${niche} space` : ''}.
-              Ranked by engagement, location fit, and partnership readiness.
+              {unverified
+                ? ' Sourced from a live web search and ranked by web knowledge.'
+                : ' Ranked by engagement, location fit, and partnership readiness.'}
             </p>
-            {didExpand && (
+            {didExpand && !unverified && (
               <p className="text-xs text-warning mt-1.5">
                 Sparse niche — results may be limited. Try a different reference account for a broader pool.
               </p>
@@ -78,20 +80,20 @@ export function CompetitorResultMessage({
           <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={onStartOver}
-              className="px-4 py-2 text-sm text-secondary border border-[rgba(245,237,214,0.10)] rounded-xl hover:bg-surface-raised transition-colors"
+              className="px-4 py-2 text-sm text-secondary border border-[rgba(var(--border-rgb),0.10)] rounded-xl hover:bg-surface-raised transition-colors"
             >
               Start over
             </button>
             <button
               onClick={handleCopy}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm text-secondary border border-[rgba(245,237,214,0.10)] rounded-xl hover:bg-surface-raised transition-colors"
+              className="flex items-center gap-1.5 px-3 py-2 text-sm text-secondary border border-[rgba(var(--border-rgb),0.10)] rounded-xl hover:bg-surface-raised transition-colors"
             >
               {copied ? <Check size={13} className="text-success" /> : <Clipboard size={13} />}
               {copied ? 'Copied!' : 'Copy for slides'}
             </button>
             <button
               onClick={handleDownloadCSV}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm text-secondary border border-[rgba(245,237,214,0.10)] rounded-xl hover:bg-surface-raised transition-colors"
+              className="flex items-center gap-1.5 px-3 py-2 text-sm text-secondary border border-[rgba(var(--border-rgb),0.10)] rounded-xl hover:bg-surface-raised transition-colors"
             >
               <Download size={13} />
               Download CSV
@@ -100,18 +102,32 @@ export function CompetitorResultMessage({
         </div>
       </div>
 
+      {/* Scrape-blocked fallback banner — handles are real but unverified, metrics are estimates. */}
+      {unverified && (
+        <div className="flex items-start gap-2 px-4 py-3 bg-[rgba(224,123,58,0.10)] border border-[#E07B3A]/30 rounded-xl">
+          <AlertTriangle size={15} className="text-[#E07B3A] flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-[#E3B98E] leading-relaxed">
+            <span className="font-semibold text-[#E07B3A]">Instagram blocked live scraping</span>, so these
+            competitors were gathered from a web search instead. The handles are real, but follower
+            counts and engagement are <span className="font-semibold">rough estimates</span> shown as
+            <span className="font-mono"> ~</span> / <span className="font-mono">—</span> — not verified
+            metrics. Re-run later to get exact numbers once scraping recovers.
+          </p>
+        </div>
+      )}
+
       {/* AI summary — violet AI tint + Gemini eyebrow per DESIGN.md */}
       {summary && (
-        <div className="px-4 py-3 bg-[rgba(167,139,250,0.08)] border border-[#A78BFA]/20 rounded-xl">
-          <p className="text-[10px] font-semibold font-mono uppercase tracking-wide text-[#A78BFA] mb-1">✦ Gemini</p>
-          <p className="text-sm text-[#C4B5FD] leading-relaxed">{summary}</p>
+        <div className="px-4 py-3 bg-[rgba(var(--ai-rgb),0.08)] border border-[rgba(var(--ai-rgb),0.20)] rounded-xl">
+          <p className="text-[10px] font-semibold font-mono uppercase tracking-wide text-[var(--color-ai-tint)] mb-1">✦ Gemini</p>
+          <p className="text-sm text-[var(--color-ai-tint)] leading-relaxed">{summary}</p>
         </div>
       )}
 
       {/* Card grids */}
       {top.length > 0 && (
         <div>
-          <p className="text-xs font-semibold font-mono text-[#7A6A54] uppercase tracking-wide mb-3">
+          <p className="text-xs font-semibold font-mono text-[var(--color-text-muted)] uppercase tracking-wide mb-3">
             {COMPETITOR_CATEGORIES.top.sectionLabel}
           </p>
           <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
@@ -123,6 +139,7 @@ export function CompetitorResultMessage({
                 cohortAvgER={cohortAvgER}
                 isSelected={selectedHandles.includes(c.username)}
                 onSelect={reelActive ? undefined : onToggleSelect}
+                unverified={unverified}
               />
             ))}
           </div>
@@ -130,7 +147,7 @@ export function CompetitorResultMessage({
       )}
       {trending.length > 0 && (
         <div>
-          <p className="text-xs font-semibold font-mono text-[#7A6A54] uppercase tracking-wide mb-3">
+          <p className="text-xs font-semibold font-mono text-[var(--color-text-muted)] uppercase tracking-wide mb-3">
             {COMPETITOR_CATEGORIES.trending.sectionLabel}
           </p>
           <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
@@ -142,6 +159,7 @@ export function CompetitorResultMessage({
                 cohortAvgER={cohortAvgER}
                 isSelected={selectedHandles.includes(c.username)}
                 onSelect={reelActive ? undefined : onToggleSelect}
+                unverified={unverified}
               />
             ))}
           </div>
@@ -153,14 +171,14 @@ export function CompetitorResultMessage({
         <div className="flex items-center gap-2 pt-1">
           <button
             onClick={onClearSelection}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm text-[#A09080] border border-[#3D2E1E] rounded-xl hover:text-[#F5E6D3] hover:border-[#5C4A30] transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm text-[var(--color-text-muted)] border border-[var(--color-surface-raised)] rounded-xl hover:text-[var(--color-text-primary)] hover:border-[var(--color-text-muted)] transition-colors"
           >
             <X size={13} />
             Clear
           </button>
           <button
             onClick={onAnalyzeReels}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-[#E07B3A] text-[#1A1410] rounded-xl hover:bg-[#C96A2A] transition-colors"
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-[var(--color-accent)] text-[var(--color-bg)] rounded-xl hover:bg-[var(--color-accent-hover)] transition-colors"
           >
             <Video size={14} />
             Analyze {selectedHandles.length} creator{selectedHandles.length !== 1 ? 's' : ''} reels

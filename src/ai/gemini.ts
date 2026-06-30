@@ -403,6 +403,9 @@ function coerceDiscoveryOutput(parsed: DiscoveryOutput): DiscoveryOutput {
  *                              the prompt as an EXPLICIT NICHE CONTEXT block that improves filtering accuracy.
  * @param clarificationAnswer   User's answer from the mid-run clarification card (optional).
  *                              When present and non-empty, injected as USER REFINEMENT to direct ranking.
+ * @param nicheBriefing         Web-grounded niche/sub-niche briefing from the knowledge-seed call
+ *                              (optional). Injected as a WEB RESEARCH block — supports ranking with
+ *                              current subniche/leaders/trends context; does NOT override the niche boundary.
  */
 export async function analyzeCompetitors(
   geminiKey: string | string[],
@@ -414,8 +417,9 @@ export async function analyzeCompetitors(
   preferenceExemplars?: PreferenceExemplars,
   corpusSignals?: Record<string, string>,
   mode: 'precise' | 'broad' = 'precise',
+  nicheBriefing?: string,
 ): Promise<AnalysisOutput> {
-  const prompt = buildCompetitorPrompt(inputProfiles, candidateProfiles, nicheContext, clarificationAnswer, preferenceExemplars, corpusSignals, mode)
+  const prompt = buildCompetitorPrompt(inputProfiles, candidateProfiles, nicheContext, clarificationAnswer, preferenceExemplars, corpusSignals, mode, nicheBriefing)
   const parsed = await callGeminiWithSchema<AnalysisOutput>(
     geminiKey,
     prompt,

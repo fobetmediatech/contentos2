@@ -90,6 +90,37 @@ export function parseSeedHandles(raw: unknown, cap = SEED_SCRAPE_CAP): SeedCandi
   return out
 }
 
+/** Max length of the web-grounded niche briefing we keep (defends against a runaway grounded reply). */
+export const NICHE_BRIEFING_MAX = 2000
+
+/** Web-grounded niche research: a short subniche/leaders/trends briefing PLUS the candidate accounts. */
+export interface NicheSeedResult {
+  /** Concise web-grounded understanding of the niche/subniche — fed into the ranking prompt. */
+  briefing: string
+  /** Candidate creators named in the same grounded call (scrape-verified + identity-gated downstream). */
+  candidates: SeedCandidate[]
+}
+
+/** Pull the briefing string out of the grounded object (tolerant of key drift). */
+function extractBriefing(raw: unknown): string {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    const o = raw as Record<string, unknown>
+    const b = o.briefing ?? o.niche_brief ?? o.nicheBrief ?? o.brief ?? o.summary
+    if (typeof b === 'string') return b.replace(/[\n\r]+/g, ' ').trim().slice(0, NICHE_BRIEFING_MAX)
+  }
+  return ''
+}
+
+/**
+ * Parse the combined grounded niche-research response (already JSON-parsed) into a briefing + candidates.
+ * The briefing improves the ranking model's subniche understanding; the candidates expand the pool.
+ * Tolerant of shape drift and NEVER throws — degrades to an empty briefing + parsed (possibly empty)
+ * candidate list so a malformed grounded reply can't abort the run.
+ */
+export function parseNicheSeedResult(raw: unknown, cap = SEED_SCRAPE_CAP): NicheSeedResult {
+  return { briefing: extractBriefing(raw), candidates: parseSeedHandles(raw, cap) }
+}
+
 /** Normalize a name/handle into comparable tokens (length ≥ 3, lowercased, alnum only). */
 function nameTokens(s: string): string[] {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(' ').filter((t) => t.length >= 3)
@@ -117,9 +148,11 @@ export function matchesIntendedIdentity(profile: NormalizedProfile, seed: SeedCa
 }
 
 /**
- * Components A + B: name candidate creators in a niche, web-grounded for recency.
- * NEVER throws — degrades to [] on any failure so the discovery run is unaffected.
- * Returns SeedCandidates; the caller is responsible for scrape-verification + the identity gate.
+ * Components A + B: in ONE web-grounded call, (1) research the niche/sub-niche for current context
+ * and (2) name candidate creators in it. Returns a { briefing, candidates } pair — the briefing
+ * sharpens the downstream ranking model's subniche understanding; the candidates expand the pool.
+ * NEVER throws — degrades to { briefing: '', candidates: [] } on any failure so the discovery run
+ * is unaffected. The caller is responsible for scrape-verification + the identity gate on candidates.
  */
 export async function generateNicheSeeds(
   geminiKeys: string | string[],
@@ -127,14 +160,14 @@ export async function generateNicheSeeds(
   refProfiles: NormalizedProfile[],
   mode: 'precise' | 'broad',
   signal?: AbortSignal,
-): Promise<SeedCandidate[]> {
+): Promise<NicheSeedResult> {
   const trimmed = niche.trim()
-  if (!trimmed) return []
+  if (!trimmed) return { briefing: '', candidates: [] }
   try {
     const prompt = buildNicheSeedPrompt(trimmed, refProfiles, SEED_REQUEST_COUNT, mode)
     const raw = await callGeminiGroundedJson<unknown>(geminiKeys, prompt, { temperature: 0.4, maxOutputTokens: 4096, signal })
-    return parseSeedHandles(raw, SEED_SCRAPE_CAP)
+    return parseNicheSeedResult(raw, SEED_SCRAPE_CAP)
   } catch {
-    return []
+    return { briefing: '', candidates: [] }
   }
 }

@@ -14,9 +14,9 @@ import { SAMPLE_RESULT } from '../lib/sampleStrategy'
 import type { StrategyBrief, ContentLanguage, DeckPreset } from '../domain/strategy'
 
 const inputCls =
-  'w-full bg-[#3D3025] border border-[rgba(245,237,214,0.08)] rounded-md px-3 py-2 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-[#E07B3A]'
+  'w-full bg-[var(--color-surface-raised)] border border-[rgba(var(--border-rgb),0.08)] rounded-md px-3 py-2 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-[var(--color-accent)]'
 const labelCls = 'block text-xs text-muted mb-1'
-const eyebrow = 'text-[11px] font-mono uppercase tracking-wider text-[#E07B3A] mb-3 mt-6 first:mt-0'
+const eyebrow = 'text-[11px] font-mono uppercase tracking-wider text-[var(--color-accent)] mb-3 mt-6 first:mt-0'
 
 const LANGS: { value: ContentLanguage; label: string }[] = [
   { value: 'english', label: 'English' },
@@ -46,7 +46,7 @@ export function StrategyPage() {
     <div className="max-w-5xl mx-auto">
       <header className="mb-5 no-print">
         <h1 className="font-serif italic text-3xl text-primary flex items-center gap-2">
-          <Target size={24} className="text-[#E07B3A]" /> Content Strategizing
+          <Target size={24} className="text-[var(--color-accent)]" /> Content Strategizing
         </h1>
         <p className="text-secondary text-sm mt-1">
           Fill the onboarding sheet — ContentOS pulls competitor metrics, niche trends, and winning hooks
@@ -55,7 +55,7 @@ export function StrategyPage() {
         {import.meta.env.DEV && (
           <button
             onClick={loadSample}
-            className="mt-2 text-xs text-secondary hover:text-primary border border-[rgba(245,237,214,0.12)] rounded-md px-3 py-1.5"
+            className="mt-2 text-xs text-secondary hover:text-primary border border-[rgba(var(--border-rgb),0.12)] rounded-md px-3 py-1.5"
           >
             Load sample deck (dev only — for previewing the format locally)
           </button>
@@ -63,7 +63,7 @@ export function StrategyPage() {
       </header>
 
       {/* Onboarding form */}
-      <div className="no-print bg-surface border border-[rgba(245,237,214,0.08)] rounded-lg p-5 mb-5">
+      <div className="no-print bg-surface border border-[rgba(var(--border-rgb),0.08)] rounded-lg p-5 mb-5">
         <div className={eyebrow}>A · Basic information</div>
         <div className="grid sm:grid-cols-2 gap-3">
           <label className="block">
@@ -91,8 +91,8 @@ export function StrategyPage() {
                   onClick={() => set({ language: l.value })}
                   className={`text-sm px-3 py-1.5 rounded-md border transition-colors ${
                     brief.language === l.value
-                      ? 'bg-[rgba(224,123,58,0.16)] border-[#E07B3A] text-[#F4A97B]'
-                      : 'border-[rgba(245,237,214,0.12)] text-secondary hover:text-primary'
+                      ? 'bg-[rgba(var(--accent-rgb),0.16)] border-[var(--color-accent)] text-[var(--color-accent-light)]'
+                      : 'border-[rgba(var(--border-rgb),0.12)] text-secondary hover:text-primary'
                   }`}
                 >
                   {l.label}
@@ -103,7 +103,7 @@ export function StrategyPage() {
         </div>
 
         <div className={eyebrow}>B · Target audience</div>
-        <textarea className={`${inputCls} resize-none`} rows={2} value={brief.audience} onChange={(e) => set({ audience: e.target.value })} placeholder="Age, income, biggest problem, what they want" />
+        <textarea className={`${inputCls} resize-none`} rows={2} value={brief.audience} onChange={(e) => set({ audience: e.target.value })} aria-label="Target audience" placeholder="Age, income, biggest problem, what they want" />
 
         <div className={eyebrow}>C · Competitors & aspirational accounts</div>
         <div className="grid sm:grid-cols-2 gap-4">
@@ -111,7 +111,7 @@ export function StrategyPage() {
             <span className={labelCls}>Direct competitors (handles)</span>
             <div className="space-y-2">
               {brief.competitors.map((h, i) => (
-                <input key={i} className={inputCls} value={h} onChange={(e) => setHandle('competitors', i, e.target.value)} placeholder={`@competitor ${i + 1}`} />
+                <input key={i} className={inputCls} value={h} onChange={(e) => setHandle('competitors', i, e.target.value)} aria-label={`Direct competitor ${i + 1}`} placeholder={`@competitor ${i + 1}`} />
               ))}
             </div>
           </div>
@@ -119,7 +119,7 @@ export function StrategyPage() {
             <span className={labelCls}>Aspirational accounts (style to replicate)</span>
             <div className="space-y-2">
               {brief.aspirational.map((h, i) => (
-                <input key={i} className={inputCls} value={h} onChange={(e) => setHandle('aspirational', i, e.target.value)} placeholder={`@aspirational ${i + 1}`} />
+                <input key={i} className={inputCls} value={h} onChange={(e) => setHandle('aspirational', i, e.target.value)} aria-label={`Aspirational account ${i + 1}`} placeholder={`@aspirational ${i + 1}`} />
               ))}
             </div>
           </div>
@@ -149,8 +149,8 @@ export function StrategyPage() {
               onClick={() => set({ theme: { ...brief.theme, preset: p } })}
               className={`text-sm px-3 py-1.5 rounded-md border transition-colors ${
                 brief.theme.preset === p
-                  ? 'bg-[rgba(224,123,58,0.16)] border-[#E07B3A] text-[#F4A97B]'
-                  : 'border-[rgba(245,237,214,0.12)] text-secondary hover:text-primary'
+                  ? 'bg-[rgba(var(--accent-rgb),0.16)] border-[var(--color-accent)] text-[var(--color-accent-light)]'
+                  : 'border-[rgba(var(--border-rgb),0.12)] text-secondary hover:text-primary'
               }`}
             >
               {PRESET_LABELS[p]}
@@ -181,14 +181,14 @@ export function StrategyPage() {
 
         <div className="flex items-center gap-3 mt-5">
           {running ? (
-            <button onClick={cancel} className="bg-surface-raised text-secondary hover:text-primary border border-[rgba(245,237,214,0.12)] text-sm font-medium rounded-md px-4 py-2">
+            <button onClick={cancel} className="bg-surface-raised text-secondary hover:text-primary border border-[rgba(var(--border-rgb),0.12)] text-sm font-medium rounded-md px-4 py-2">
               Cancel
             </button>
           ) : (
             <button
               onClick={() => generate(brief)}
               disabled={!canGenerate}
-              className="flex items-center gap-1.5 bg-[#E07B3A] hover:bg-[#C4612A] disabled:opacity-50 text-white text-sm font-medium rounded-md px-5 py-2 transition-colors"
+              className="flex items-center gap-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] disabled:opacity-50 text-white text-sm font-medium rounded-md px-5 py-2 transition-colors"
             >
               <Target size={15} /> Generate strategy
             </button>
@@ -208,10 +208,10 @@ export function StrategyPage() {
           <div className="no-print flex items-center justify-between mb-3">
             <h2 className="text-primary text-lg font-medium">Content Strategy Document</h2>
             <div className="flex items-center gap-2">
-              <button onClick={reset} className="text-sm text-secondary hover:text-primary border border-[rgba(245,237,214,0.12)] rounded-md px-3 py-1.5">
+              <button onClick={reset} className="text-sm text-secondary hover:text-primary border border-[rgba(var(--border-rgb),0.12)] rounded-md px-3 py-1.5">
                 Clear
               </button>
-              <button onClick={() => window.print()} className="bg-[#E07B3A] hover:bg-[#C4612A] text-white text-sm font-medium rounded-md px-4 py-1.5">
+              <button onClick={() => window.print()} className="bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white text-sm font-medium rounded-md px-4 py-1.5">
                 Print / Save as PDF
               </button>
             </div>

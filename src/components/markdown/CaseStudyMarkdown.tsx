@@ -8,7 +8,7 @@
  *
  * Styling follows DESIGN.md via the repo's Tailwind theme tokens (font-serif = Instrument
  * Serif, font-mono = DM Mono, text-primary / text-secondary / text-muted warm neutrals,
- * text-accent = saffron #E07B3A). Headings + links use the saffron accent; stat/hashtag
+ * text-accent = fawn #DFA477). Headings + links use the fawn accent; stat/hashtag
  * tables use DM Mono for that clinical-precision contrast against the warm prose.
  */
 
@@ -49,7 +49,7 @@ export function CaseStudyMarkdown({ markdown }: { markdown: string }) {
           blockquote: ({ children }) => (
             <blockquote className="my-3 border-l-2 border-accent/50 pl-3 italic text-secondary">{children}</blockquote>
           ),
-          hr: () => <hr className="my-4 border-0 border-t border-[rgba(245,237,214,0.15)]" />,
+          hr: () => <hr className="my-4 border-0 border-t border-[rgba(var(--border-rgb),0.15)]" />,
           code: ({ children }) => (
             <code className="font-mono text-xs px-1 py-0.5 rounded-sm bg-surface-raised text-primary">{children}</code>
           ),
@@ -65,12 +65,12 @@ export function CaseStudyMarkdown({ markdown }: { markdown: string }) {
           ),
           thead: ({ children }) => <thead>{children}</thead>,
           th: ({ children }) => (
-            <th className="border-b border-[rgba(245,237,214,0.15)] px-2 py-1.5 font-medium font-mono uppercase tracking-wide text-[11px] text-muted">
+            <th className="border-b border-[rgba(var(--border-rgb),0.15)] px-2 py-1.5 font-medium font-mono uppercase tracking-wide text-[11px] text-muted">
               {children}
             </th>
           ),
           td: ({ children }) => (
-            <td className="border-b border-[rgba(245,237,214,0.08)] px-2 py-1.5 text-secondary tabular-nums">{children}</td>
+            <td className="border-b border-[rgba(var(--border-rgb),0.08)] px-2 py-1.5 text-secondary tabular-nums">{children}</td>
           ),
         }}
       >

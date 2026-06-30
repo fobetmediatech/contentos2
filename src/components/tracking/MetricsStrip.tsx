@@ -21,19 +21,19 @@ interface MetricCardProps {
 
 function MetricCard({ label, value, sub, info }: MetricCardProps) {
   return (
-    <div className="bg-[#2C2218] border border-[rgba(245,237,214,0.08)] rounded-xl px-4 py-3 flex flex-col gap-1">
+    <div className="bg-[var(--color-surface)] border border-[rgba(var(--border-rgb),0.08)] rounded-xl px-4 py-3 flex flex-col gap-1">
       {/* min-h reserves two lines so single- and two-line labels keep their
           values aligned across the strip (uniform card titles). */}
       <div className="flex items-start justify-between gap-1 min-h-[2.25rem]">
-        <span className="text-[#7A6A54] text-xs font-medium font-mono uppercase tracking-wider leading-tight">
+        <span className="text-[var(--color-text-muted)] text-xs font-medium font-mono uppercase tracking-wider leading-tight">
           {label}
         </span>
         {info && (
           <InfoPopover title={info.title} formula={info.formula} significance={info.significance} />
         )}
       </div>
-      <span className="text-[#F5EDD6] text-xl font-mono tabular-nums font-medium">{value}</span>
-      {sub && <span className="text-[#7A6A54] text-[11px] font-mono">{sub}</span>}
+      <span className="text-[var(--color-text-primary)] text-xl font-mono tabular-nums font-medium">{value}</span>
+      {sub && <span className="text-[var(--color-text-muted)] text-[11px] font-mono">{sub}</span>}
     </div>
   )
 }

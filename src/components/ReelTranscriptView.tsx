@@ -23,7 +23,7 @@ export function ReelTranscriptView({ result }: { result: SingleReelResult }) {
       <div className="space-y-1.5">
         {result.segments.map((seg, i) => (
           <p key={`${i}-${seg.start}`} className="text-sm text-secondary leading-relaxed">
-            <span className="font-mono text-xs text-[#E07B3A] tabular-nums mr-2">
+            <span className="font-mono text-xs text-[var(--color-accent)] tabular-nums mr-2">
               [{fmtTime(seg.start)}]
             </span>
             {seg.text}

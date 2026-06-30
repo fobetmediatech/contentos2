@@ -40,8 +40,8 @@ export function ChatOptions({ options, onSelect, disabled, label }: ChatOptionsP
             disabled={disabled}
             className={`px-3 py-1.5 rounded-full border text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
               isProceed
-                ? 'border-dashed border-[rgba(245,237,214,0.12)] text-muted hover:border-[rgba(245,237,214,0.2)] hover:text-secondary'
-                : 'border-[rgba(245,237,214,0.10)] text-secondary bg-surface-raised hover:border-[#E07B3A] hover:text-[#F4A97B]'
+                ? 'border-dashed border-[rgba(var(--border-rgb),0.12)] text-muted hover:border-[rgba(var(--border-rgb),0.2)] hover:text-secondary'
+                : 'border-[rgba(var(--border-rgb),0.10)] text-secondary bg-surface-raised hover:border-[var(--color-accent)] hover:text-[var(--color-accent-light)]'
             }`}
           >
             {option}

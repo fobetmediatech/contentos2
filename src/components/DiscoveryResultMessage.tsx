@@ -52,11 +52,11 @@ export function DiscoveryResultMessage({
     <>
       {/* Completion bubble */}
       <div className="flex items-start gap-2">
-        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(224,123,58,0.12)] flex items-center justify-center mt-0.5">
-          <Bot size={14} className="text-[#E07B3A]" />
+        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(var(--accent-rgb),0.12)] flex items-center justify-center mt-0.5">
+          <Bot size={14} className="text-[var(--color-accent)]" />
         </div>
         <div className="flex flex-col gap-2 max-w-[80%]">
-          <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(245,237,214,0.08)] text-sm leading-relaxed">
+          <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(var(--border-rgb),0.08)] text-sm leading-relaxed">
             <div className="flex items-center gap-2 mb-1">
               <CheckCircle size={14} className="text-success flex-shrink-0" />
               <span className="font-semibold text-primary">Discovery complete</span>
@@ -80,20 +80,20 @@ export function DiscoveryResultMessage({
           <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={onStartOver}
-              className="px-4 py-2 text-sm text-secondary border border-[rgba(245,237,214,0.10)] rounded-xl hover:bg-surface-raised transition-colors"
+              className="px-4 py-2 text-sm text-secondary border border-[rgba(var(--border-rgb),0.10)] rounded-xl hover:bg-surface-raised transition-colors"
             >
               Start over
             </button>
             <button
               onClick={handleCopy}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm text-secondary border border-[rgba(245,237,214,0.10)] rounded-xl hover:bg-surface-raised transition-colors"
+              className="flex items-center gap-1.5 px-3 py-2 text-sm text-secondary border border-[rgba(var(--border-rgb),0.10)] rounded-xl hover:bg-surface-raised transition-colors"
             >
               {copied ? <Check size={13} className="text-success" /> : <Clipboard size={13} />}
               {copied ? 'Copied!' : 'Copy for slides'}
             </button>
             <button
               onClick={handleDownloadCSV}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm text-secondary border border-[rgba(245,237,214,0.10)] rounded-xl hover:bg-surface-raised transition-colors"
+              className="flex items-center gap-1.5 px-3 py-2 text-sm text-secondary border border-[rgba(var(--border-rgb),0.10)] rounded-xl hover:bg-surface-raised transition-colors"
             >
               <Download size={13} />
               Download CSV
@@ -105,7 +105,7 @@ export function DiscoveryResultMessage({
       {/* Card grids */}
       {top.length > 0 && (
         <div>
-          <p className="text-xs font-semibold font-mono text-[#7A6A54] uppercase tracking-wide mb-3">
+          <p className="text-xs font-semibold font-mono text-[var(--color-text-muted)] uppercase tracking-wide mb-3">
             {DISCOVERY_CATEGORIES.top.sectionLabel}
           </p>
           <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
@@ -124,7 +124,7 @@ export function DiscoveryResultMessage({
       )}
       {trending.length > 0 && (
         <div>
-          <p className="text-xs font-semibold font-mono text-[#7A6A54] uppercase tracking-wide mb-3">
+          <p className="text-xs font-semibold font-mono text-[var(--color-text-muted)] uppercase tracking-wide mb-3">
             {DISCOVERY_CATEGORIES.trending.sectionLabel}
           </p>
           <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
@@ -147,14 +147,14 @@ export function DiscoveryResultMessage({
         <div className="flex items-center gap-2 pt-1">
           <button
             onClick={onClearSelection}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm text-[#A09080] border border-[#3D2E1E] rounded-xl hover:text-[#F5E6D3] hover:border-[#5C4A30] transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm text-[var(--color-text-muted)] border border-[var(--color-surface-raised)] rounded-xl hover:text-[var(--color-text-primary)] hover:border-[var(--color-text-muted)] transition-colors"
           >
             <X size={13} />
             Clear
           </button>
           <button
             onClick={onAnalyzeReels}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-[#E07B3A] text-[#1A1410] rounded-xl hover:bg-[#C96A2A] transition-colors"
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-[var(--color-accent)] text-[var(--color-bg)] rounded-xl hover:bg-[var(--color-accent-hover)] transition-colors"
           >
             <Video size={14} />
             Analyze {selectedHandles.length} creator{selectedHandles.length !== 1 ? 's' : ''} reels

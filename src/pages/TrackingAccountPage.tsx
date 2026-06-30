@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Loader2, AlertCircle, LineChart } from 'lucide-react'
 import {
   getTrackedAccount,
   getAccountSnapshots,
@@ -14,6 +14,7 @@ import { MetricsStrip } from '../components/tracking/MetricsStrip'
 import { TrendChart } from '../components/tracking/TrendChart'
 import { ExpandableChartCard } from '../components/tracking/ExpandableChartCard'
 import { ControlsPanel } from '../components/tracking/ControlsPanel'
+import { EmptyState } from '../components/EmptyState'
 import type { AccountSnapshot, ReelSnapshot } from '../lib/trackingDb'
 
 // ---------- Chart data derivation ----------
@@ -162,7 +163,7 @@ export function TrackingAccountPage() {
 
   if (loadingAccount) {
     return (
-      <div className="flex items-center justify-center py-24 text-[#7A6A54]">
+      <div className="flex items-center justify-center py-24 text-[var(--color-text-muted)]">
         <Loader2 size={20} className="animate-spin mr-3" />
         <span className="font-mono text-sm">Loading…</span>
       </div>
@@ -172,11 +173,11 @@ export function TrackingAccountPage() {
   if (!account) {
     return (
       <div className="max-w-4xl mx-auto py-24 text-center space-y-4">
-        <AlertCircle size={32} className="mx-auto text-[#7A6A54]" />
-        <p className="text-[#C4A882]">Account not found in tracking list.</p>
+        <AlertCircle size={32} className="mx-auto text-[var(--color-text-muted)]" />
+        <p className="text-[var(--color-text-secondary)]">Account not found in tracking list.</p>
         <button
           onClick={() => navigate('/tracking')}
-          className="text-[#E07B3A] text-sm hover:underline"
+          className="text-[var(--color-accent)] text-sm hover:underline"
         >
           ← Back to tracking
         </button>
@@ -196,45 +197,45 @@ export function TrackingAccountPage() {
       {/* Back link */}
       <button
         onClick={() => navigate('/tracking')}
-        className="flex items-center gap-2 text-[#7A6A54] text-sm hover:text-[#C4A882] transition-colors"
+        className="flex items-center gap-2 text-[var(--color-text-muted)] text-sm hover:text-[var(--color-text-secondary)] transition-colors"
       >
         <ArrowLeft size={14} />
         All accounts
       </button>
 
       {/* Profile header */}
-      <div className="bg-[#2C2218] border border-[rgba(245,237,214,0.08)] rounded-xl p-5">
+      <div className="bg-[var(--color-surface)] border border-[rgba(var(--border-rgb),0.08)] rounded-xl p-5">
         <div className="flex items-start gap-4">
-          <div className="w-16 h-16 rounded-full bg-[rgba(224,123,58,0.15)] ring-2 ring-[rgba(224,123,58,0.3)] flex items-center justify-center text-[#E07B3A] font-medium text-xl flex-shrink-0">
+          <div className="w-16 h-16 rounded-full bg-[rgba(var(--accent-rgb),0.15)] ring-2 ring-[rgba(var(--accent-rgb),0.3)] flex items-center justify-center text-[var(--color-accent)] font-medium text-xl flex-shrink-0">
             {initials}
           </div>
 
           <div className="flex-1 min-w-0 space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-[#F5EDD6] font-semibold text-lg leading-tight">
+              <h1 className="text-[var(--color-text-primary)] font-semibold text-lg leading-tight">
                 {account.full_name ?? `@${account.username}`}
               </h1>
               {account.is_verified && (
-                <span className="text-[10px] bg-[rgba(224,123,58,0.12)] text-[#E07B3A] px-2 py-0.5 rounded font-mono">
+                <span className="text-[10px] bg-[rgba(var(--accent-rgb),0.12)] text-[var(--color-accent)] px-2 py-0.5 rounded font-mono">
                   Verified
                 </span>
               )}
               {account.is_business && (
-                <span className="text-[10px] bg-[rgba(196,168,130,0.1)] text-[#C4A882] px-2 py-0.5 rounded font-mono">
+                <span className="text-[10px] bg-[rgba(196,168,130,0.1)] text-[var(--color-text-secondary)] px-2 py-0.5 rounded font-mono">
                   Business
                 </span>
               )}
               {isFetching && (
-                <span className="text-[10px] text-[#E07B3A] font-mono animate-pulse">
+                <span className="text-[10px] text-[var(--color-accent)] font-mono animate-pulse">
                   {fetchState?.phase}…
                 </span>
               )}
             </div>
 
-            <p className="text-[#7A6A54] font-mono text-sm">@{account.username}</p>
+            <p className="text-[var(--color-text-muted)] font-mono text-sm">@{account.username}</p>
 
             {account.biography && (
-              <p className="text-[#C4A882] text-sm leading-relaxed line-clamp-2">
+              <p className="text-[var(--color-text-secondary)] text-sm leading-relaxed line-clamp-2">
                 {account.biography}
               </p>
             )}
@@ -253,10 +254,10 @@ export function TrackingAccountPage() {
                 { label: 'Following', value: latestSnapshot?.follows_count },
               ].map(({ label, value }) => (
                 <div key={label} className="text-center">
-                  <div className="text-[#F5EDD6] font-mono text-sm tabular-nums">
+                  <div className="text-[var(--color-text-primary)] font-mono text-sm tabular-nums">
                     {value != null ? value.toLocaleString() : '—'}
                   </div>
-                  <div className="text-[#7A6A54] text-[10px]">{label}</div>
+                  <div className="text-[var(--color-text-muted)] text-[10px]">{label}</div>
                 </div>
               ))}
             </div>
@@ -269,9 +270,13 @@ export function TrackingAccountPage() {
 
       {/* Empty state */}
       {snapshots.length === 0 && (
-        <div className="text-center py-8 text-[#7A6A54] text-sm font-mono">
-          First fetch pending — click "Fetch now" to get data.
-        </div>
+        <EmptyState
+          icon={LineChart}
+          title="No data yet"
+          description="Run the first fetch to pull this account's followers, engagement, and top reels. Come back anytime to track how they change."
+          action={{ label: isFetching ? 'Fetching…' : 'Fetch now', onClick: handleFetchNow }}
+          compact
+        />
       )}
 
       {/* Charts — each expands to a modal on click */}
@@ -288,7 +293,7 @@ export function TrackingAccountPage() {
             <TrendChart
               data={followerData}
               label="Followers"
-              color="#E07B3A"
+              color="#DFA477"
               formatter={(v) => v.toLocaleString()}
               axisFormatter={(v) =>
                 v >= 1_000_000
@@ -312,7 +317,7 @@ export function TrackingAccountPage() {
             <TrendChart
               data={reelERData}
               label="View ER"
-              color="#C4A882"
+              color="#CBB093"
               formatter={(v) => `${v.toFixed(2)}%`}
               emptyMessage="No reel data yet"
             />
@@ -330,7 +335,7 @@ export function TrackingAccountPage() {
             <TrendChart
               data={followerERData}
               label="Follower ER"
-              color="#F4A97B"
+              color="#ECC09B"
               formatter={(v) => `${v.toFixed(2)}%`}
               emptyMessage="No reel data yet"
             />
@@ -347,7 +352,7 @@ export function TrackingAccountPage() {
             <TrendChart
               data={reelsPostedData}
               label="Reels"
-              color="#E07B3A"
+              color="#DFA477"
               type="bar"
               emptyMessage="No reel data yet"
             />
