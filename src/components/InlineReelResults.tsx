@@ -36,7 +36,7 @@ export function InlineReelResults({ handles, creatorStates, synthesisStatus, syn
           path (`synthesis` is null for HookMap runs); per-creator progress shows in each section. */}
       {synthesisStatus === 'done' && synthesis && <SynthesisCard synthesis={synthesis} onSuggest={onSuggest} />}
       {synthesisStatus === 'failed' && (
-        <div className="mb-4 px-4 py-3 bg-[#2C1818] border border-danger/30 rounded-xl text-sm text-danger">
+        <div className="mb-4 px-4 py-3 bg-[var(--color-surface)] border border-danger/30 rounded-xl text-sm text-danger">
           Reel analysis failed{synthesisError ? `: ${synthesisError}` : ' — please retry.'}
         </div>
       )}
@@ -51,40 +51,40 @@ export function InlineReelResults({ handles, creatorStates, synthesisStatus, syn
 
 function SynthesisCard({ synthesis, onSuggest }: { synthesis: SynthesisOutput; onSuggest?: (text: string) => void }) {
   return (
-    <div className="mb-8 px-5 py-5 bg-[#1E1A2E] border border-[#A78BFA]/20 rounded-xl">
-      <h2 className="text-lg font-semibold text-[#F5EDD6] mb-4">Hook patterns dominating this niche</h2>
+    <div className="mb-8 px-5 py-5 bg-[var(--color-ai-subtle)] border border-[rgba(var(--ai-rgb),0.20)] rounded-xl">
+      <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-4">Hook patterns dominating this niche</h2>
 
       <div className="flex flex-wrap gap-2 mb-5">
         {synthesis.topPatterns.map((pattern, i) => (
-          <div key={i} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#A78BFA]/10 border border-[#A78BFA]/20 text-sm text-[#A78BFA]">
+          <div key={i} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[rgba(var(--ai-rgb),0.10)] border border-[rgba(var(--ai-rgb),0.20)] text-sm text-[var(--color-ai-tint)]">
             <span>{pattern.archetype}</span>
-            <span className="text-[#A78BFA]/60 text-xs">×{pattern.count}</span>
+            <span className="text-[rgba(var(--ai-rgb),0.60)] text-xs">×{pattern.count}</span>
           </div>
         ))}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
-        <div className="px-3 py-2 bg-[#13101E] rounded-lg">
-          <p className="text-xs text-[#7A6A54] mb-0.5">Median views</p>
-          <p className="text-sm font-mono text-[#C4A882]">{formatViews(synthesis.benchmarks.medianViews)}</p>
+        <div className="px-3 py-2 bg-[var(--color-ai-subtle)] rounded-lg">
+          <p className="text-xs text-[var(--color-text-muted)] mb-0.5">Median views</p>
+          <p className="text-sm font-mono text-[var(--color-text-secondary)]">{formatViews(synthesis.benchmarks.medianViews)}</p>
         </div>
-        <div className="px-3 py-2 bg-[#13101E] rounded-lg">
-          <p className="text-xs text-[#7A6A54] mb-0.5">Likes / views</p>
-          <p className="text-sm font-mono text-[#C4A882]">{(synthesis.benchmarks.likesViewsRatio * 100).toFixed(1)}%</p>
+        <div className="px-3 py-2 bg-[var(--color-ai-subtle)] rounded-lg">
+          <p className="text-xs text-[var(--color-text-muted)] mb-0.5">Likes / views</p>
+          <p className="text-sm font-mono text-[var(--color-text-secondary)]">{(synthesis.benchmarks.likesViewsRatio * 100).toFixed(1)}%</p>
         </div>
-        <div className="px-3 py-2 bg-[#13101E] rounded-lg">
-          <p className="text-xs text-[#7A6A54] mb-0.5">Comments / likes</p>
-          <p className="text-sm font-mono text-[#C4A882]">{(synthesis.benchmarks.commentsLikesRatio * 100).toFixed(1)}%</p>
+        <div className="px-3 py-2 bg-[var(--color-ai-subtle)] rounded-lg">
+          <p className="text-xs text-[var(--color-text-muted)] mb-0.5">Comments / likes</p>
+          <p className="text-sm font-mono text-[var(--color-text-secondary)]">{(synthesis.benchmarks.commentsLikesRatio * 100).toFixed(1)}%</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <h3 className="text-xs font-semibold font-mono text-[#A78BFA] uppercase tracking-wide mb-2">Replicate</h3>
+          <h3 className="text-xs font-semibold font-mono text-[var(--color-ai-tint)] uppercase tracking-wide mb-2">Replicate</h3>
           <ul className="space-y-2">
             {synthesis.replicateTips.map((tip, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm text-[#C4A882]">
-                <span className="text-[#A78BFA] mt-0.5">+</span>{tip}
+              <li key={i} className="flex items-start gap-2 text-sm text-[var(--color-text-secondary)]">
+                <span className="text-[var(--color-ai-tint)] mt-0.5">+</span>{tip}
               </li>
             ))}
           </ul>
@@ -93,7 +93,7 @@ function SynthesisCard({ synthesis, onSuggest }: { synthesis: SynthesisOutput; o
           <h3 className="text-xs font-semibold font-mono text-danger uppercase tracking-wide mb-2">Avoid</h3>
           <ul className="space-y-2">
             {synthesis.avoidTips.map((tip, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm text-[#C4A882]">
+              <li key={i} className="flex items-start gap-2 text-sm text-[var(--color-text-secondary)]">
                 <span className="text-danger mt-0.5">–</span>{tip}
               </li>
             ))}
@@ -111,7 +111,7 @@ function SynthesisCard({ synthesis, onSuggest }: { synthesis: SynthesisOutput; o
                 .join(', ')}.`,
             )
           }
-          className="mt-5 w-full px-4 py-2.5 text-sm font-semibold rounded-xl bg-[#A78BFA]/15 text-[#C4B5FD] border border-[#A78BFA]/30 hover:bg-[#A78BFA]/25 transition-colors"
+          className="mt-5 w-full px-4 py-2.5 text-sm font-semibold rounded-xl bg-[rgba(var(--ai-rgb),0.15)] text-[var(--color-ai-tint)] border border-[rgba(var(--ai-rgb),0.30)] hover:bg-[rgba(var(--ai-rgb),0.25)] transition-colors"
         >
           ✦ Generate hooks like these for my niche
         </button>
@@ -133,7 +133,7 @@ function CreatorSection({ state, singleHandle }: { state: CreatorAnalysisState; 
 
   if (state.status === 'failed') {
     return (
-      <div className="mb-4 px-4 py-3 bg-[#2C1818] border border-danger/30 rounded-xl text-sm text-danger">
+      <div className="mb-4 px-4 py-3 bg-[var(--color-surface)] border border-danger/30 rounded-xl text-sm text-danger">
         @{state.handle} — {state.error ?? 'analysis failed'}
       </div>
     )
@@ -141,7 +141,7 @@ function CreatorSection({ state, singleHandle }: { state: CreatorAnalysisState; 
 
   if (state.status === 'no-reels') {
     return (
-      <div className="mb-4 px-4 py-3 bg-[#2C2218] border border-[#E07B3A]/20 rounded-xl text-sm text-[#C4A882]">
+      <div className="mb-4 px-4 py-3 bg-[var(--color-surface)] border border-[rgba(var(--accent-rgb),0.20)] rounded-xl text-sm text-[var(--color-text-secondary)]">
         @{state.handle} — no recent Reels found. Try a more active creator.
       </div>
     )
@@ -150,7 +150,7 @@ function CreatorSection({ state, singleHandle }: { state: CreatorAnalysisState; 
   if (state.status === 'scraping' || state.status === 'analyzing') {
     return (
       <div className="mb-6">
-        <h3 className="text-[#F5EDD6] font-medium mb-3">@{state.handle}</h3>
+        <h3 className="text-[var(--color-text-primary)] font-medium mb-3">@{state.handle}</h3>
         <ProgressSteps currentStep={stepIndex} steps={REEL_STEPS} />
       </div>
     )
@@ -160,7 +160,7 @@ function CreatorSection({ state, singleHandle }: { state: CreatorAnalysisState; 
     <div className="mb-8">
       <button
         onClick={() => setExpanded(e => !e)}
-        className="flex items-center gap-2 mb-4 text-[#F5EDD6] font-medium hover:text-[#E07B3A] transition-colors"
+        className="flex items-center gap-2 mb-4 text-[var(--color-text-primary)] font-medium hover:text-[var(--color-accent)] transition-colors"
       >
         @{state.handle} — {(hasCaseStudies ? state.reels.length : Object.keys(state.analyses).length)} reels analyzed
         {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
@@ -198,43 +198,43 @@ function ReelCard({ reel, analysis }: { reel: ReelData; analysis?: ReelAnalysis 
   const [showFull, setShowFull] = useState(false)
 
   return (
-    <div className="bg-[#2C2218] border border-[rgba(245,237,214,0.08)] rounded-xl overflow-hidden">
+    <div className="bg-[var(--color-surface)] border border-[rgba(var(--border-rgb),0.08)] rounded-xl overflow-hidden">
       {reel.displayUrl && (
         <img
           src={reel.displayUrl}
           alt="Reel thumbnail"
-          className="w-full aspect-square object-cover bg-[#1A1410]"
+          className="w-full aspect-square object-cover bg-[var(--color-bg)]"
           referrerPolicy="no-referrer"
           loading="lazy"
           onError={e => { e.currentTarget.style.display = 'none' }}
         />
       )}
       <div className="p-3">
-        <p className="text-xs text-[#7A6A54] font-mono">{formatViews(reel.videoViewCount)} views</p>
+        <p className="text-xs text-[var(--color-text-muted)] font-mono">{formatViews(reel.videoViewCount)} views</p>
         {analysis?.openingLine && (
-          <p className="text-xs text-[#F5EDD6] mt-1 leading-snug italic">"{analysis.openingLine}"</p>
+          <p className="text-xs text-[var(--color-text-primary)] mt-1 leading-snug italic">"{analysis.openingLine}"</p>
         )}
         {analysis && (
-          <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded-full bg-[#A78BFA]/10 text-[#A78BFA] border border-[#A78BFA]/20">
+          <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded-full bg-[rgba(var(--ai-rgb),0.10)] text-[var(--color-ai-tint)] border border-[rgba(var(--ai-rgb),0.20)]">
             {analysis.hookArchetype}
           </span>
         )}
         {analysis?.lowConfidenceNote && (
-          <p className="text-xs text-[#7A6A54] mt-1 italic">{analysis.lowConfidenceNote}</p>
+          <p className="text-xs text-[var(--color-text-muted)] mt-1 italic">{analysis.lowConfidenceNote}</p>
         )}
         {analysis && (
           <button
             onClick={() => setShowFull(f => !f)}
-            className="text-xs text-[#E07B3A] mt-2 hover:underline"
+            className="text-xs text-[var(--color-accent)] mt-2 hover:underline"
           >
             {showFull ? 'Hide analysis' : 'Show full analysis'}
           </button>
         )}
         {showFull && analysis && (
-          <div className="mt-2 text-xs text-[#C4A882] space-y-1">
-            <p><span className="text-[#7A6A54]">Retention:</span> {analysis.retentionMechanism}</p>
-            <p><span className="text-[#7A6A54]">Psychology:</span> {analysis.psychologyTrigger}</p>
-            <p><span className="text-[#7A6A54]">Template:</span> {analysis.replicationTemplate}</p>
+          <div className="mt-2 text-xs text-[var(--color-text-secondary)] space-y-1">
+            <p><span className="text-[var(--color-text-muted)]">Retention:</span> {analysis.retentionMechanism}</p>
+            <p><span className="text-[var(--color-text-muted)]">Psychology:</span> {analysis.psychologyTrigger}</p>
+            <p><span className="text-[var(--color-text-muted)]">Template:</span> {analysis.replicationTemplate}</p>
           </div>
         )}
       </div>

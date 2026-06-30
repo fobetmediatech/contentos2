@@ -19,7 +19,7 @@ import type { PaymentClient, PaymentClientInput } from '../domain/calendar'
 const CURRENCIES = ['INR', 'USD', 'EUR', 'GBP', 'AED']
 
 const inputCls =
-  'w-full bg-[#3D3025] border border-[rgba(245,237,214,0.08)] rounded-md px-3 py-2 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-[#E07B3A]'
+  'w-full bg-[var(--color-surface-raised)] border border-[rgba(var(--border-rgb),0.08)] rounded-md px-3 py-2 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-[var(--color-accent)]'
 
 const EMPTY: PaymentClientInput = {
   name: '', contactPerson: '', email: '', phone: '', taxId: '', currency: 'INR', instagramHandle: '', notes: '',
@@ -79,7 +79,7 @@ export function PaymentClientsManager({ onClose }: Props) {
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div
-        className="bg-surface border border-[rgba(245,237,214,0.12)] rounded-lg w-full max-w-2xl p-5 max-h-[90vh] overflow-y-auto"
+        className="bg-surface border border-[rgba(var(--border-rgb),0.12)] rounded-lg w-full max-w-2xl p-5 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
@@ -90,7 +90,7 @@ export function PaymentClientsManager({ onClose }: Props) {
         </div>
 
         {/* Add / edit form */}
-        <div className="bg-[rgba(245,237,214,0.03)] border border-[rgba(245,237,214,0.08)] rounded-lg p-4 mb-5">
+        <div className="bg-[rgba(var(--border-rgb),0.03)] border border-[rgba(var(--border-rgb),0.08)] rounded-lg p-4 mb-5">
           <div className="text-[11px] font-mono uppercase tracking-wide text-muted mb-2">
             {editingId ? 'Edit client' : 'New client'}
           </div>
@@ -117,7 +117,7 @@ export function PaymentClientsManager({ onClose }: Props) {
             <button
               onClick={submit}
               disabled={!canSave}
-              className="flex items-center gap-1.5 bg-[#E07B3A] hover:bg-[#C4612A] disabled:opacity-50 text-white text-sm font-medium rounded-md px-4 py-2 transition-colors"
+              className="flex items-center gap-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] disabled:opacity-50 text-white text-sm font-medium rounded-md px-4 py-2 transition-colors"
             >
               <Plus size={15} /> {save.isPending ? 'Saving…' : editingId ? 'Save changes' : 'Add client'}
             </button>
@@ -133,7 +133,7 @@ export function PaymentClientsManager({ onClose }: Props) {
             {clients.map((c) => (
               <li
                 key={c.id}
-                className="flex items-center gap-3 bg-surface border border-[rgba(245,237,214,0.08)] rounded-lg px-4 py-3"
+                className="flex items-center gap-3 bg-surface border border-[rgba(var(--border-rgb),0.08)] rounded-lg px-4 py-3"
               >
                 <div className="min-w-0 flex-1">
                   <div className="text-primary text-sm font-medium truncate">{c.name}</div>

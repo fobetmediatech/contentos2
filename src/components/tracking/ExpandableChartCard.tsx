@@ -39,9 +39,9 @@ export function ExpandableChartCard({ title, info, children }: ExpandableChartCa
   }, [open])
 
   return (
-    <div className="bg-[#2C2218] border border-[rgba(245,237,214,0.08)] rounded-xl p-4 space-y-3">
+    <div className="bg-[var(--color-surface)] border border-[rgba(var(--border-rgb),0.08)] rounded-xl p-4 space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-[#C4A882] text-xs font-medium font-mono uppercase tracking-wider">{title}</h3>
+        <h3 className="text-[var(--color-text-secondary)] text-xs font-medium font-mono uppercase tracking-wider">{title}</h3>
         <div className="flex items-center gap-2">
           {info && <InfoPopover title={info.title} formula={info.formula} significance={info.significance} />}
           <button
@@ -49,7 +49,7 @@ export function ExpandableChartCard({ title, info, children }: ExpandableChartCa
             onClick={() => setOpen(true)}
             aria-label={`Expand ${title}`}
             title="Expand"
-            className="text-[#7A6A54] hover:text-[#E07B3A] transition-colors"
+            className="text-[var(--color-text-muted)] hover:text-[var(--color-accent)] transition-colors"
           >
             <Maximize2 size={13} />
           </button>
@@ -75,12 +75,12 @@ export function ExpandableChartCard({ title, info, children }: ExpandableChartCa
             aria-label={title}
           >
             <div
-              className="w-full max-w-4xl bg-[#2C2218] border border-[rgba(245,237,214,0.15)] rounded-[14px] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.7)]"
+              className="w-full max-w-4xl bg-[var(--color-surface)] border border-[rgba(var(--border-rgb),0.15)] rounded-[14px] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.7)]"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between gap-3 mb-4">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-[#F5EDD6] text-sm font-medium font-mono uppercase tracking-wider">{title}</h3>
+                  <h3 className="text-[var(--color-text-primary)] text-sm font-medium font-mono uppercase tracking-wider">{title}</h3>
                   {info && (
                     <InfoPopover
                       title={info.title}
@@ -94,7 +94,7 @@ export function ExpandableChartCard({ title, info, children }: ExpandableChartCa
                   type="button"
                   onClick={() => setOpen(false)}
                   aria-label="Close"
-                  className="text-[#7A6A54] hover:text-[#F5EDD6] transition-colors"
+                  className="text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
                 >
                   <X size={18} />
                 </button>

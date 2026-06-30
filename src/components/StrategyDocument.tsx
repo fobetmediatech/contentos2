@@ -2,8 +2,8 @@
  * StrategyDocument — the client-ready Content Strategy Document.
  *
  * Renders the synthesized strategy + the backend analysis (competitor metrics + HookMap signals)
- * as one printable page. Print / Save as PDF reuses the global print CSS (.no-print / .report-printable),
- * same as ReportPage — no PDF library.
+ * as one printable page. Print / Save as PDF reuses the global print CSS (.no-print / .report-printable)
+ * — no PDF library.
  */
 import type { StrategyResult } from '../domain/strategy'
 
@@ -12,7 +12,7 @@ const fmt = (n: number) => n.toLocaleString()
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="mt-6">
-      <h2 className="text-[11px] font-mono uppercase tracking-wider text-[#E07B3A] mb-2">{title}</h2>
+      <h2 className="text-[11px] font-mono uppercase tracking-wider text-[var(--color-accent)] mb-2">{title}</h2>
       {children}
     </section>
   )
@@ -23,9 +23,9 @@ export function StrategyDocument({ result }: { result: StrategyResult }) {
   const date = new Date(result.generatedAt).toLocaleDateString()
 
   return (
-    <div className="report-printable bg-surface border border-[rgba(245,237,214,0.1)] rounded-lg p-6 sm:p-8 text-primary">
+    <div className="report-printable bg-surface border border-[rgba(var(--border-rgb),0.1)] rounded-lg p-6 sm:p-8 text-primary">
       {/* Header */}
-      <header className="border-b border-[rgba(245,237,214,0.12)] pb-4">
+      <header className="border-b border-[rgba(var(--border-rgb),0.12)] pb-4">
         <div className="text-[11px] font-mono uppercase tracking-wider text-muted">Content Strategy · {date}</div>
         <h1 className="font-serif italic text-3xl text-primary mt-1">{brief.brandName || 'Untitled brand'}</h1>
         <p className="text-secondary text-sm mt-1">
@@ -58,7 +58,7 @@ export function StrategyDocument({ result }: { result: StrategyResult }) {
               </thead>
               <tbody className="font-mono">
                 {accounts.map((a) => (
-                  <tr key={a.username} className="border-t border-[rgba(245,237,214,0.06)]">
+                  <tr key={a.username} className="border-t border-[rgba(var(--border-rgb),0.06)]">
                     <td className="py-1 pr-3 text-primary">@{a.username}{a.verified ? ' ✓' : ''}</td>
                     <td className="py-1 pr-3 text-muted">{a.source}</td>
                     <td className="py-1 pr-3 text-right text-secondary">{fmt(a.followers)}</td>
@@ -91,7 +91,7 @@ export function StrategyDocument({ result }: { result: StrategyResult }) {
       <Section title="Content pillars">
         <div className="grid sm:grid-cols-2 gap-3">
           {doc.contentPillars.map((p, i) => (
-            <div key={i} className="bg-[rgba(245,237,214,0.03)] border border-[rgba(245,237,214,0.08)] rounded-md p-3">
+            <div key={i} className="bg-[rgba(var(--border-rgb),0.03)] border border-[rgba(var(--border-rgb),0.08)] rounded-md p-3">
               <div className="text-primary text-sm font-medium">{p.name}</div>
               <div className="text-secondary text-xs mt-1">{p.description}</div>
             </div>
@@ -126,7 +126,7 @@ export function StrategyDocument({ result }: { result: StrategyResult }) {
       <Section title="Format mix & cadence">
         <div className="flex flex-wrap gap-2 mb-2">
           {doc.formatMix.map((f, i) => (
-            <span key={i} className="text-xs bg-[rgba(224,123,58,0.12)] text-[#F4A97B] rounded px-2 py-1">
+            <span key={i} className="text-xs bg-[rgba(var(--accent-rgb),0.12)] text-[var(--color-accent-light)] rounded px-2 py-1">
               {f.format} {f.weight} <span className="text-muted">— {f.rationale}</span>
             </span>
           ))}

@@ -9,6 +9,35 @@
   box-sizing: border-box;
 }
 
+/* Themed scrollbars — thin, rounded, warm, and theme-aware (the --border-rgb
+   channel flips per mode). Replaces the chunky default bar app-wide. Elements
+   that opt out (e.g. the nav) use [&::-webkit-scrollbar]:hidden, which wins on
+   specificity. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--border-rgb), 0.20) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(var(--border-rgb), 0.16);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--border-rgb), 0.30);
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 body {
   margin: 0;
   background-color: var(--color-bg);
@@ -20,6 +49,28 @@ body {
 
 #root {
   min-height: 100vh;
+}
+
+/* Mobile nav drawer transitions (respect prefers-reduced-motion below) */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slideInLeft {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+/* Skeleton shimmer — warm chai surfaces sliding (see components/Skeleton.tsx).
+   prefers-reduced-motion below flattens this to a static surface. */
+.skeleton {
+  background: linear-gradient(90deg, var(--color-surface) 25%, var(--color-surface-raised) 50%, var(--color-surface) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -46,9 +97,9 @@ body {
   .report-printable,
   .report-printable * {
     visibility: visible;
-    color: #1a1410 !important;
+    color: #0A3323 !important;
     background: transparent !important;
-    border-color: #d4c5b0 !important;
+    border-color: #C8C39A !important;
   }
   .report-printable {
     position: absolute;

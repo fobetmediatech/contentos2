@@ -18,7 +18,7 @@ const MONTH_NAMES = [
 
 const STATUS_CHIP: Record<PaymentStatus, string> = {
   due: 'bg-[rgba(217,119,6,0.18)] text-warning',
-  paid: 'bg-[rgba(76,175,125,0.20)] text-[#5FBF94]',
+  paid: 'bg-[rgba(76,175,125,0.20)] text-[var(--color-success)]',
   overdue: 'bg-[rgba(224,92,92,0.18)] text-danger',
 }
 
@@ -93,7 +93,7 @@ export function PaymentsCalendar({ payments, clientLabel }: Props) {
             value={month.getMonth()}
             onChange={(e) => setMonth(new Date(month.getFullYear(), Number(e.target.value), 1))}
             aria-label="Month"
-            className="ml-2 bg-[#3D3025] border border-[rgba(245,237,214,0.08)] rounded-md px-2 py-1 text-sm text-primary focus:outline-none focus:border-[#E07B3A]"
+            className="ml-2 bg-[var(--color-surface-raised)] border border-[rgba(var(--border-rgb),0.08)] rounded-md px-2 py-1 text-sm text-primary focus:outline-none focus:border-[var(--color-accent)]"
           >
             {MONTH_NAMES.map((m, i) => (
               <option key={m} value={i}>
@@ -105,7 +105,7 @@ export function PaymentsCalendar({ payments, clientLabel }: Props) {
             value={month.getFullYear()}
             onChange={(e) => setMonth(new Date(Number(e.target.value), month.getMonth(), 1))}
             aria-label="Year"
-            className="bg-[#3D3025] border border-[rgba(245,237,214,0.08)] rounded-md px-2 py-1 text-sm text-primary focus:outline-none focus:border-[#E07B3A]"
+            className="bg-[var(--color-surface-raised)] border border-[rgba(var(--border-rgb),0.08)] rounded-md px-2 py-1 text-sm text-primary focus:outline-none focus:border-[var(--color-accent)]"
           >
             {years.map((y) => (
               <option key={y} value={y}>
@@ -119,7 +119,7 @@ export function PaymentsCalendar({ payments, clientLabel }: Props) {
             const n = new Date()
             setMonth(new Date(n.getFullYear(), n.getMonth(), 1))
           }}
-          className="text-xs text-secondary hover:text-primary border border-[rgba(245,237,214,0.12)] rounded-md px-2.5 py-1 transition-colors"
+          className="text-xs text-secondary hover:text-primary border border-[rgba(var(--border-rgb),0.12)] rounded-md px-2.5 py-1 transition-colors"
         >
           Today
         </button>
@@ -145,7 +145,7 @@ export function PaymentsCalendar({ payments, clientLabel }: Props) {
       </div>
 
       {/* Day grid */}
-      <div className="grid grid-cols-7 gap-px bg-[rgba(245,237,214,0.06)] rounded-lg overflow-hidden">
+      <div className="grid grid-cols-7 gap-px bg-[rgba(var(--border-rgb),0.06)] rounded-lg overflow-hidden">
         {cells.map((d) => {
           const key = ymd(d)
           const dayPays = byDay[key] ?? []
@@ -155,10 +155,10 @@ export function PaymentsCalendar({ payments, clientLabel }: Props) {
             <div
               key={key}
               className={`min-h-[88px] p-1.5 bg-chai flex flex-col gap-1 ${inMonth ? '' : 'opacity-40'} ${
-                dayPays.length ? 'ring-1 ring-inset ring-[rgba(224,123,58,0.18)]' : ''
+                dayPays.length ? 'ring-1 ring-inset ring-[rgba(var(--accent-rgb),0.18)]' : ''
               }`}
             >
-              <span className={`text-xs font-mono ${isToday ? 'text-[#E07B3A] font-semibold' : 'text-muted'}`}>
+              <span className={`text-xs font-mono ${isToday ? 'text-[var(--color-accent)] font-semibold' : 'text-muted'}`}>
                 {d.getDate()}
               </span>
               {dayPays.map((p) => (
@@ -190,7 +190,7 @@ export function PaymentsCalendar({ payments, clientLabel }: Props) {
           onClick={() => setSelected(null)}
         >
           <div
-            className="bg-surface border border-[rgba(245,237,214,0.12)] rounded-lg w-full max-w-sm p-5"
+            className="bg-surface border border-[rgba(var(--border-rgb),0.12)] rounded-lg w-full max-w-sm p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">

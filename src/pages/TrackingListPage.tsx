@@ -11,6 +11,8 @@ import {
 import { runAccountFetch } from '../lib/trackingClient'
 import { useTrackingStore } from '../store/trackingStore'
 import { AccountRow } from '../components/tracking/AccountRow'
+import { ListRowSkeleton } from '../components/Skeleton'
+import { EmptyState } from '../components/EmptyState'
 
 export function TrackingListPage() {
   const qc = useQueryClient()
@@ -83,10 +85,10 @@ export function TrackingListPage() {
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
           <div className="flex items-center gap-3">
-            <BarChart2 size={22} className="text-[#E07B3A]" />
-            <h1 className="font-serif italic text-2xl text-[#F5EDD6]">Dashboard</h1>
+            <BarChart2 size={22} className="text-[var(--color-accent)]" />
+            <h1 className="font-serif italic text-2xl text-[var(--color-text-primary)]">Dashboard</h1>
           </div>
-          <p className="text-[#C4A882] text-sm pl-9">
+          <p className="text-[var(--color-text-secondary)] text-sm pl-9">
             Monitor Instagram accounts over time — followers, reel engagement, posting cadence.
           </p>
         </div>
@@ -95,20 +97,20 @@ export function TrackingListPage() {
       {/* Add account form */}
       <form onSubmit={handleSubmit} className="flex gap-2">
         <div className="flex-1 relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7A6A54] font-mono text-sm">@</span>
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] font-mono text-sm">@</span>
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="username"
             disabled={addMutation.isPending}
-            className="w-full bg-[#2C2218] border border-[rgba(245,237,214,0.12)] rounded-xl pl-8 pr-4 py-2.5 text-[#F5EDD6] font-mono text-sm placeholder:text-[#7A6A54] focus:outline-none focus:border-[#E07B3A] transition-colors"
+            className="w-full bg-[var(--color-surface)] border border-[rgba(var(--border-rgb),0.12)] rounded-xl pl-8 pr-4 py-2.5 text-[var(--color-text-primary)] font-mono text-sm placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
           />
         </div>
         <button
           type="submit"
           disabled={addMutation.isPending || !input.trim()}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#E07B3A] text-[#1A1410] font-medium text-sm hover:bg-[#F4A97B] transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--color-accent)] text-[var(--color-bg)] font-medium text-sm hover:bg-[var(--color-accent-light)] transition-colors disabled:opacity-50"
         >
           {addMutation.isPending ? (
             <Loader2 size={14} className="animate-spin" />
@@ -120,21 +122,22 @@ export function TrackingListPage() {
       </form>
 
       {addError && (
-        <p className="text-red-400 text-sm font-mono -mt-4">{addError}</p>
+        <p className="text-danger text-sm font-mono -mt-4">{addError}</p>
       )}
 
       {/* Account list */}
       {isLoading ? (
-        <div className="flex items-center justify-center py-16 text-[#7A6A54]">
-          <Loader2 size={20} className="animate-spin mr-3" />
-          <span className="font-mono text-sm">Loading accounts…</span>
+        <div className="space-y-2">
+          {Array.from({ length: 4 }, (_, i) => (
+            <ListRowSkeleton key={i} />
+          ))}
         </div>
       ) : accounts.length === 0 ? (
-        <div className="text-center py-20 space-y-3">
-          <BarChart2 size={32} className="mx-auto text-[#3D3025]" />
-          <p className="text-[#7A6A54] text-sm">No accounts tracked yet.</p>
-          <p className="text-[#7A6A54] text-xs">Add a username above to start monitoring.</p>
-        </div>
+        <EmptyState
+          icon={BarChart2}
+          title="No accounts tracked yet"
+          description="Add an Instagram username above to start monitoring its followers, engagement, and top reels over time."
+        />
       ) : (
         <div className="space-y-2">
           {accounts.map((account) => {

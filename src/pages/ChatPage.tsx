@@ -36,6 +36,7 @@ import { PIPELINE_REGISTRY } from '../tools/registry'
 import type { NormalizedProfile } from '../lib/transformers'
 import type { ChatMessage as ChatMessageData } from '../store/analysisStore'
 import { useCorpusStore } from '../store/corpusStore'
+import { toast } from '../lib/toast'
 import { harvestCompetitors, harvestDiscovery, harvestReelContent } from '../lib/corpusHarvest'
 import { buildReelResultPayload } from '../lib/reelSnapshot'
 import { addShownProfiles, getShownProfiles } from '../lib/competitorCache'
@@ -153,7 +154,6 @@ export function ChatPage() {
 
   // Selection state — shared across competitor + discovery results
   const [selectedHandles, setSelectedHandles] = useState<string[]>([])
-  const [selectionWarning, setSelectionWarning] = useState<string | null>(null)
 
   // Phase 1: keys are server-side — isReady() always returns true; the !ready banner is removed.
   // Kept as a local const to avoid touching canSend / disabled props throughout.
@@ -535,8 +535,7 @@ export function ChatPage() {
     setSelectedHandles((prev) => {
       if (prev.includes(handle)) return prev.filter((h) => h !== handle)
       if (prev.length >= 5) {
-        setSelectionWarning('Select up to 5 creators at a time')
-        setTimeout(() => setSelectionWarning(null), 2500)
+        toast('Select up to 5 creators at a time')
         return prev
       }
       return [...prev, handle]
@@ -619,21 +618,14 @@ export function ChatPage() {
         onDelete={handleDeleteConversation}
       />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-      {/* Selection warning toast */}
-      {selectionWarning && (
-        <div role="alert" className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 bg-[#2C2118] border border-[#E07B3A]/40 rounded-xl text-sm text-[#E07B3A] shadow-lg pointer-events-none">
-          {selectionWarning}
-        </div>
-      )}
-
       {/* ── Message area ──────────────────────────────────────────────── */}
       {!isNearBottom && (
         <button
           onClick={scrollToBottom}
           className={`fixed bottom-24 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full transition-colors shadow-lg ${
             isAnalysisClarifying
-              ? 'bg-[#E07B3A] text-white hover:bg-[#C4612A] animate-pulse'
-              : 'bg-[#2C2118] border border-[#E07B3A]/40 text-[#E07B3A] hover:bg-[#3D2E1E]'
+              ? 'bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] animate-pulse'
+              : 'bg-[var(--color-surface)] border border-[rgba(var(--accent-rgb),0.40)] text-[var(--color-accent)] hover:bg-[var(--color-surface-raised)]'
           }`}
         >
           <ChevronDown size={12} />
@@ -644,8 +636,8 @@ export function ChatPage() {
         {!hasMessages && !showInlineContent ? (
           // Welcome / empty state
           <div className="h-full flex flex-col items-center justify-center px-6 py-12">
-            <div className="w-12 h-12 rounded-full bg-[rgba(224,123,58,0.12)] flex items-center justify-center mb-4">
-              <Bot size={22} className="text-[#E07B3A]" />
+            <div className="w-12 h-12 rounded-full bg-[rgba(var(--accent-rgb),0.12)] flex items-center justify-center mb-4">
+              <Bot size={22} className="text-[var(--color-accent)]" />
             </div>
             <h2 className="font-serif italic text-2xl text-primary mb-1.5 tracking-tight">
               What do you want to research?
@@ -663,9 +655,9 @@ export function ChatPage() {
                     textareaRef.current?.focus()
                   }}
                   disabled={!ready}
-                  className="group px-3.5 py-2.5 text-left bg-surface border border-[rgba(245,237,214,0.08)] rounded-xl hover:border-[#E07B3A] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="group px-3.5 py-2.5 text-left bg-surface border border-[rgba(var(--border-rgb),0.08)] rounded-xl hover:border-[var(--color-accent)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  <span className="block text-xs font-semibold text-[#F4A97B] mb-0.5">{tool}</span>
+                  <span className="block text-xs font-semibold text-[var(--color-accent-light)] mb-0.5">{tool}</span>
                   <span className="block text-sm text-secondary group-hover:text-primary transition-colors">"{example}"</span>
                   <span className="block text-[11px] text-muted mt-0.5">{hint}</span>
                 </button>
@@ -730,10 +722,10 @@ export function ChatPage() {
                   message.id === lastReelMarkerId && activeHandles.length > 0 && reelConversationId === activeConversationId ? (
                     <Fragment key={message.id}>
                       <div className="flex items-start gap-2">
-                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(167,139,250,0.12)] flex items-center justify-center mt-0.5">
-                          <Video size={14} className="text-[#A78BFA]" />
+                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(var(--ai-rgb),0.12)] flex items-center justify-center mt-0.5">
+                          <Video size={14} className="text-[var(--color-ai-tint)]" />
                         </div>
-                        <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(245,237,214,0.08)] text-sm leading-relaxed max-w-[80%]">
+                        <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(var(--border-rgb),0.08)] text-sm leading-relaxed max-w-[80%]">
                           <span className="font-semibold text-primary">Analyzing reels</span>
                           <p className="text-secondary mt-0.5">
                             Scraping and analyzing reels for {activeHandles.map((h) => `@${h}`).join(', ')}.
@@ -762,14 +754,14 @@ export function ChatPage() {
                           {synthesisStatus === 'failed' && (
                             <button
                               onClick={handleRetryReels}
-                              className="px-4 py-2 text-sm font-semibold text-white bg-[#E07B3A] rounded-xl hover:bg-[#C4612A] transition-colors"
+                              className="px-4 py-2 text-sm font-semibold text-white bg-[var(--color-accent)] rounded-xl hover:bg-[var(--color-accent-hover)] transition-colors"
                             >
                               Retry analysis
                             </button>
                           )}
                           <button
                             onClick={handleStartOver}
-                            className="px-4 py-2 text-sm text-secondary border border-[rgba(245,237,214,0.10)] rounded-xl hover:bg-surface-raised transition-colors"
+                            className="px-4 py-2 text-sm text-secondary border border-[rgba(var(--border-rgb),0.10)] rounded-xl hover:bg-surface-raised transition-colors"
                           >
                             Start over
                           </button>
@@ -796,10 +788,10 @@ export function ChatPage() {
                   && (repurposeStatus === 'building-profile' || repurposeStatus === 'analyzing-source' || repurposeStatus === 'rewriting' || repurposeStatus === 'error') ? (
                     <div key={message.id} className="my-2 text-sm text-muted flex items-center gap-2">
                       {repurposeStatus === 'error' ? (
-                        <span className="text-[#E07B3A]">{repurposeError || 'Could not repurpose this reel.'}</span>
+                        <span className="text-[var(--color-accent)]">{repurposeError || 'Could not repurpose this reel.'}</span>
                       ) : (
                         <>
-                          <span className="inline-block w-3 h-3 rounded-full border-2 border-[#E07B3A] border-t-transparent animate-spin" />
+                          <span className="inline-block w-3 h-3 rounded-full border-2 border-[var(--color-accent)] border-t-transparent animate-spin" />
                           <span>
                             {repurposeStatus === 'building-profile' && PIPELINE_REGISTRY.repurpose.steps[0]}
                             {repurposeStatus === 'analyzing-source' && PIPELINE_REGISTRY.repurpose.steps[1]}
@@ -850,8 +842,8 @@ export function ChatPage() {
                   />
                   {isAnalysisClarifying && pendingDiscovery && (
                     <div className="flex items-start gap-2">
-                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(224,123,58,0.12)] flex items-center justify-center mt-0.5">
-                        <Bot size={14} className="text-[#E07B3A]" />
+                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(var(--accent-rgb),0.12)] flex items-center justify-center mt-0.5">
+                        <Bot size={14} className="text-[var(--color-accent)]" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <ClarificationCard
@@ -889,8 +881,8 @@ export function ChatPage() {
         )}
       </div>
 
-      {/* ── Input area ────────────────────────────────────────────────── */}
-      <div className="flex-shrink-0 bg-surface border-t border-[rgba(245,237,214,0.08)] px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))]">
+      {/* ── Input area — blends into the chat canvas; the field is a soft pill ── */}
+      <div className="flex-shrink-0 bg-chai px-4 pt-2 pb-[max(12px,env(safe-area-inset-bottom))]">
         {/* Centered to the same max-width as the conversation column above. */}
         <div className="flex items-end gap-2 max-w-4xl mx-auto w-full">
           <div className="relative flex-1">
@@ -905,7 +897,7 @@ export function ChatPage() {
               rows={1}
               disabled={!ready}
               aria-label="Message input"
-              className="w-full px-3 py-2.5 text-sm bg-[#1A1410] text-primary border border-[rgba(245,237,214,0.12)] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#E07B3A] focus:border-[#E07B3A] resize-none disabled:opacity-40 disabled:cursor-not-allowed leading-relaxed placeholder:text-muted"
+              className="w-full px-4 py-3 text-sm bg-[var(--color-surface)] text-primary border border-[rgba(var(--border-rgb),0.10)] rounded-2xl shadow-sm focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)] resize-none disabled:opacity-40 disabled:cursor-not-allowed leading-relaxed placeholder:text-muted"
             />
             {inputText.length >= 400 && (
               <span
@@ -922,7 +914,7 @@ export function ChatPage() {
             onClick={handleSend}
             disabled={!canSend}
             aria-label="Send message"
-            className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl bg-[#E07B3A] text-white hover:bg-[#C4612A] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full bg-[var(--color-accent)] text-[var(--color-bg)] hover:bg-[var(--color-accent-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
           >
             <Send size={15} />
           </button>
