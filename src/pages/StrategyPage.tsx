@@ -8,8 +8,10 @@
 import { Target, Loader2 } from 'lucide-react'
 import { useStrategyStore } from '../store/strategyStore'
 import { useContentStrategy } from '../hooks/useContentStrategy'
-import { StrategyDocument } from '../components/StrategyDocument'
-import type { StrategyBrief, ContentLanguage } from '../domain/strategy'
+import { StrategyDeck } from '../components/StrategyDeck'
+import { resolveDeckColors, PRESET_LABELS } from '../lib/deckThemes'
+import { SAMPLE_RESULT } from '../lib/sampleStrategy'
+import type { StrategyBrief, ContentLanguage, DeckPreset } from '../domain/strategy'
 
 const inputCls =
   'w-full bg-[#3D3025] border border-[rgba(245,237,214,0.08)] rounded-md px-3 py-2 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-[#E07B3A]'
@@ -23,8 +25,12 @@ const LANGS: { value: ContentLanguage; label: string }[] = [
 ]
 
 export function StrategyPage() {
-  const { brief, status, step, error, result, setBrief, reset } = useStrategyStore()
+  const { brief, status, step, error, result, setBrief, setResult, reset } = useStrategyStore()
   const { generate, cancel } = useContentStrategy()
+  const loadSample = () => {
+    setBrief(SAMPLE_RESULT.brief)
+    setResult(SAMPLE_RESULT)
+  }
   const running = status === 'running'
 
   const set = (patch: Partial<StrategyBrief>) => setBrief({ ...brief, ...patch })
@@ -37,15 +43,23 @@ export function StrategyPage() {
   const canGenerate = brief.brandName.trim() && brief.offer.trim() && !running
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-5xl mx-auto">
       <header className="mb-5 no-print">
         <h1 className="font-serif italic text-3xl text-primary flex items-center gap-2">
           <Target size={24} className="text-[#E07B3A]" /> Content Strategizing
         </h1>
         <p className="text-secondary text-sm mt-1">
           Fill the onboarding sheet — ContentOS pulls competitor metrics, niche trends, and winning hooks
-          automatically and writes a complete strategy document.
+          automatically and writes a complete strategy deck.
         </p>
+        {import.meta.env.DEV && (
+          <button
+            onClick={loadSample}
+            className="mt-2 text-xs text-secondary hover:text-primary border border-[rgba(245,237,214,0.12)] rounded-md px-3 py-1.5"
+          >
+            Load sample deck (dev only — for previewing the format locally)
+          </button>
+        )}
       </header>
 
       {/* Onboarding form */}
@@ -114,8 +128,8 @@ export function StrategyPage() {
         <div className={eyebrow}>D · Brand & restrictions</div>
         <div className="grid sm:grid-cols-2 gap-3">
           <label className="block">
-            <span className={labelCls}>Brand colors (optional)</span>
-            <input className={inputCls} value={brief.brandColors} onChange={(e) => set({ brandColors: e.target.value })} placeholder="hex codes or names" />
+            <span className={labelCls}>Brand color (hex — used as deck accent)</span>
+            <input className={inputCls} value={brief.brandColors} onChange={(e) => set({ brandColors: e.target.value })} placeholder="#C9A227" />
           </label>
           <label className="block">
             <span className={labelCls}>Topics / styles they dislike</span>
@@ -126,6 +140,44 @@ export function StrategyPage() {
             <input className={inputCls} value={brief.offLimits} onChange={(e) => set({ offLimits: e.target.value })} placeholder="e.g. nothing negative about Dubai" />
           </label>
         </div>
+
+        <div className={eyebrow}>Deck theme</div>
+        <div className="flex flex-wrap items-center gap-2">
+          {(Object.keys(PRESET_LABELS) as DeckPreset[]).map((p) => (
+            <button
+              key={p}
+              onClick={() => set({ theme: { ...brief.theme, preset: p } })}
+              className={`text-sm px-3 py-1.5 rounded-md border transition-colors ${
+                brief.theme.preset === p
+                  ? 'bg-[rgba(224,123,58,0.16)] border-[#E07B3A] text-[#F4A97B]'
+                  : 'border-[rgba(245,237,214,0.12)] text-secondary hover:text-primary'
+              }`}
+            >
+              {PRESET_LABELS[p]}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 mt-2">
+          <input
+            className={`${inputCls} w-44`}
+            value={brief.theme.bg}
+            onChange={(e) => set({ theme: { ...brief.theme, bg: e.target.value } })}
+            placeholder="Background hex e.g. #0A0A0A"
+          />
+          <input
+            className={`${inputCls} w-44`}
+            value={brief.theme.accent}
+            onChange={(e) => set({ theme: { ...brief.theme, accent: e.target.value } })}
+            placeholder="Accent hex e.g. #C9A227"
+          />
+          <span className="text-muted text-xs ml-1">Type custom colors to override the preset (accent also reads your brand color).</span>
+        </div>
+        <input
+          className={`${inputCls} w-full max-w-lg mt-2`}
+          value={brief.imageKeyword}
+          onChange={(e) => set({ imageKeyword: e.target.value })}
+          placeholder="Hero image keyword — e.g. Dubai skyline luxury (blank = no cover photo)"
+        />
 
         <div className="flex items-center gap-3 mt-5">
           {running ? (
@@ -164,7 +216,7 @@ export function StrategyPage() {
               </button>
             </div>
           </div>
-          <StrategyDocument result={result} />
+          <StrategyDeck result={result} colors={resolveDeckColors(brief)} imageKeyword={brief.imageKeyword} />
         </>
       )}
     </div>

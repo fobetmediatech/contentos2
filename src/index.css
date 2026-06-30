@@ -57,3 +57,39 @@ body {
     width: 100%;
   }
 }
+
+/* Content Strategy slide deck — each .deck-slide prints as a landscape 16:9 page with its
+   theme colors preserved (named page so it doesn't disturb the portrait report above). */
+@page deck-page {
+  size: 13.333in 7.5in;
+  margin: 0;
+}
+@media print {
+  .deck-printable,
+  .deck-printable * {
+    visibility: visible;
+  }
+  .deck-printable {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    gap: 0 !important;
+  }
+  .deck-slide {
+    page: deck-page;
+    width: 13.333in;
+    height: 7.5in;
+    box-sizing: border-box;
+    border: none !important;
+    border-radius: 0 !important;
+    aspect-ratio: auto !important;
+    page-break-after: always;
+    break-after: page;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .deck-slide:last-child {
+    page-break-after: auto;
+  }
+}

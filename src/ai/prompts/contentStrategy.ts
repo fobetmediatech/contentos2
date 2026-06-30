@@ -23,6 +23,7 @@ export const CONTENT_STRATEGY_SCHEMA = {
     positioning: { type: 'string' },
     audienceInsight: { type: 'string' },
     competitiveSummary: { type: 'string' },
+    whatsWorking: { type: 'array', items: { type: 'string' } },
     contentPillars: {
       type: 'array',
       items: { type: 'object', properties: { name: { type: 'string' }, description: { type: 'string' } }, required: ['name', 'description'] },
@@ -44,7 +45,7 @@ export const CONTENT_STRATEGY_SCHEMA = {
     dos: { type: 'array', items: { type: 'string' } },
     donts: { type: 'array', items: { type: 'string' } },
   },
-  required: ['positioning', 'audienceInsight', 'competitiveSummary', 'contentPillars', 'hookFormulas', 'contentIdeas', 'formatMix', 'cadence', 'voiceAndTone', 'dos', 'donts'],
+  required: ['positioning', 'audienceInsight', 'competitiveSummary', 'whatsWorking', 'contentPillars', 'hookFormulas', 'contentIdeas', 'formatMix', 'cadence', 'voiceAndTone', 'dos', 'donts'],
 }
 
 function accountsBlock(accounts: AnalyzedAccount[]): string {
@@ -106,6 +107,7 @@ Return JSON matching the schema with:
 - positioning: one sharp sentence on how this brand should be positioned vs. the competitors.
 - audienceInsight: what this specific audience actually wants/fears, beyond the surface ask.
 - competitiveSummary: 2-3 sentences on the competitive landscape and the gap this brand can own.
+- whatsWorking: 4-6 short bullets distilling the winning hook/content patterns from the HookMap analysis above. CRITICAL: write these in LATIN script only (romanise any Hindi/Devanagari source quotes into Latin Hinglish, e.g. "पर मैं आपसे क्यों लूं" → "Par main aapse kyun lun") — never output Devanagari.
 - contentPillars: 3-5 recurring content themes (name + description) that map to the offer.
 - hookFormulas: 4-6 reusable hook templates DERIVED FROM what works above, each with a fill-in template and a concrete example written for THIS client.
 - contentIdeas: 6-10 specific post ideas (title + ready hook + format like Reel/Carousel/Story + which pillar). Hooks must obey the language rule.
@@ -129,6 +131,7 @@ export function parseContentStrategyDoc(raw: unknown): ContentStrategyDoc {
     positioning: str(r.positioning),
     audienceInsight: str(r.audienceInsight),
     competitiveSummary: str(r.competitiveSummary),
+    whatsWorking: strArr(r.whatsWorking),
     contentPillars: objArr(r.contentPillars, (o) => ({ name: str(o.name), description: str(o.description) })),
     hookFormulas: objArr(r.hookFormulas, (o) => ({ name: str(o.name), template: str(o.template), example: str(o.example) })),
     contentIdeas: objArr(r.contentIdeas, (o) => ({ title: str(o.title), hook: str(o.hook), format: str(o.format), pillar: str(o.pillar) })),
