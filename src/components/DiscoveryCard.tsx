@@ -54,7 +54,7 @@ function LocationBadge({ confidence }: { confidence: DiscoveryResult['locationCo
     )
   }
   return (
-    <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-[#3D3025] text-[#7A6A54] opacity-70">
+    <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-[#3D3025] text-[#8B7D6B] opacity-70">
       <MapPin size={10} />
       Unconfirmed
     </span>
@@ -97,7 +97,7 @@ export const DiscoveryCard = memo(function DiscoveryCard({ result, profile, coho
           {isSelected ? (
             <CheckSquare size={18} className="text-[#E07B3A]" />
           ) : (
-            <Square size={18} className="text-[#7A6A54]" />
+            <Square size={18} className="text-[#8B7D6B]" />
           )}
         </div>
       )}
@@ -205,7 +205,7 @@ export const DiscoveryCard = memo(function DiscoveryCard({ result, profile, coho
       <div className="mt-2 flex items-center gap-3">
         {result.contentFocus && (
           <span className="inline-flex items-center gap-1 text-xs text-[#C4A882]">
-            <Video size={11} className="text-[#7A6A54]" />
+            <Video size={11} className="text-[#8B7D6B]" />
             {result.contentFocus}
           </span>
         )}
@@ -224,7 +224,7 @@ export const DiscoveryCard = memo(function DiscoveryCard({ result, profile, coho
 
       {/* Feedback (Phase 3) — save/dismiss trains future rankings toward your taste. */}
       <div className="mt-3 pt-2 border-t border-[rgba(245,237,214,0.06)] flex items-center justify-between">
-        <span className="text-[11px] text-[#7A6A54]">More like this?</span>
+        <span className="text-[11px] text-[#8B7D6B]">More like this?</span>
         <FeedbackControl username={result.username} />
       </div>
     </div>

@@ -49,7 +49,7 @@ export function ExpandableChartCard({ title, info, children }: ExpandableChartCa
             onClick={() => setOpen(true)}
             aria-label={`Expand ${title}`}
             title="Expand"
-            className="text-[#7A6A54] hover:text-[#E07B3A] transition-colors"
+            className="text-[#8B7D6B] hover:text-[#E07B3A] transition-colors"
           >
             <Maximize2 size={13} />
           </button>
@@ -94,7 +94,7 @@ export function ExpandableChartCard({ title, info, children }: ExpandableChartCa
                   type="button"
                   onClick={() => setOpen(false)}
                   aria-label="Close"
-                  className="text-[#7A6A54] hover:text-[#F5EDD6] transition-colors"
+                  className="text-[#8B7D6B] hover:text-[#F5EDD6] transition-colors"
                 >
                   <X size={18} />
                 </button>

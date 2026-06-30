@@ -35,7 +35,7 @@ function compactNumber(n: number): string {
 }
 
 const GRID_COLOR = 'rgba(245,237,214,0.06)'
-const AXIS_COLOR = '#7A6A54'
+const AXIS_COLOR = '#8B7D6B'
 
 const tooltipStyle: React.CSSProperties = {
   backgroundColor: '#2C2218',
@@ -55,7 +55,7 @@ const axisStyle = {
 
 function NoData({ message }: { message: string }) {
   return (
-    <div className="flex items-center justify-center h-full text-[#7A6A54] font-mono text-xs">
+    <div className="flex items-center justify-center h-full text-[#8B7D6B] font-mono text-xs">
       {message}
     </div>
   )

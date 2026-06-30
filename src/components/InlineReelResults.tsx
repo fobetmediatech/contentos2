@@ -65,15 +65,15 @@ function SynthesisCard({ synthesis, onSuggest }: { synthesis: SynthesisOutput; o
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
         <div className="px-3 py-2 bg-[#13101E] rounded-lg">
-          <p className="text-xs text-[#7A6A54] mb-0.5">Median views</p>
+          <p className="text-xs text-[#8B7D6B] mb-0.5">Median views</p>
           <p className="text-sm font-mono text-[#C4A882]">{formatViews(synthesis.benchmarks.medianViews)}</p>
         </div>
         <div className="px-3 py-2 bg-[#13101E] rounded-lg">
-          <p className="text-xs text-[#7A6A54] mb-0.5">Likes / views</p>
+          <p className="text-xs text-[#8B7D6B] mb-0.5">Likes / views</p>
           <p className="text-sm font-mono text-[#C4A882]">{(synthesis.benchmarks.likesViewsRatio * 100).toFixed(1)}%</p>
         </div>
         <div className="px-3 py-2 bg-[#13101E] rounded-lg">
-          <p className="text-xs text-[#7A6A54] mb-0.5">Comments / likes</p>
+          <p className="text-xs text-[#8B7D6B] mb-0.5">Comments / likes</p>
           <p className="text-sm font-mono text-[#C4A882]">{(synthesis.benchmarks.commentsLikesRatio * 100).toFixed(1)}%</p>
         </div>
       </div>
@@ -210,7 +210,7 @@ function ReelCard({ reel, analysis }: { reel: ReelData; analysis?: ReelAnalysis 
         />
       )}
       <div className="p-3">
-        <p className="text-xs text-[#7A6A54] font-mono">{formatViews(reel.videoViewCount)} views</p>
+        <p className="text-xs text-[#8B7D6B] font-mono">{formatViews(reel.videoViewCount)} views</p>
         {analysis?.openingLine && (
           <p className="text-xs text-[#F5EDD6] mt-1 leading-snug italic">"{analysis.openingLine}"</p>
         )}
@@ -220,7 +220,7 @@ function ReelCard({ reel, analysis }: { reel: ReelData; analysis?: ReelAnalysis 
           </span>
         )}
         {analysis?.lowConfidenceNote && (
-          <p className="text-xs text-[#7A6A54] mt-1 italic">{analysis.lowConfidenceNote}</p>
+          <p className="text-xs text-[#8B7D6B] mt-1 italic">{analysis.lowConfidenceNote}</p>
         )}
         {analysis && (
           <button
@@ -232,9 +232,9 @@ function ReelCard({ reel, analysis }: { reel: ReelData; analysis?: ReelAnalysis 
         )}
         {showFull && analysis && (
           <div className="mt-2 text-xs text-[#C4A882] space-y-1">
-            <p><span className="text-[#7A6A54]">Retention:</span> {analysis.retentionMechanism}</p>
-            <p><span className="text-[#7A6A54]">Psychology:</span> {analysis.psychologyTrigger}</p>
-            <p><span className="text-[#7A6A54]">Template:</span> {analysis.replicationTemplate}</p>
+            <p><span className="text-[#8B7D6B]">Retention:</span> {analysis.retentionMechanism}</p>
+            <p><span className="text-[#8B7D6B]">Psychology:</span> {analysis.psychologyTrigger}</p>
+            <p><span className="text-[#8B7D6B]">Template:</span> {analysis.replicationTemplate}</p>
           </div>
         )}
       </div>

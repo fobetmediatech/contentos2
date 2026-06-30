@@ -57,7 +57,7 @@ export const CompetitorCard = memo(function CompetitorCard({ competitor, profile
           {isSelected ? (
             <CheckSquare size={18} className="text-[#E07B3A]" />
           ) : (
-            <Square size={18} className="text-[#7A6A54]" />
+            <Square size={18} className="text-[#8B7D6B]" />
           )}
         </div>
       )}
@@ -153,7 +153,7 @@ export const CompetitorCard = memo(function CompetitorCard({ competitor, profile
 
       {/* Feedback (Phase 3) — save/dismiss trains future rankings toward your taste. */}
       <div className="mt-3 pt-2 border-t border-[rgba(245,237,214,0.06)] flex items-center justify-between">
-        <span className="text-[11px] text-[#7A6A54]">More like this?</span>
+        <span className="text-[11px] text-[#8B7D6B]">More like this?</span>
         <FeedbackControl username={competitor.username} />
       </div>
     </div>

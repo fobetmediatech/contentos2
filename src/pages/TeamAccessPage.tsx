@@ -101,6 +101,7 @@ export function TeamAccessPage() {
               if (e.key === 'Enter') addMember()
             }}
             placeholder="person@company.com"
+            aria-label="Email address to grant finance access"
             className={`${inputCls} flex-1 min-w-[14rem]`}
           />
           <button

@@ -46,7 +46,7 @@ export function ProgressSteps({ currentStep, steps }: ProgressStepsProps) {
                     ? 'bg-success/15 text-success'
                     : isActive
                     ? 'bg-[#E07B3A] text-[#1A1410]'
-                    : 'bg-[#3D3025] text-[#7A6A54]'
+                    : 'bg-[#3D3025] text-[#8B7D6B]'
                 }`}
               >
                 {isDone ? (
@@ -61,7 +61,7 @@ export function ProgressSteps({ currentStep, steps }: ProgressStepsProps) {
               {/* Step label */}
               <span
                 className={`text-sm ${
-                  isActive ? 'text-[#F5EDD6] font-medium' : isDone ? 'text-[#C4A882]' : 'text-[#7A6A54]'
+                  isActive ? 'text-[#F5EDD6] font-medium' : isDone ? 'text-[#C4A882]' : 'text-[#8B7D6B]'
                 }`}
               >
                 {stepLabels[step] ?? `Step ${step}`}

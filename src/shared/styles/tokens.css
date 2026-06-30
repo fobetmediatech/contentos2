@@ -14,7 +14,7 @@
   /* ── Text ─────────────────────────────────────────────────────────── */
   --color-text-primary: #F5EDD6;    /* aged paper warm white */
   --color-text-secondary: #C4A882; /* warm muted */
-  --color-text-muted: #7A6A54;     /* labels, placeholders */
+  --color-text-muted: #8B7D6B;     /* labels, placeholders — lightened from #7A6A54 for WCAG AA on chai bg */
 
   /* ── Accent — saffron orange ──────────────────────────────────────── */
   --color-accent: #E07B3A;

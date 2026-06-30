@@ -25,7 +25,7 @@ export function ReportPage() {
     return (
       <div className="max-w-2xl mx-auto px-4 py-16 text-center">
         <h1 className="text-2xl font-bold text-[#F5EDD6] mb-2">No report yet</h1>
-        <p className="text-[#7A6A54] mb-6">
+        <p className="text-[#8B7D6B] mb-6">
           Analyze a single creator's reels from the chat, then come back here for the full-page summary.
         </p>
         <button

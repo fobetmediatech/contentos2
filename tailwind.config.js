@@ -16,7 +16,7 @@ export default {
         'surface-elevated': '#4A3C2E',
         primary: '#F5EDD6',
         secondary: '#C4A882',
-        muted: '#7A6A54',
+        muted: '#8B7D6B',
         accent: {
           DEFAULT: '#E07B3A',
           hover: '#C4612A',

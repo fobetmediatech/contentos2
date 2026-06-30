@@ -48,9 +48,9 @@ export function ConversationSwitcher({ conversations, activeId, onSwitch, onNew,
           className="flex items-center gap-1.5 max-w-[55vw] px-3 py-1.5 text-sm rounded-xl bg-[#2C2218] border border-[rgba(245,237,214,0.08)] text-[#C4A882] hover:text-[#F5EDD6] hover:border-[rgba(245,237,214,0.15)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E07B3A] transition-colors"
           aria-label="Switch conversation"
         >
-          <MessageSquare size={14} className="flex-shrink-0 text-[#7A6A54]" />
+          <MessageSquare size={14} className="flex-shrink-0 text-[#8B7D6B]" />
           <span className="truncate">{active?.title ?? 'Chat'}</span>
-          <ChevronDown size={14} className="flex-shrink-0 text-[#7A6A54]" />
+          <ChevronDown size={14} className="flex-shrink-0 text-[#8B7D6B]" />
         </button>
 
         {open && (
@@ -77,7 +77,7 @@ export function ConversationSwitcher({ conversations, activeId, onSwitch, onNew,
                     e.stopPropagation()
                     onDelete(c.id)
                   }}
-                  className="flex-shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-[#7A6A54] hover:text-[#E05C5C] focus-visible:text-[#E05C5C] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#E05C5C] rounded transition-opacity"
+                  className="flex-shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-[#8B7D6B] hover:text-[#E05C5C] focus-visible:text-[#E05C5C] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#E05C5C] rounded transition-opacity"
                   aria-label={`Delete conversation: ${c.title}`}
                 >
                   <Trash2 size={13} />

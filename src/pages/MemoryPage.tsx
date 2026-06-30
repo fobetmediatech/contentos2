@@ -84,7 +84,7 @@ export function MemoryPage() {
             className={`text-sm px-3 py-1.5 rounded-md border transition-colors ${
               tab === t
                 ? 'border-[#E07B3A] text-[#F5EDD6]'
-                : 'border-[rgba(245,237,214,0.12)] text-[#7A6A54] hover:text-[#C4A882] hover:border-[rgba(245,237,214,0.20)]'
+                : 'border-[rgba(245,237,214,0.12)] text-[#8B7D6B] hover:text-[#C4A882] hover:border-[rgba(245,237,214,0.20)]'
             }`}
           >
             {t === 'creators' ? 'Creators' : 'Voice Profiles'}
@@ -96,7 +96,7 @@ export function MemoryPage() {
         <>
           {list.length === 0 ? (
             <div className="text-center py-16">
-              <p className="text-sm text-[#7A6A54]">Nothing remembered yet — run a search and creators show up here.</p>
+              <p className="text-sm text-[#8B7D6B]">Nothing remembered yet — run a search and creators show up here.</p>
               <Link to="/" className="inline-block mt-3 text-sm text-[#E07B3A] hover:underline">
                 Start a search →
               </Link>
@@ -105,14 +105,14 @@ export function MemoryPage() {
             <>
               {/* Text search over the loaded corpus */}
               <div className="relative mb-3">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7A6A54] pointer-events-none" />
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8B7D6B] pointer-events-none" />
                 <input
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search remembered creators…"
                   aria-label="Search creators"
-                  className="w-full pl-9 pr-3 py-2 text-sm bg-[#2C2218] text-[#F5EDD6] border border-[rgba(245,237,214,0.08)] rounded-xl focus:outline-none focus:border-[#E07B3A] placeholder:text-[#7A6A54] transition-colors"
+                  className="w-full pl-9 pr-3 py-2 text-sm bg-[#2C2218] text-[#F5EDD6] border border-[rgba(245,237,214,0.08)] rounded-xl focus:outline-none focus:border-[#E07B3A] placeholder:text-[#8B7D6B] transition-colors"
                 />
               </div>
 
@@ -141,7 +141,7 @@ export function MemoryPage() {
                     className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
                       verdict === v.key
                         ? 'bg-[rgba(224,123,58,0.12)] text-[#F4A97B] border-[rgba(224,123,58,0.3)]'
-                        : 'bg-[#2C2218] text-[#7A6A54] border-[rgba(245,237,214,0.08)] hover:border-[rgba(245,237,214,0.15)]'
+                        : 'bg-[#2C2218] text-[#8B7D6B] border-[rgba(245,237,214,0.08)] hover:border-[rgba(245,237,214,0.15)]'
                     }`}
                   >
                     {v.label}
@@ -150,7 +150,7 @@ export function MemoryPage() {
               </div>
 
               {searched.length === 0 ? (
-                <p className="text-sm text-[#7A6A54] py-8 text-center">
+                <p className="text-sm text-[#8B7D6B] py-8 text-center">
                   {query.trim() ? 'No creators match your search.' : `No ${verdict} creators yet.`}
                 </p>
               ) : (
@@ -168,7 +168,7 @@ export function MemoryPage() {
       {tab === 'voices' && (
         <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
           {Object.values(voiceProfiles).length === 0 ? (
-            <p className="text-sm text-[#7A6A54] col-span-full py-8 text-center">
+            <p className="text-sm text-[#8B7D6B] col-span-full py-8 text-center">
               No voice profiles yet.{' '}
               <Link to="/" className="text-[#E07B3A] hover:underline">
                 Repurpose a reel for a client
@@ -253,12 +253,12 @@ function MemoryCreatorCard({ record }: { record: CreatorRecord }) {
           {record.fullName && record.fullName !== record.username && (
             <p className="text-xs text-[#C4A882] mt-0.5 truncate">{record.fullName}</p>
           )}
-          <p className="text-xs text-[#7A6A54] mt-0.5 tabular-nums">
+          <p className="text-xs text-[#8B7D6B] mt-0.5 tabular-nums">
             {formatCount(record.followersCount)} followers
             {er !== null ? ` · ${er.toFixed(1)}% ER` : ''}
           </p>
           {contexts.length > 0 && (
-            <p className="text-xs text-[#7A6A54] mt-1">
+            <p className="text-xs text-[#8B7D6B] mt-1">
               <span className="text-[#5C4A30]">Seen in:</span> {contexts.join(' · ')}
             </p>
           )}
@@ -279,12 +279,12 @@ function MemoryCreatorCard({ record }: { record: CreatorRecord }) {
       {expanded && (
         <div className="mt-2">
           {loading ? (
-            <p className="text-xs text-[#7A6A54]">Loading…</p>
+            <p className="text-xs text-[#8B7D6B]">Loading…</p>
           ) : content && content.length > 0 ? (
             <div className="grid gap-2 grid-cols-1">
               {content.map((c) => (
                 <div key={c.id} className="bg-[#1A1410] rounded-lg p-2.5 border border-[rgba(245,237,214,0.06)]">
-                  <p className="text-xs text-[#7A6A54] font-mono">{formatCount(c.videoViewCount)} views</p>
+                  <p className="text-xs text-[#8B7D6B] font-mono">{formatCount(c.videoViewCount)} views</p>
                   {c.openingLine && <p className="text-xs text-[#F5EDD6] mt-1 leading-snug italic">"{c.openingLine}"</p>}
                   {c.hookArchetype && (
                     // Hook archetype is Gemini-classified → violet tint per DESIGN.md.
@@ -296,7 +296,7 @@ function MemoryCreatorCard({ record }: { record: CreatorRecord }) {
               ))}
             </div>
           ) : (
-            <p className="text-xs text-[#7A6A54]">No reels analyzed for this creator yet.</p>
+            <p className="text-xs text-[#8B7D6B]">No reels analyzed for this creator yet.</p>
           )}
         </div>
       )}

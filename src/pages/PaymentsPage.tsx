@@ -198,18 +198,19 @@ export function PaymentsPage() {
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             placeholder="Amount"
+            aria-label="Amount"
             min="0"
             className={inputCls}
           />
-          <select value={currency} onChange={(e) => setCurrency(e.target.value)} className={inputCls}>
+          <select value={currency} onChange={(e) => setCurrency(e.target.value)} aria-label="Currency" className={inputCls}>
             {CURRENCIES.map((c) => (
               <option key={c} value={c}>
                 {c}
               </option>
             ))}
           </select>
-          <input type="date" value={paidOn} onChange={(e) => setPaidOn(e.target.value)} className={inputCls} />
-          <select value={status} onChange={(e) => setStatus(e.target.value as PaymentStatus)} className={inputCls}>
+          <input type="date" value={paidOn} onChange={(e) => setPaidOn(e.target.value)} aria-label="Payment date" className={inputCls} />
+          <select value={status} onChange={(e) => setStatus(e.target.value as PaymentStatus)} aria-label="Status" className={inputCls}>
             {STATUSES.map((s) => (
               <option key={s} value={s}>
                 {s}
@@ -220,6 +221,7 @@ export function PaymentsPage() {
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="Note *"
+            aria-label="Note"
             maxLength={200}
             className={`${inputCls} col-span-2 sm:col-span-5`}
           />

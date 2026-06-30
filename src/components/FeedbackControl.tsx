@@ -34,7 +34,7 @@ export function FeedbackControl({ username, className = '' }: Props) {
   }
 
   const base = 'p-1.5 rounded-lg transition-colors'
-  const idle = 'text-[#7A6A54] hover:text-[#C4A882] hover:bg-[#3D3025]'
+  const idle = 'text-[#8B7D6B] hover:text-[#C4A882] hover:bg-[#3D3025]'
 
   return (
     <div className={`inline-flex items-center gap-1 ${className}`} onClick={(e) => e.stopPropagation()}>

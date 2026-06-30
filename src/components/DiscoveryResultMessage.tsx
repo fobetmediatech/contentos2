@@ -105,7 +105,7 @@ export function DiscoveryResultMessage({
       {/* Card grids */}
       {top.length > 0 && (
         <div>
-          <p className="text-xs font-semibold font-mono text-[#7A6A54] uppercase tracking-wide mb-3">
+          <p className="text-xs font-semibold font-mono text-[#8B7D6B] uppercase tracking-wide mb-3">
             {DISCOVERY_CATEGORIES.top.sectionLabel}
           </p>
           <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
@@ -124,7 +124,7 @@ export function DiscoveryResultMessage({
       )}
       {trending.length > 0 && (
         <div>
-          <p className="text-xs font-semibold font-mono text-[#7A6A54] uppercase tracking-wide mb-3">
+          <p className="text-xs font-semibold font-mono text-[#8B7D6B] uppercase tracking-wide mb-3">
             {DISCOVERY_CATEGORIES.trending.sectionLabel}
           </p>
           <div className="grid gap-3 grid-cols-1 md:grid-cols-2">

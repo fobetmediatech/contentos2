@@ -73,7 +73,7 @@ Every design decision should reinforce that someone who lives in the creator eco
 /* Text */
 --color-text-primary: #F5EDD6;   /* aged paper warm white — NOT pure white */
 --color-text-secondary: #C4A882; /* warm muted text */
---color-text-muted: #7A6A54;     /* labels, placeholders, captions */
+--color-text-muted: #8B7D6B;     /* labels, placeholders, captions — WCAG AA on chai bg (was #7A6A54) */
 
 /* Accent — Saffron Orange */
 --color-accent: #E07B3A;         /* marigold energy — CTAs, active states, links */
@@ -183,3 +183,4 @@ color: var(--color-text-muted);
 | 2026-06-01 | Saffron orange (#E07B3A) as accent | Marigold energy. Completely absent from competitor palette (all use blue/indigo/purple). |
 | 2026-06-01 | AI insight tint violet (#A78BFA) | Semantic signal: this color only appears on Gemini-generated content. Users learn to read it. |
 | 2026-06-01 | Warm undertone rule for all neutrals | Discipline that makes the whole system feel coherent vs. assembled from parts. |
+| 2026-06-30 | Muted text #7A6A54 → #8B7D6B | Old value sat at the WCAG AA contrast floor on the chai bg. Lightened a touch while keeping the warm brown undertone. |

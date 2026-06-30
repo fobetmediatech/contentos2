@@ -130,7 +130,7 @@ export function ControlsPanel({
             onChange={(e) => setWindowDays(Number(e.target.value))}
             className="w-full bg-[#1A1410] border border-[rgba(245,237,214,0.12)] rounded-md px-3 py-2 text-[#F5EDD6] font-mono text-sm focus:outline-none focus:border-[#E07B3A] transition-colors"
           />
-          <p className="text-[#7A6A54] text-[11px]">How far back to scrape reels</p>
+          <p className="text-[#8B7D6B] text-[11px]">How far back to scrape reels</p>
         </div>
 
         <div className="space-y-1.5">
@@ -143,7 +143,7 @@ export function ControlsPanel({
             onChange={(e) => setIntervalDays(Number(e.target.value))}
             className="w-full bg-[#1A1410] border border-[rgba(245,237,214,0.12)] rounded-md px-3 py-2 text-[#F5EDD6] font-mono text-sm focus:outline-none focus:border-[#E07B3A] transition-colors"
           />
-          <p className="text-[#7A6A54] text-[11px]">Cron checks every 6 hours</p>
+          <p className="text-[#8B7D6B] text-[11px]">Cron checks every 6 hours</p>
         </div>
       </div>
 
@@ -178,7 +178,7 @@ export function ControlsPanel({
         {!confirmRemove ? (
           <button
             onClick={() => setConfirmRemove(true)}
-            className="flex items-center gap-2 text-sm px-3 py-1.5 rounded-md text-[#7A6A54] hover:text-danger transition-colors ml-auto"
+            className="flex items-center gap-2 text-sm px-3 py-1.5 rounded-md text-[#8B7D6B] hover:text-danger transition-colors ml-auto"
           >
             <Trash2 size={13} />
             Stop tracking
@@ -200,7 +200,7 @@ export function ControlsPanel({
             </button>
             <button
               onClick={() => setConfirmRemove(false)}
-              className="text-xs text-[#7A6A54] hover:text-[#C4A882] transition-colors"
+              className="text-xs text-[#8B7D6B] hover:text-[#C4A882] transition-colors"
             >
               Cancel
             </button>
@@ -209,7 +209,7 @@ export function ControlsPanel({
       </div>
 
       {/* Next scheduled fetch */}
-      <p className="text-[#7A6A54] text-[11px] font-mono">
+      <p className="text-[#8B7D6B] text-[11px] font-mono">
         Next auto-fetch:{' '}
         {account.next_fetch_at
           ? new Date(account.next_fetch_at).toLocaleString()

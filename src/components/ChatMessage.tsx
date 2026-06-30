@@ -179,7 +179,7 @@ export function ProgressBubble({ label, currentStep, steps, onStop, elapsedSec }
             )
           })}
           {elapsedSec ? (
-            <span className="self-start text-[11px] font-mono text-[#7A6A54] tabular-nums">{formatElapsed(elapsedSec)} elapsed</span>
+            <span className="self-start text-[11px] font-mono text-[#8B7D6B] tabular-nums">{formatElapsed(elapsedSec)} elapsed</span>
           ) : null}
           {onStop && (
             <button

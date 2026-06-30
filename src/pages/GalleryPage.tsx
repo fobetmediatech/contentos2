@@ -165,7 +165,7 @@ function ReelThumb({ reel }: { reel: ContentRecord }) {
       ) : (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-4 text-center">
           <Play size={28} className="text-[#E07B3A]" />
-          <span className="text-xs text-[#7A6A54] line-clamp-3">{reel.caption || 'View reel'}</span>
+          <span className="text-xs text-[#8B7D6B] line-clamp-3">{reel.caption || 'View reel'}</span>
         </div>
       )}
     </div>
@@ -282,17 +282,17 @@ function ReelModal({ reel, onClose }: { reel: ContentRecord; onClose: () => void
 
             {reel.caption && (
               <section>
-                <h3 className="text-[11px] font-mono uppercase tracking-wide text-[#7A6A54] mb-1.5">Caption</h3>
+                <h3 className="text-[11px] font-mono uppercase tracking-wide text-[#8B7D6B] mb-1.5">Caption</h3>
                 <p className="text-sm text-[#E6D9BE] leading-relaxed whitespace-pre-wrap">{reel.caption}</p>
               </section>
             )}
 
             <section>
-              <h3 className="text-[11px] font-mono uppercase tracking-wide text-[#7A6A54] mb-1.5">Transcript</h3>
+              <h3 className="text-[11px] font-mono uppercase tracking-wide text-[#8B7D6B] mb-1.5">Transcript</h3>
               {reel.transcript ? (
                 <p className="text-sm text-[#F5EDD6] leading-relaxed whitespace-pre-wrap">{reel.transcript}</p>
               ) : (
-                <p className="text-sm text-[#7A6A54] italic">No transcript captured for this reel.</p>
+                <p className="text-sm text-[#8B7D6B] italic">No transcript captured for this reel.</p>
               )}
             </section>
 

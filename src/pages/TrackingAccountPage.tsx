@@ -163,7 +163,7 @@ export function TrackingAccountPage() {
 
   if (loadingAccount) {
     return (
-      <div className="flex items-center justify-center py-24 text-[#7A6A54]">
+      <div className="flex items-center justify-center py-24 text-[#8B7D6B]">
         <Loader2 size={20} className="animate-spin mr-3" />
         <span className="font-mono text-sm">Loading…</span>
       </div>
@@ -173,7 +173,7 @@ export function TrackingAccountPage() {
   if (!account) {
     return (
       <div className="max-w-4xl mx-auto py-24 text-center space-y-4">
-        <AlertCircle size={32} className="mx-auto text-[#7A6A54]" />
+        <AlertCircle size={32} className="mx-auto text-[#8B7D6B]" />
         <p className="text-[#C4A882]">Account not found in tracking list.</p>
         <button
           onClick={() => navigate('/tracking')}
@@ -197,7 +197,7 @@ export function TrackingAccountPage() {
       {/* Back link */}
       <button
         onClick={() => navigate('/tracking')}
-        className="flex items-center gap-2 text-[#7A6A54] text-sm hover:text-[#C4A882] transition-colors"
+        className="flex items-center gap-2 text-[#8B7D6B] text-sm hover:text-[#C4A882] transition-colors"
       >
         <ArrowLeft size={14} />
         All accounts
@@ -232,7 +232,7 @@ export function TrackingAccountPage() {
               )}
             </div>
 
-            <p className="text-[#7A6A54] font-mono text-sm">@{account.username}</p>
+            <p className="text-[#8B7D6B] font-mono text-sm">@{account.username}</p>
 
             {account.biography && (
               <p className="text-[#C4A882] text-sm leading-relaxed line-clamp-2">
@@ -257,7 +257,7 @@ export function TrackingAccountPage() {
                   <div className="text-[#F5EDD6] font-mono text-sm tabular-nums">
                     {value != null ? value.toLocaleString() : '—'}
                   </div>
-                  <div className="text-[#7A6A54] text-[10px]">{label}</div>
+                  <div className="text-[#8B7D6B] text-[10px]">{label}</div>
                 </div>
               ))}
             </div>

@@ -97,14 +97,14 @@ export function TrackingListPage() {
       {/* Add account form */}
       <form onSubmit={handleSubmit} className="flex gap-2">
         <div className="flex-1 relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7A6A54] font-mono text-sm">@</span>
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8B7D6B] font-mono text-sm">@</span>
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="username"
             disabled={addMutation.isPending}
-            className="w-full bg-[#2C2218] border border-[rgba(245,237,214,0.12)] rounded-xl pl-8 pr-4 py-2.5 text-[#F5EDD6] font-mono text-sm placeholder:text-[#7A6A54] focus:outline-none focus:border-[#E07B3A] transition-colors"
+            className="w-full bg-[#2C2218] border border-[rgba(245,237,214,0.12)] rounded-xl pl-8 pr-4 py-2.5 text-[#F5EDD6] font-mono text-sm placeholder:text-[#8B7D6B] focus:outline-none focus:border-[#E07B3A] transition-colors"
           />
         </div>
         <button

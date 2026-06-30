@@ -179,7 +179,7 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
                   borderTop: '1px solid rgba(245,237,214,0.08)',
                 },
                 userButtonPopoverFooterPagesLink: {
-                  color: '#7A6A54',
+                  color: '#8B7D6B',
                 },
                 badge: {
                   backgroundColor: 'rgba(224,123,58,0.15)',

@@ -47,7 +47,7 @@ export function InfoPopover({ title, formula, significance, align = 'right' }: I
           setOpen((v) => !v)
         }}
         aria-label={`What is ${title}?`}
-        className={`transition-colors ${open ? 'text-[#E07B3A]' : 'text-[#7A6A54] hover:text-[#E07B3A]'}`}
+        className={`transition-colors ${open ? 'text-[#E07B3A]' : 'text-[#8B7D6B] hover:text-[#E07B3A]'}`}
       >
         <Info size={13} />
       </button>

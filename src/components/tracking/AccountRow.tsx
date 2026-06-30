@@ -92,7 +92,7 @@ export function AccountRow({
               </span>
             )}
           </div>
-          <span className="text-[#7A6A54] text-xs font-mono">@{account.username}</span>
+          <span className="text-[#8B7D6B] text-xs font-mono">@{account.username}</span>
         </div>
 
         {/* Metrics */}
@@ -106,28 +106,28 @@ export function AccountRow({
                 </span>
               )}
             </div>
-            <div className="text-[#7A6A54] text-[10px]">followers</div>
+            <div className="text-[#8B7D6B] text-[10px]">followers</div>
           </div>
 
           <div className="text-right">
             <div className="text-[#F5EDD6] font-mono text-sm tabular-nums">
               {reelER ?? '—'}
             </div>
-            <div className="text-[#7A6A54] text-[10px]">view ER</div>
+            <div className="text-[#8B7D6B] text-[10px]">view ER</div>
           </div>
 
           <div className="text-right">
             <div className="text-[#C4A882] font-mono text-xs tabular-nums">
               {lastFetched ?? '—'}
             </div>
-            <div className="text-[#7A6A54] text-[10px]">last fetch</div>
+            <div className="text-[#8B7D6B] text-[10px]">last fetch</div>
           </div>
 
           <div className="text-right">
             <div className="text-[#C4A882] font-mono text-xs tabular-nums">
               {nextFetch ?? '—'}
             </div>
-            <div className="text-[#7A6A54] text-[10px]">next fetch</div>
+            <div className="text-[#8B7D6B] text-[10px]">next fetch</div>
           </div>
         </div>
 
@@ -149,7 +149,7 @@ export function AccountRow({
           ) : latestSnapshot ? (
             <CheckCircle size={14} className="text-success/60" />
           ) : (
-            <span className="flex items-center gap-1 text-[10px] font-mono text-[#7A6A54]">
+            <span className="flex items-center gap-1 text-[10px] font-mono text-[#8B7D6B]">
               <Clock size={10} />
               Pending
             </span>

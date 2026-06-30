@@ -89,7 +89,7 @@ export function StrategyPage() {
         </div>
 
         <div className={eyebrow}>B · Target audience</div>
-        <textarea className={`${inputCls} resize-none`} rows={2} value={brief.audience} onChange={(e) => set({ audience: e.target.value })} placeholder="Age, income, biggest problem, what they want" />
+        <textarea className={`${inputCls} resize-none`} rows={2} value={brief.audience} onChange={(e) => set({ audience: e.target.value })} aria-label="Target audience" placeholder="Age, income, biggest problem, what they want" />
 
         <div className={eyebrow}>C · Competitors & aspirational accounts</div>
         <div className="grid sm:grid-cols-2 gap-4">
@@ -97,7 +97,7 @@ export function StrategyPage() {
             <span className={labelCls}>Direct competitors (handles)</span>
             <div className="space-y-2">
               {brief.competitors.map((h, i) => (
-                <input key={i} className={inputCls} value={h} onChange={(e) => setHandle('competitors', i, e.target.value)} placeholder={`@competitor ${i + 1}`} />
+                <input key={i} className={inputCls} value={h} onChange={(e) => setHandle('competitors', i, e.target.value)} aria-label={`Direct competitor ${i + 1}`} placeholder={`@competitor ${i + 1}`} />
               ))}
             </div>
           </div>
@@ -105,7 +105,7 @@ export function StrategyPage() {
             <span className={labelCls}>Aspirational accounts (style to replicate)</span>
             <div className="space-y-2">
               {brief.aspirational.map((h, i) => (
-                <input key={i} className={inputCls} value={h} onChange={(e) => setHandle('aspirational', i, e.target.value)} placeholder={`@aspirational ${i + 1}`} />
+                <input key={i} className={inputCls} value={h} onChange={(e) => setHandle('aspirational', i, e.target.value)} aria-label={`Aspirational account ${i + 1}`} placeholder={`@aspirational ${i + 1}`} />
               ))}
             </div>
           </div>
