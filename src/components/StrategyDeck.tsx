@@ -3,9 +3,9 @@
  *
  * Same data as before (StrategyResult); presentation only. Heavy on visuals: icons on every
  * section, recharts (donut/bars that fit their column), creator photos, a positioning "gap"
- * diagram, a strategy-map flow, and keyword hero images on the cover/close. Slide bodies are
- * vertically centered so no slide looks empty. Colors come from `colors` (per-client) via CSS
- * variables. Each `.deck-slide` prints as one landscape PDF page (print CSS in index.css).
+ * diagram, and a strategy-map flow. Slide bodies are vertically centered so no slide looks empty.
+ * Colors come from `colors` (per-client) via CSS variables. Each `.deck-slide` prints as one
+ * landscape PDF page (print CSS in index.css).
  */
 import type { CSSProperties } from 'react'
 import {
@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import type { StrategyResult } from '../domain/strategy'
 import { themeVars, type DeckColors } from '../lib/deckThemes'
-import { CreatorAvatar, FormatMixDonut, ErBarChart, HookPatternChart, HeroBg } from './strategyVisuals'
+import { CreatorAvatar, FormatMixDonut, ErBarChart, HookPatternChart } from './strategyVisuals'
 
 const fmt = (n: number) => n.toLocaleString()
 
@@ -52,29 +52,23 @@ function Slide({ icon, title, children, center }: { icon?: LucideIcon; title?: s
   )
 }
 
-export function StrategyDeck({ result, colors, imageKeyword }: { result: StrategyResult; colors: DeckColors; imageKeyword?: string }) {
+export function StrategyDeck({ result, colors }: { result: StrategyResult; colors: DeckColors }) {
   const { brief, doc } = result
   const date = new Date(result.generatedAt).toLocaleDateString()
   const accounts = result.accounts.filter((a) => a.followers >= 1000).slice(0, 12)
   const whatsWorking = doc.whatsWorking?.length
     ? doc.whatsWorking
     : result.hookSummaries.flatMap((s) => s.dominantHooks.slice(0, 2).map((h) => `@${s.handle} — ${h.pattern}`)).slice(0, 6)
-  const imgKeyword = (imageKeyword ?? brief.imageKeyword ?? '').trim()
-  const hasImage = imgKeyword.length > 0
-  const heroText: CSSProperties | undefined = hasImage ? { color: '#FFFFFF' } : undefined
-  const heroAccent: CSSProperties = hasImage ? { color: 'var(--dk-accent)' } : vAccent
-  const heroSub: CSSProperties = hasImage ? { color: 'rgba(255,255,255,0.82)' } : vMuted
 
   return (
     <div className="deck-printable flex flex-col gap-5" style={themeVars(colors) as CSSProperties}>
       {/* Cover */}
       <Slide center>
-        <HeroBg keyword={imgKeyword} seed={3} />
-        <div className="relative z-10 flex flex-col items-center" style={heroText}>
+        <div className="flex flex-col items-center">
           <span className="grid place-items-center rounded-full mb-4" style={{ ...vChip, width: 56, height: 56 }}><Sparkles size={26} /></span>
-          <div className="text-[13px] font-mono uppercase tracking-[0.2em]" style={heroAccent}>Content Strategy · {date}</div>
+          <div className="text-[13px] font-mono uppercase tracking-[0.2em]" style={vAccent}>Content Strategy · {date}</div>
           <h1 className="font-serif italic text-5xl mt-2">{brief.brandName || 'Untitled brand'}</h1>
-          <p className="text-base mt-3 max-w-2xl" style={heroSub}>{brief.primaryNiche}{brief.subNiche ? ` · ${brief.subNiche}` : ''}</p>
+          <p className="text-base mt-3 max-w-2xl" style={vMuted}>{brief.primaryNiche}{brief.subNiche ? ` · ${brief.subNiche}` : ''}</p>
           <p className="text-sm mt-4 px-3 py-1.5 rounded inline-flex items-center gap-2" style={vChip}><Target size={15} /> Drives toward: {brief.offer}</p>
         </div>
       </Slide>
@@ -290,12 +284,11 @@ export function StrategyDeck({ result, colors, imageKeyword }: { result: Strateg
 
       {/* Close */}
       <Slide center>
-        <HeroBg keyword={imgKeyword} seed={9} />
-        <div className="relative z-10 flex flex-col items-center" style={heroText}>
+        <div className="flex flex-col items-center">
           <span className="grid place-items-center rounded-full mb-4" style={{ ...vChip, width: 52, height: 52 }}><Flag size={24} /></span>
-          <div className="text-[13px] font-mono uppercase tracking-[0.2em]" style={heroAccent}>Let's build</div>
+          <div className="text-[13px] font-mono uppercase tracking-[0.2em]" style={vAccent}>Let's build</div>
           <h2 className="font-serif italic text-4xl mt-2">{brief.brandName}</h2>
-          <p className="text-sm mt-3 max-w-xl" style={heroSub}>Repeat what works, eliminate what doesn't.</p>
+          <p className="text-sm mt-3 max-w-xl" style={vMuted}>Repeat what works, eliminate what doesn't.</p>
         </div>
       </Slide>
     </div>

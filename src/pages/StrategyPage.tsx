@@ -172,12 +172,6 @@ export function StrategyPage() {
           />
           <span className="text-muted text-xs ml-1">Type custom colors to override the preset (accent also reads your brand color).</span>
         </div>
-        <input
-          className={`${inputCls} w-full max-w-lg mt-2`}
-          value={brief.imageKeyword}
-          onChange={(e) => set({ imageKeyword: e.target.value })}
-          placeholder="Hero image keyword — e.g. Dubai skyline luxury (blank = no cover photo)"
-        />
 
         <div className="flex items-center gap-3 mt-5">
           {running ? (
@@ -216,7 +210,7 @@ export function StrategyPage() {
               </button>
             </div>
           </div>
-          <StrategyDeck result={result} colors={resolveDeckColors(brief)} imageKeyword={brief.imageKeyword} />
+          <StrategyDeck result={result} colors={resolveDeckColors(brief)} />
         </>
       )}
     </div>

@@ -19,7 +19,6 @@ export const SAMPLE_RESULT: StrategyResult = {
     brandColors: '',
     dislikes: 'no cringe videos',
     offLimits: 'anything negative about Dubai',
-    imageKeyword: 'Dubai skyline luxury real estate',
     theme: { preset: 'black-gold', accent: '', bg: '' },
   },
   accounts: [

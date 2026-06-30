@@ -33,14 +33,13 @@ export interface StrategyBrief {
   brandColors: string           // optional — hex/names; also used as the deck accent
   dislikes: string              // topics/styles the client dislikes
   offLimits: string             // off-limits topics (legal / sensitivity)
-  imageKeyword: string          // optional — drives the cover/close hero imagery (e.g. "Dubai skyline")
   theme: DeckTheme              // per-client deck look (presentation only)
 }
 
 export const EMPTY_BRIEF: StrategyBrief = {
   brandName: '', primaryNiche: '', subNiche: '', offer: '', language: 'hinglish',
   audience: '', competitors: ['', '', '', '', ''], aspirational: ['', '', '', ''],
-  brandColors: '', dislikes: '', offLimits: '', imageKeyword: '', theme: { ...DEFAULT_THEME },
+  brandColors: '', dislikes: '', offLimits: '', theme: { ...DEFAULT_THEME },
 }
 
 /** The synthesized strategy (Gemini output, schema-validated). */

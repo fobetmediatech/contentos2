@@ -7,7 +7,7 @@ const brief: StrategyBrief = {
   offer: 'Dubai relocation consultancy', language: 'hinglish', audience: 'HNIs worldwide',
   competitors: ['propertytalkswithad'], aspirational: ['rizwan.sajan'], brandColors: '',
   dislikes: 'no cringe videos', offLimits: 'nothing negative about Dubai',
-  imageKeyword: 'Dubai skyline', theme: { preset: 'black-gold', accent: '', bg: '' },
+  theme: { preset: 'black-gold', accent: '', bg: '' },
 }
 
 describe('parseContentStrategyDoc', () => {

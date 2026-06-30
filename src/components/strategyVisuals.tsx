@@ -9,20 +9,6 @@ import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, LabelList, Responsive
 import type { AnalyzedAccount, ContentStrategyDoc } from '../domain/strategy'
 import type { CreatorHookSummary } from '../ai/prompts/creatorHookSummary'
 import { shades, type DeckColors } from '../lib/deckThemes'
-import { heroImageUrl } from '../lib/deckImages'
-
-/** Full-bleed keyword hero image + dark overlay for the cover/close slides. Renders nothing on
- *  failure/empty keyword, so the slide falls back to its themed background. */
-export function HeroBg({ keyword, seed = 7 }: { keyword: string; seed?: number }) {
-  const [failed, setFailed] = useState(false)
-  if (!keyword.trim() || failed) return null
-  return (
-    <>
-      <img src={heroImageUrl(keyword, seed)} alt="" onError={() => setFailed(true)} className="absolute inset-0 w-full h-full object-cover" />
-      <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.42), rgba(0,0,0,0.74))' }} />
-    </>
-  )
-}
 
 export function CreatorAvatar({ url, name, size = 56, colors }: { url?: string; name: string; size?: number; colors: DeckColors }) {
   const [failed, setFailed] = useState(false)
