@@ -23,15 +23,15 @@ export function SignInPage() {
         fallbackRedirectUrl="/"
         appearance={{
           variables: {
-            colorBackground: '#0A3323',           // surface — slightly lifted from chai
-            colorText: '#F7F4D5',                 // primary text
-            colorTextSecondary: '#B8C49B',        // secondary text
-            colorPrimary: '#D3968C',              // rosy brown accent
-            colorTextOnPrimaryBackground: '#082619', // dark text on rosy button
-            colorDanger: '#D9706A',               // error red (Lotus Pond)
-            colorInputBackground: '#0F4730',      // surface-raised
-            colorInputText: '#F7F4D5',
-            colorNeutral: '#B8C49B',
+            colorBackground: '#2E221A',           // surface — slightly lifted from chai
+            colorText: '#F5DFC5',                 // primary text
+            colorTextSecondary: '#CBB093',        // secondary text
+            colorPrimary: '#DFA477',              // fawn accent
+            colorTextOnPrimaryBackground: '#221913', // dark text on rosy button
+            colorDanger: '#CB5F4F',               // error red (Terracotta)
+            colorInputBackground: '#3B2C21',      // surface-raised
+            colorInputText: '#F5DFC5',
+            colorNeutral: '#CBB093',
             borderRadius: '0.5rem',
             fontFamily: '"Outfit", system-ui, sans-serif',
           },

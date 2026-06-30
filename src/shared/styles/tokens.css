@@ -1,13 +1,13 @@
-/* Design tokens — Lotus Pond system (see DESIGN.md)
+/* Design tokens — Terracotta system (see DESIGN.md)
  *
- * Palette: Dark green #0A3323 · Moss green #839958 · Beige #F7F4D5 ·
- *          Rosy brown #D3968C · Midnight green #105666.
+ * Palette: Cambridge blue #A1B5A8 · Khaki #CBB093 · Fawn #DFA477 ·
+ *          Redwood #A4624D · Almond #F5DFC5.
  *
  * Every color is a CSS variable so the whole app flips between dark (default)
  * and light (prefers-color-scheme: light) by swapping these definitions only.
  * Tailwind tokens (tailwind.config.js) and arbitrary [var(--…)] classes both
- * read from here. The two *-rgb channels back the translucent borders/tints so
- * alpha variants flip too.
+ * read from here. The three *-rgb channels back the translucent borders/tints
+ * so alpha variants flip too.
  */
 
 @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Outfit:wght@400;500;600;700&family=DM+Mono:ital,wght@0,400;0,500;1,400&display=swap');
@@ -16,42 +16,42 @@
   color-scheme: dark;
 
   /* RGB channels for translucent borders/tints (flip per mode) */
-  --border-rgb: 247, 244, 213;   /* beige */
-  --accent-rgb: 211, 150, 140;   /* rosy brown */
+  --border-rgb: 245, 223, 197;   /* almond */
+  --accent-rgb: 223, 164, 119;   /* fawn */
   --ai-rgb: 167, 139, 250;       /* violet (AI tint) */
 
   /* ── Surfaces ─────────────────────────────────────────────────────── */
-  --color-bg: #082619;              /* deep pond green — the background */
-  --color-surface: #0A3323;         /* dark green card base */
-  --color-surface-raised: #0F4730; /* raised / hover state */
-  --color-surface-elevated: #135A3D;
+  --color-bg: #221913;              /* warm espresso — the background */
+  --color-surface: #2E221A;         /* terracotta-stained card base */
+  --color-surface-raised: #3B2C21; /* raised / hover state */
+  --color-surface-elevated: #483728;
   --color-border: rgba(var(--border-rgb), 0.10);
   --color-border-strong: rgba(var(--border-rgb), 0.20);
 
   /* ── Text ─────────────────────────────────────────────────────────── */
-  --color-text-primary: #F7F4D5;    /* beige */
-  --color-text-secondary: #B8C49B; /* light moss */
-  --color-text-muted: #8A9A74;     /* muted moss — AA on deep green */
+  --color-text-primary: #F5DFC5;    /* almond */
+  --color-text-secondary: #CBB093; /* khaki */
+  --color-text-muted: #A89177;     /* muted khaki — AA on espresso */
 
-  /* ── Accent — rosy brown ──────────────────────────────────────────── */
-  --color-accent: #D3968C;
-  --color-accent-hover: #C07E73;
+  /* ── Accent — fawn ────────────────────────────────────────────────── */
+  --color-accent: #DFA477;
+  --color-accent-hover: #C9885C;
   --color-accent-subtle: rgba(var(--accent-rgb), 0.16);
-  --color-accent-light: #E3B5AC;
+  --color-accent-light: #ECC09B;
 
   /* ── AI insight tint (Gemini-generated content ONLY) ─────────────── */
   --color-ai-tint: #A78BFA;
   --color-ai-subtle: rgba(167, 139, 250, 0.12);
 
   /* ── Semantic ─────────────────────────────────────────────────────── */
-  --color-success: #9CB36A;        /* lightened moss for dark bg */
-  --color-success-subtle: rgba(131, 153, 88, 0.16);
-  --color-warning: #D9A441;
-  --color-warning-bg: rgba(217, 164, 65, 0.12);
-  --color-warning-border: rgba(217, 164, 65, 0.30);
-  --color-warning-text: #E8C98A;
-  --color-error: #D9706A;
-  --color-error-subtle: rgba(217, 112, 106, 0.12);
+  --color-success: #8FB088;        /* sage-green for dark bg */
+  --color-success-subtle: rgba(143, 176, 136, 0.16);
+  --color-warning: #D8923F;
+  --color-warning-bg: rgba(216, 146, 63, 0.12);
+  --color-warning-border: rgba(216, 146, 63, 0.30);
+  --color-warning-text: #E8B07A;
+  --color-error: #CB5F4F;
+  --color-error-subtle: rgba(203, 95, 79, 0.12);
 
   /* ── Badge: Top / Trending ────────────────────────────────────────── */
   --color-badge-top-bg: var(--color-accent-subtle);
@@ -63,8 +63,8 @@
   --color-er-above: var(--color-success);
   --color-er-below: var(--color-warning);
 
-  /* ── Info (midnight green) ────────────────────────────────────────── */
-  --color-info: #2E8198;
+  /* ── Info (cambridge blue) ────────────────────────────────────────── */
+  --color-info: #A1B5A8;
 
   /* ── Shadows ──────────────────────────────────────────────────────── */
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
@@ -80,43 +80,43 @@
   :root {
     color-scheme: light;
 
-    --border-rgb: 10, 51, 35;        /* dark green */
-    --accent-rgb: 199, 122, 107;     /* deepened rosy brown */
+    --border-rgb: 58, 34, 24;        /* redwood-brown */
+    --accent-rgb: 164, 98, 77;       /* redwood */
     --ai-rgb: 109, 91, 196;          /* deepened violet */
 
     /* Surfaces */
-    --color-bg: #F7F4D5;             /* beige */
-    --color-surface: #FFFEF7;
-    --color-surface-raised: #EEEACB;
-    --color-surface-elevated: #E6E1BF;
+    --color-bg: #F4E4CE;             /* warm almond */
+    --color-surface: #FFFCF6;
+    --color-surface-raised: #EFE0C8;
+    --color-surface-elevated: #E8D6BB;
     --color-border: rgba(var(--border-rgb), 0.12);
     --color-border-strong: rgba(var(--border-rgb), 0.24);
 
     /* Text */
-    --color-text-primary: #0A3323;   /* dark green */
-    --color-text-secondary: #105666; /* midnight green */
-    --color-text-muted: #5C7257;     /* muted green — AA on beige */
+    --color-text-primary: #3A2218;   /* deep redwood-brown */
+    --color-text-secondary: #7A5544;
+    --color-text-muted: #876F54;     /* muted khaki — AA on almond */
 
-    /* Accent — rosy brown deepened for contrast on beige */
-    --color-accent: #C77A6B;
-    --color-accent-hover: #B5685C;
+    /* Accent — redwood (deepened fawn for contrast on cream) */
+    --color-accent: #A4624D;
+    --color-accent-hover: #8C5140;
     --color-accent-subtle: rgba(var(--accent-rgb), 0.14);
-    --color-accent-light: #A85A4E;
+    --color-accent-light: #C97E5E;
 
     /* AI tint deepened for light bg */
     --color-ai-tint: #6D5BC4;
     --color-ai-subtle: rgba(109, 91, 196, 0.10);
 
     /* Semantic */
-    --color-success: #5C7A3D;
-    --color-success-subtle: rgba(92, 122, 61, 0.12);
+    --color-success: #5E7A4A;
+    --color-success-subtle: rgba(94, 122, 74, 0.12);
     --color-warning: #B57A12;
     --color-warning-bg: rgba(181, 122, 18, 0.12);
     --color-warning-border: rgba(181, 122, 18, 0.30);
     --color-warning-text: #8A5C0D;
-    --color-error: #C0453E;
-    --color-error-subtle: rgba(192, 69, 62, 0.10);
+    --color-error: #B0463A;
+    --color-error-subtle: rgba(176, 70, 58, 0.10);
 
-    --color-info: #105666;
+    --color-info: #5C7D6E;
   }
 }

@@ -34,14 +34,14 @@ function compactNumber(n: number): string {
   return `${n}`
 }
 
-const GRID_COLOR = 'rgba(247,244,213,0.06)'
-const AXIS_COLOR = '#8A9A74'
+const GRID_COLOR = 'rgba(245,223,197,0.06)'
+const AXIS_COLOR = '#A89177'
 
 const tooltipStyle: React.CSSProperties = {
-  backgroundColor: '#0A3323',
-  border: '1px solid rgba(247,244,213,0.12)',
+  backgroundColor: '#2E221A',
+  border: '1px solid rgba(245,223,197,0.12)',
   borderRadius: '8px',
-  color: '#F7F4D5',
+  color: '#F5DFC5',
   fontFamily: '"DM Mono", monospace',
   fontSize: '11px',
   padding: '8px 12px',
@@ -64,7 +64,7 @@ function NoData({ message }: { message: string }) {
 export function TrendChart({
   data,
   label,
-  color = '#D3968C',
+  color = '#DFA477',
   type = 'line',
   formatter,
   axisFormatter,
@@ -125,8 +125,8 @@ export function TrendChart({
             contentStyle={tooltipStyle}
             formatter={tooltipFormatter}
             labelFormatter={labelForIndex}
-            labelStyle={{ color: '#B8C49B', marginBottom: 4 }}
-            cursor={{ fill: 'rgba(211,150,140,0.06)' }}
+            labelStyle={{ color: '#CBB093', marginBottom: 4 }}
+            cursor={{ fill: 'rgba(223,164,119,0.06)' }}
           />
           <Bar dataKey="value" fill={color} radius={[3, 3, 0, 0]} maxBarSize={32} />
         </BarChart>
@@ -142,7 +142,7 @@ export function TrendChart({
           contentStyle={tooltipStyle}
           formatter={tooltipFormatter}
           labelFormatter={labelForIndex}
-          labelStyle={{ color: '#B8C49B', marginBottom: 4 }}
+          labelStyle={{ color: '#CBB093', marginBottom: 4 }}
         />
         <Line
           type="monotone"
@@ -150,7 +150,7 @@ export function TrendChart({
           stroke={color}
           strokeWidth={2}
           dot={false}
-          activeDot={{ r: 4, fill: color, stroke: '#082619', strokeWidth: 2 }}
+          activeDot={{ r: 4, fill: color, stroke: '#221913', strokeWidth: 2 }}
         />
       </LineChart>
     </ResponsiveContainer>

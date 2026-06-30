@@ -10,7 +10,7 @@
  *
  * The transcript prefers `result.segments` (rendered as `[m:ss] text` lines) and falls back
  * to the raw `result.transcript`; it only appears when the transcript text is non-empty.
- * rosy brown #D3968C is the primary accent; the violet AI tint marks the AI-generated header.
+ * fawn #DFA477 is the primary accent; the violet AI tint marks the AI-generated header.
  */
 
 import { useState } from 'react'

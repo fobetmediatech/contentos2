@@ -50,6 +50,31 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
   const isActive = (s: NavSection) =>
     s.path === '/' ? location.pathname === '/' : location.pathname.startsWith(s.path)
 
+  // Spotlight split: the active tab centers; the rest keep their fixed order,
+  // half falling to its left and half to its right.
+  const activeIndex = sections.findIndex(isActive)
+  const activeSection = activeIndex >= 0 ? sections[activeIndex] : null
+  const leftTabs = activeIndex >= 0 ? sections.slice(0, activeIndex) : sections
+  const rightTabs = activeIndex >= 0 ? sections.slice(activeIndex + 1) : []
+
+  // One inactive tab = an icon chip that expands to its label on hover.
+  const renderChip = (s: NavSection) => {
+    const Icon = s.icon
+    return (
+      <Link
+        key={s.path}
+        to={s.path}
+        title={s.path === '/memory' && corpusCount > 0 ? `${s.label} · ${corpusCount} remembered` : s.label}
+        className="group/chip flex items-center h-9 px-2.5 rounded-full text-secondary hover:text-primary hover:bg-surface-raised hover:-translate-y-0.5 transition-[color,background-color,transform] duration-150"
+      >
+        <Icon size={15} className={s.path === '/memory' ? 'text-[var(--color-accent)]' : undefined} />
+        <span className="max-w-0 overflow-hidden whitespace-nowrap text-sm group-hover/chip:max-w-[140px] group-hover/chip:ml-1.5 transition-[max-width,margin] duration-200">
+          {s.label}
+        </span>
+      </Link>
+    )
+  }
+
   useEffect(() => {
     void useCorpusStore.getState().hydrate().catch(() => {})
   }, [])
@@ -93,51 +118,38 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
             </Link>
           </div>
 
-          {/* Nav — SPOTLIGHT. The open tab takes center stage; the rest huddle at
-              the end as icon chips that expand on hover. Desktop only; mobile = drawer. */}
-          <nav aria-label="Main" className="hidden md:flex items-center flex-1 min-w-0 pl-4">
-            {/* Spotlight: the active tab, centered */}
-            <div className="flex-1 flex justify-center min-w-0">
-              {(() => {
-                const act = sections.find(isActive)
-                if (!act) return null
-                const Icon = act.icon
-                return (
-                  <Link
-                    to={act.path}
-                    aria-current="page"
-                    className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-[rgba(var(--accent-rgb),0.16)] text-[var(--color-accent-light)] font-medium text-[15px] ring-1 ring-[rgba(var(--accent-rgb),0.45)] shadow-[0_0_20px_rgba(var(--accent-rgb),0.16)] whitespace-nowrap transition-colors"
-                  >
-                    <Icon size={16} className={act.path === '/memory' ? 'text-[var(--color-accent)]' : undefined} />
-                    {act.label}
-                    {act.path === '/memory' && corpusCount > 0 && (
-                      <span className="text-[11px] font-medium tabular-nums px-1.5 py-0.5 rounded-full bg-[rgba(var(--accent-rgb),0.24)] text-[var(--color-accent-light)]">
-                        {corpusCount}
-                      </span>
-                    )}
-                  </Link>
-                )
-              })()}
+          {/* Nav — SPOTLIGHT. The open tab is centered; the other tabs keep their
+              fixed order, split half to its left and half to its right. Each
+              inactive tab is an icon chip that expands on hover. Desktop only. */}
+          <nav aria-label="Main" className="hidden md:flex items-center justify-center flex-1 min-w-0 gap-1">
+            {/* Left half — tabs before the active one */}
+            <div className="flex items-center gap-0.5 justify-end">
+              {leftTabs.map(renderChip)}
             </div>
 
-            {/* Cluster: the other tabs, huddled at the end — each expands on hover */}
-            <div className="flex items-center gap-0.5 flex-shrink-0">
-              {sections.filter((s) => !isActive(s)).map((s) => {
-                const Icon = s.icon
-                return (
-                  <Link
-                    key={s.path}
-                    to={s.path}
-                    title={s.path === '/memory' && corpusCount > 0 ? `${s.label} · ${corpusCount} remembered` : s.label}
-                    className="group/chip flex items-center h-9 px-2.5 rounded-full text-secondary hover:text-primary hover:bg-surface-raised hover:-translate-y-0.5 transition-[color,background-color,transform] duration-150"
-                  >
-                    <Icon size={15} className={s.path === '/memory' ? 'text-[var(--color-accent)]' : undefined} />
-                    <span className="max-w-0 overflow-hidden whitespace-nowrap text-sm group-hover/chip:max-w-[140px] group-hover/chip:ml-1.5 transition-[max-width,margin] duration-200">
-                      {s.label}
-                    </span>
-                  </Link>
-                )
-              })}
+            {/* Center — the active tab in the spotlight */}
+            {activeSection && (
+              <Link
+                to={activeSection.path}
+                aria-current="page"
+                className="flex items-center gap-2 px-4 py-1.5 mx-1 rounded-full bg-[rgba(var(--accent-rgb),0.16)] text-[var(--color-accent-light)] font-medium text-[15px] ring-1 ring-[rgba(var(--accent-rgb),0.45)] shadow-[0_0_20px_rgba(var(--accent-rgb),0.16)] whitespace-nowrap transition-colors flex-shrink-0"
+              >
+                {(() => {
+                  const Icon = activeSection.icon
+                  return <Icon size={16} className={activeSection.path === '/memory' ? 'text-[var(--color-accent)]' : undefined} />
+                })()}
+                {activeSection.label}
+                {activeSection.path === '/memory' && corpusCount > 0 && (
+                  <span className="text-[11px] font-medium tabular-nums px-1.5 py-0.5 rounded-full bg-[rgba(var(--accent-rgb),0.24)] text-[var(--color-accent-light)]">
+                    {corpusCount}
+                  </span>
+                )}
+              </Link>
+            )}
+
+            {/* Right half — tabs after the active one */}
+            <div className="flex items-center gap-0.5 justify-start">
+              {rightTabs.map(renderChip)}
             </div>
           </nav>
 
@@ -145,31 +157,31 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
           <UserButton
             appearance={{
               variables: {
-                colorBackground: '#0A3323',
-                colorText: '#F7F4D5',
-                colorTextSecondary: '#B8C49B',
-                colorPrimary: '#D3968C',
-                colorTextOnPrimaryBackground: '#082619',
-                colorInputBackground: '#0F4730',
-                colorInputText: '#F7F4D5',
-                colorNeutral: '#B8C49B',
+                colorBackground: '#2E221A',
+                colorText: '#F5DFC5',
+                colorTextSecondary: '#CBB093',
+                colorPrimary: '#DFA477',
+                colorTextOnPrimaryBackground: '#221913',
+                colorInputBackground: '#3B2C21',
+                colorInputText: '#F5DFC5',
+                colorNeutral: '#CBB093',
                 borderRadius: '10px',
                 fontFamily: '"Outfit", sans-serif',
                 fontSize: '14px',
               },
               elements: {
                 card: {
-                  backgroundColor: '#0A3323',
+                  backgroundColor: '#2E221A',
                   border: '1px solid rgba(var(--border-rgb),0.12)',
                   boxShadow: '0 8px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(var(--border-rgb),0.06)',
                 },
                 userPreviewMainIdentifier: {
-                  color: '#F7F4D5',
+                  color: '#F5DFC5',
                   fontWeight: '600',
                   fontFamily: '"Outfit", sans-serif',
                 },
                 userPreviewSecondaryIdentifier: {
-                  color: '#B8C49B',
+                  color: '#CBB093',
                   fontFamily: '"DM Mono", monospace',
                   fontSize: '12px',
                   letterSpacing: '0.01em',
@@ -179,27 +191,27 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
                   outlineOffset: '1px',
                 },
                 userButtonPopoverActionButton: {
-                  color: '#F7F4D5',
+                  color: '#F5DFC5',
                   borderRadius: '8px',
                   transition: 'background-color 150ms ease',
                 },
                 userButtonPopoverActionButtonText: {
-                  color: '#F7F4D5',
+                  color: '#F5DFC5',
                   fontFamily: '"Outfit", sans-serif',
                   fontWeight: '500',
                 },
                 userButtonPopoverActionButtonIcon: {
-                  color: '#B8C49B',
+                  color: '#CBB093',
                 },
                 userButtonPopoverFooter: {
                   borderTop: '1px solid rgba(var(--border-rgb),0.08)',
                 },
                 userButtonPopoverFooterPagesLink: {
-                  color: '#8A9A74',
+                  color: '#A89177',
                 },
                 badge: {
                   backgroundColor: 'rgba(var(--accent-rgb),0.15)',
-                  color: '#E3B5AC',
+                  color: '#ECC09B',
                   border: '1px solid rgba(var(--accent-rgb),0.25)',
                   fontFamily: '"DM Mono", monospace',
                   letterSpacing: '0.04em',

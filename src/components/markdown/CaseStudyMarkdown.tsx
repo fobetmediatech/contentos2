@@ -8,7 +8,7 @@
  *
  * Styling follows DESIGN.md via the repo's Tailwind theme tokens (font-serif = Instrument
  * Serif, font-mono = DM Mono, text-primary / text-secondary / text-muted warm neutrals,
- * text-accent = rosy brown #D3968C). Headings + links use the saffron accent; stat/hashtag
+ * text-accent = fawn #DFA477). Headings + links use the fawn accent; stat/hashtag
  * tables use DM Mono for that clinical-precision contrast against the warm prose.
  */
 

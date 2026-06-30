@@ -293,7 +293,7 @@ export function TrackingAccountPage() {
             <TrendChart
               data={followerData}
               label="Followers"
-              color="#D3968C"
+              color="#DFA477"
               formatter={(v) => v.toLocaleString()}
               axisFormatter={(v) =>
                 v >= 1_000_000
@@ -317,7 +317,7 @@ export function TrackingAccountPage() {
             <TrendChart
               data={reelERData}
               label="View ER"
-              color="#B8C49B"
+              color="#CBB093"
               formatter={(v) => `${v.toFixed(2)}%`}
               emptyMessage="No reel data yet"
             />
@@ -335,7 +335,7 @@ export function TrackingAccountPage() {
             <TrendChart
               data={followerERData}
               label="Follower ER"
-              color="#E3B5AC"
+              color="#ECC09B"
               formatter={(v) => `${v.toFixed(2)}%`}
               emptyMessage="No reel data yet"
             />
@@ -352,7 +352,7 @@ export function TrackingAccountPage() {
             <TrendChart
               data={reelsPostedData}
               label="Reels"
-              color="#D3968C"
+              color="#DFA477"
               type="bar"
               emptyMessage="No reel data yet"
             />

@@ -12,10 +12,10 @@
 Every design decision should reinforce that someone who lives in the creator economy made this — not an enterprise SaaS team.
 
 ## Aesthetic Direction
-- **Direction:** Lotus Pond — deep pond-green surfaces, beige "lily" text, a single rosy-brown bloom as the accent. Editorial, botanical, calm. Ships with **both dark (default) and light** modes that flip automatically via `prefers-color-scheme`.
-- **Decoration level:** Intentional — green-on-green surface depth, DM Mono precision as a deliberate contrast signal, one warm accent that pops.
-- **Mood:** Calm, authoritative, precise. A research tool that feels like a studio garden — the data feels real because the surface is unhurried.
-- **The rule:** Surfaces are green, text is beige (dark) / dark-green (light), the accent is rosy brown — used sparingly. All colors are CSS variables (tokens.css); never hardcode a hex that won't flip with the mode.
+- **Direction:** Terracotta — warm earthen surfaces (espresso-brown in dark, almond-cream in light), almond/redwood text, a fawn→redwood accent, with cambridge-blue sage as the cool counterpoint. Mediterranean, sun-warmed, editorial. Ships with **both dark (default) and light** modes that flip automatically via `prefers-color-scheme`.
+- **Decoration level:** Intentional — warm tonal surface depth, DM Mono precision as a deliberate contrast signal, one warm accent that pops and one sage for info.
+- **Mood:** Warm, grounded, precise. A research tool that feels like a sunlit terracotta courtyard — the data feels real because the surface is warm and unhurried.
+- **The rule:** Surfaces are warm earth tones, the accent is fawn (dark) / redwood (light) used sparingly, sage cambridge-blue carries "info". All colors are CSS variables (tokens.css); never hardcode a hex that won't flip with the mode (the only exceptions: Clerk `appearance.variables` and Recharts/SVG presentation attributes, which can't read `var()`).
 
 ## Competitive Differentiation
 - **Later.com:** Warm cream + bold editorial (light). We go warm dark — unclaimed territory.
@@ -57,40 +57,40 @@ Every design decision should reinforce that someone who lives in the creator eco
 
 ## Color System
 
-**Palette anchors:** Dark green `#0A3323` · Moss green `#839958` · Beige `#F7F4D5` · Rosy brown `#D3968C` · Midnight green `#105666`.
+**Palette anchors:** Cambridge blue `#A1B5A8` · Khaki `#CBB093` · Fawn `#DFA477` · Redwood `#A4624D` · Almond `#F5DFC5`.
 
 Every color is a CSS variable in `src/shared/styles/tokens.css`. Dark is the default `:root`; light overrides inside `@media (prefers-color-scheme: light)`. Translucent borders/tints flip via the `--border-rgb` / `--accent-rgb` / `--ai-rgb` channel vars. Tailwind tokens (`tailwind.config.js`) and `[var(--…)]` arbitrary classes both read from here — so the whole app flips with the OS theme. **Never hardcode a hex in a component** (the two exceptions that need literals: Clerk `appearance.variables`, which Clerk derives shades from in JS, and SVG/Recharts presentation attributes, where `var()` doesn't resolve).
 
 ### Dark mode (default)
 ```css
---color-bg: #082619;             /* deep pond green — background */
---color-surface: #0A3323;        /* dark green card base */
---color-surface-raised: #0F4730;
---color-surface-elevated: #135A3D;
---color-border: rgba(var(--border-rgb), 0.10);   /* --border-rgb: 247,244,213 (beige) */
---color-text-primary: #F7F4D5;   /* beige */
---color-text-secondary: #B8C49B; /* light moss */
---color-text-muted: #8A9A74;     /* muted moss — WCAG AA on deep green */
---color-accent: #D3968C;         /* rosy brown — CTAs, active states, links */
---color-accent-hover: #C07E73;
---color-accent-light: #E3B5AC;
---color-success: #9CB36A;  --color-warning: #D9A441;  --color-error: #D9706A;
---color-info: #2E8198;     --color-ai-tint: #A78BFA;  /* AI-generated content ONLY */
+--color-bg: #221913;             /* warm espresso — background */
+--color-surface: #2E221A;        /* terracotta-stained card base */
+--color-surface-raised: #3B2C21;
+--color-surface-elevated: #483728;
+--color-border: rgba(var(--border-rgb), 0.10);   /* --border-rgb: 245,223,197 (almond) */
+--color-text-primary: #F5DFC5;   /* almond */
+--color-text-secondary: #CBB093; /* khaki */
+--color-text-muted: #A89177;     /* muted khaki — WCAG AA on espresso */
+--color-accent: #DFA477;         /* fawn — CTAs, active states, links */
+--color-accent-hover: #C9885C;
+--color-accent-light: #ECC09B;
+--color-success: #8FB088;  --color-warning: #D8923F;  --color-error: #CB5F4F;
+--color-info: #A1B5A8;     --color-ai-tint: #A78BFA;  /* AI-generated content ONLY */
 ```
 
 ### Light mode (`prefers-color-scheme: light`)
 ```css
---color-bg: #F7F4D5;             /* beige */
---color-surface: #FFFEF7;
---color-surface-raised: #EEEACB;
---color-border: rgba(var(--border-rgb), 0.12);   /* --border-rgb: 10,51,35 (dark green) */
---color-text-primary: #0A3323;   /* dark green */
---color-text-secondary: #105666; /* midnight green */
---color-text-muted: #5C7257;     /* muted green — WCAG AA on beige */
---color-accent: #C77A6B;         /* rosy brown, deepened for contrast on beige */
---color-accent-light: #A85A4E;
---color-success: #5C7A3D;  --color-warning: #B57A12;  --color-error: #C0453E;
---color-info: #105666;     --color-ai-tint: #6D5BC4;
+--color-bg: #F4E4CE;             /* warm almond */
+--color-surface: #FFFCF6;
+--color-surface-raised: #EFE0C8;
+--color-border: rgba(var(--border-rgb), 0.12);   /* --border-rgb: 58,34,24 (redwood-brown) */
+--color-text-primary: #3A2218;   /* deep redwood-brown */
+--color-text-secondary: #7A5544;
+--color-text-muted: #876F54;     /* muted khaki — WCAG AA on almond */
+--color-accent: #A4624D;         /* redwood (deepened fawn for contrast on cream) */
+--color-accent-light: #C97E5E;
+--color-success: #5E7A4A;  --color-warning: #B57A12;  --color-error: #B0463A;
+--color-info: #5C7D6E;     --color-ai-tint: #6D5BC4;
 ```
 
 ## Spacing
@@ -175,3 +175,5 @@ color: var(--color-text-muted);
 | 2026-06-01 | Warm undertone rule for all neutrals | Discipline that makes the whole system feel coherent vs. assembled from parts. |
 | 2026-06-30 | Muted text #7A6A54 → #8B7D6B | Old value sat at the WCAG AA contrast floor on the chai bg. Lightened a touch while keeping the warm brown undertone. |
 | 2026-06-30 | Chai Dark → Lotus Pond + light/dark | Full palette pivot to pond-green/beige/rosy-brown, driven entirely by CSS vars so the app flips between dark (default) and light via `prefers-color-scheme`. Accent moved saffron → rosy brown. Clerk + Recharts keep fixed hex (can't take vars). |
+| 2026-06-30 | Lotus Pond → Terracotta | Green scheme rejected. Adopted the terracotta palette: warm earth surfaces, almond/redwood text, fawn→redwood accent, cambridge-blue sage for info. Same var-driven light/dark machinery — only token values + the fixed Clerk/Recharts literals changed. |
+| 2026-06-30 | Spotlight nav split | Active tab centers; the rest keep fixed order, split half-left / half-right around it (was: all clustered at the end). |

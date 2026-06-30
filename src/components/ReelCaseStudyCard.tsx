@@ -9,7 +9,7 @@
  *   done + result       → the case-study markdown, a metrics line (DM Mono), and a
  *                         collapsible transcript behind a "Transcript" toggle
  *
- * rosy brown #D3968C is the primary accent; the violet AI tint marks the AI-generated header.
+ * fawn #DFA477 is the primary accent; the violet AI tint marks the AI-generated header.
  */
 
 import { useState } from 'react'
