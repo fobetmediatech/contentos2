@@ -23,24 +23,25 @@ export function SignInPage() {
         fallbackRedirectUrl="/"
         appearance={{
           variables: {
-            colorBackground: '#2C2218',           // surface — slightly lifted from chai
-            colorText: '#F5EDD6',                 // primary text
-            colorTextSecondary: '#C4A882',        // secondary text
-            colorPrimary: '#E07B3A',              // saffron accent
-            colorDanger: '#F87171',               // red-400 for errors
-            colorInputBackground: '#3D3025',      // surface-raised
-            colorInputText: '#F5EDD6',
-            colorNeutral: '#C4A882',
+            colorBackground: '#0A3323',           // surface — slightly lifted from chai
+            colorText: '#F7F4D5',                 // primary text
+            colorTextSecondary: '#B8C49B',        // secondary text
+            colorPrimary: '#D3968C',              // rosy brown accent
+            colorTextOnPrimaryBackground: '#082619', // dark text on rosy button
+            colorDanger: '#D9706A',               // error red (Lotus Pond)
+            colorInputBackground: '#0F4730',      // surface-raised
+            colorInputText: '#F7F4D5',
+            colorNeutral: '#B8C49B',
             borderRadius: '0.5rem',
             fontFamily: '"Outfit", system-ui, sans-serif',
           },
           elements: {
             // Subtle border to match other cards in the app
-            card: 'shadow-none border border-[rgba(245,237,214,0.08)]',
+            card: 'shadow-none border border-[rgba(var(--border-rgb),0.08)]',
             // Keep the primary button rounded to match the design system
             formButtonPrimary: 'rounded-md font-medium',
             // Muted divider lines
-            dividerLine: 'bg-[rgba(245,237,214,0.08)]',
+            dividerLine: 'bg-[rgba(var(--border-rgb),0.08)]',
           },
         }}
       />

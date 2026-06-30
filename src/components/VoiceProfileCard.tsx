@@ -15,7 +15,7 @@ import { useCorpusStore } from '../store/corpusStore'
 import type { VoiceProfile, VoiceLanguageMode } from '../ai/prompts/voiceProfile'
 
 const inputCls =
-  'w-full bg-[#3D3025] border border-[rgba(245,237,214,0.08)] rounded-md px-3 py-2 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-[#E07B3A]'
+  'w-full bg-[var(--color-surface-raised)] border border-[rgba(var(--border-rgb),0.08)] rounded-md px-3 py-2 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-[var(--color-accent)]'
 
 const LANG_OPTIONS: { value: VoiceLanguageMode; label: string }[] = [
   { value: 'auto', label: 'Auto' },
@@ -71,7 +71,7 @@ export default function VoiceProfileCard({ profile, onRebuild }: Props) {
 
   if (editing) {
     return (
-      <div className="rounded-lg bg-[#2A211B] border border-[rgba(245,237,214,0.08)] p-3 space-y-2">
+      <div className="rounded-lg bg-[var(--color-surface)] border border-[rgba(var(--border-rgb),0.08)] p-3 space-y-2">
         <div className="text-[11px] font-mono uppercase tracking-wide text-muted mb-1">
           Editing — {profile.displayName || `@${profile.handle}`}
         </div>
@@ -148,7 +148,7 @@ export default function VoiceProfileCard({ profile, onRebuild }: Props) {
             type="button"
             disabled={saving}
             onClick={() => void save()}
-            className="text-sm px-3 py-1.5 rounded-md bg-[#E07B3A] text-[#1A1410] font-medium disabled:opacity-50 hover:bg-[#C4612A] transition-colors"
+            className="text-sm px-3 py-1.5 rounded-md bg-[var(--color-accent)] text-[var(--color-bg)] font-medium disabled:opacity-50 hover:bg-[var(--color-accent-hover)] transition-colors"
           >
             {saving ? 'Saving…' : 'Save'}
           </button>
@@ -158,7 +158,7 @@ export default function VoiceProfileCard({ profile, onRebuild }: Props) {
               setForm(profile)
               setEditing(false)
             }}
-            className="text-sm px-3 py-1.5 rounded-md border border-[rgba(245,237,214,0.12)] text-muted hover:text-primary transition-colors"
+            className="text-sm px-3 py-1.5 rounded-md border border-[rgba(var(--border-rgb),0.12)] text-muted hover:text-primary transition-colors"
           >
             Cancel
           </button>
@@ -168,7 +168,7 @@ export default function VoiceProfileCard({ profile, onRebuild }: Props) {
   }
 
   return (
-    <div className="rounded-lg bg-[#2A211B] border border-[rgba(245,237,214,0.08)] p-3">
+    <div className="rounded-lg bg-[var(--color-surface)] border border-[rgba(var(--border-rgb),0.08)] p-3">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="text-sm font-medium text-primary truncate">
@@ -192,7 +192,7 @@ export default function VoiceProfileCard({ profile, onRebuild }: Props) {
               setForm(profile)
               setEditing(true)
             }}
-            className="text-xs px-2 py-1 rounded-md border border-[rgba(245,237,214,0.12)] text-muted hover:text-primary hover:border-[#E07B3A] transition-colors"
+            className="text-xs px-2 py-1 rounded-md border border-[rgba(var(--border-rgb),0.12)] text-muted hover:text-primary hover:border-[var(--color-accent)] transition-colors"
           >
             Edit
           </button>
@@ -201,7 +201,7 @@ export default function VoiceProfileCard({ profile, onRebuild }: Props) {
               type="button"
               disabled={rebuilding}
               onClick={rebuild}
-              className="text-xs px-2 py-1 rounded-md border border-[rgba(245,237,214,0.12)] text-muted hover:text-primary hover:border-[#E07B3A] disabled:opacity-50 transition-colors"
+              className="text-xs px-2 py-1 rounded-md border border-[rgba(var(--border-rgb),0.12)] text-muted hover:text-primary hover:border-[var(--color-accent)] disabled:opacity-50 transition-colors"
             >
               {rebuilding ? 'Rebuilding…' : 'Rebuild'}
             </button>
@@ -210,7 +210,7 @@ export default function VoiceProfileCard({ profile, onRebuild }: Props) {
       </div>
 
       {rebuildError && (
-        <div className="mt-2 text-xs text-[#E07B3A]">{rebuildError}</div>
+        <div className="mt-2 text-xs text-[var(--color-accent)]">{rebuildError}</div>
       )}
 
       <div className="mt-3">
@@ -229,8 +229,8 @@ export default function VoiceProfileCard({ profile, onRebuild }: Props) {
                 onClick={() => setLang(o.value)}
                 className={`text-xs px-2.5 py-1 rounded-md border transition-colors disabled:opacity-50 ${
                   active
-                    ? 'bg-[#E07B3A] text-[#1A1410] border-[#E07B3A] font-medium'
-                    : 'border-[rgba(245,237,214,0.12)] text-muted hover:text-primary hover:border-[#E07B3A]'
+                    ? 'bg-[var(--color-accent)] text-[var(--color-bg)] border-[var(--color-accent)] font-medium'
+                    : 'border-[rgba(var(--border-rgb),0.12)] text-muted hover:text-primary hover:border-[var(--color-accent)]'
                 }`}
               >
                 {o.label}
@@ -249,7 +249,7 @@ export default function VoiceProfileCard({ profile, onRebuild }: Props) {
             // Tone descriptors are AI-generated → violet tint per DESIGN.md.
             <span
               key={i}
-              className="text-xs px-2 py-0.5 rounded-full bg-[rgba(167,139,250,0.10)] text-[#A78BFA] border border-[rgba(167,139,250,0.20)]"
+              className="text-xs px-2 py-0.5 rounded-full bg-[rgba(var(--ai-rgb),0.10)] text-[var(--color-ai-tint)] border border-[rgba(var(--ai-rgb),0.20)]"
             >
               {t}
             </span>

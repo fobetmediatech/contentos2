@@ -34,7 +34,7 @@ export function FeedbackControl({ username, className = '' }: Props) {
   }
 
   const base = 'p-1.5 rounded-lg transition-colors'
-  const idle = 'text-[#8B7D6B] hover:text-[#C4A882] hover:bg-[#3D3025]'
+  const idle = 'text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-raised)]'
 
   return (
     <div className={`inline-flex items-center gap-1 ${className}`} onClick={(e) => e.stopPropagation()}>
@@ -44,7 +44,7 @@ export function FeedbackControl({ username, className = '' }: Props) {
         aria-pressed={current === 'saved'}
         aria-label="Save — show more creators like this"
         title="Save — more like this"
-        className={`${base} ${current === 'saved' ? 'bg-[rgba(224,123,58,0.15)] text-[#E07B3A]' : idle}`}
+        className={`${base} ${current === 'saved' ? 'bg-[rgba(var(--accent-rgb),0.15)] text-[var(--color-accent)]' : idle}`}
       >
         <ThumbsUp size={14} />
       </button>
@@ -54,7 +54,7 @@ export function FeedbackControl({ username, className = '' }: Props) {
         aria-pressed={current === 'dismissed'}
         aria-label="Dismiss — show fewer creators like this"
         title="Dismiss — less like this"
-        className={`${base} ${current === 'dismissed' ? 'bg-[#3D3025] text-[#C4A882]' : idle}`}
+        className={`${base} ${current === 'dismissed' ? 'bg-[var(--color-surface-raised)] text-[var(--color-text-secondary)]' : idle}`}
       >
         <ThumbsDown size={14} />
       </button>

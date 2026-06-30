@@ -12,10 +12,10 @@
 Every design decision should reinforce that someone who lives in the creator economy made this — not an enterprise SaaS team.
 
 ## Aesthetic Direction
-- **Direction:** Chai Dark — warm near-black background (the color of strong chai held to light), not clinical dark mode. Creator-studio energy. Editorial but not fashion-y.
-- **Decoration level:** Intentional — warm undertones everywhere, subtle card depth, DM Mono precision as a deliberate contrast signal
-- **Mood:** Warm, authoritative, precise. A research tool that feels like it was designed at a studio run by creators. The data feels real because the warmth makes you trust it.
-- **The rule:** Every neutral must have a warm undertone. No pure Tailwind slate grays (#94A3B8, #CBD5E1, etc.) — if a neutral doesn't have amber/brown in it, reject it.
+- **Direction:** Lotus Pond — deep pond-green surfaces, beige "lily" text, a single rosy-brown bloom as the accent. Editorial, botanical, calm. Ships with **both dark (default) and light** modes that flip automatically via `prefers-color-scheme`.
+- **Decoration level:** Intentional — green-on-green surface depth, DM Mono precision as a deliberate contrast signal, one warm accent that pops.
+- **Mood:** Calm, authoritative, precise. A research tool that feels like a studio garden — the data feels real because the surface is unhurried.
+- **The rule:** Surfaces are green, text is beige (dark) / dark-green (light), the accent is rosy brown — used sparingly. All colors are CSS variables (tokens.css); never hardcode a hex that won't flip with the mode.
 
 ## Competitive Differentiation
 - **Later.com:** Warm cream + bold editorial (light). We go warm dark — unclaimed territory.
@@ -57,51 +57,41 @@ Every design decision should reinforce that someone who lives in the creator eco
 
 ## Color System
 
-### Approach: Chai Dark (primary)
+**Palette anchors:** Dark green `#0A3323` · Moss green `#839958` · Beige `#F7F4D5` · Rosy brown `#D3968C` · Midnight green `#105666`.
 
+Every color is a CSS variable in `src/shared/styles/tokens.css`. Dark is the default `:root`; light overrides inside `@media (prefers-color-scheme: light)`. Translucent borders/tints flip via the `--border-rgb` / `--accent-rgb` / `--ai-rgb` channel vars. Tailwind tokens (`tailwind.config.js`) and `[var(--…)]` arbitrary classes both read from here — so the whole app flips with the OS theme. **Never hardcode a hex in a component** (the two exceptions that need literals: Clerk `appearance.variables`, which Clerk derives shades from in JS, and SVG/Recharts presentation attributes, where `var()` doesn't resolve).
+
+### Dark mode (default)
 ```css
-/* Surfaces */
---color-bg: #1A1410;             /* chai warm near-black — the background */
---color-surface: #2C2218;        /* card base — floats off bg, no shadow needed */
---color-surface-raised: #3D3025; /* hover states, secondary surfaces */
---color-surface-elevated: #4A3C2E; /* tooltips, dropdowns */
-
-/* Borders */
---color-border: rgba(245, 237, 214, 0.08);    /* subtle warm border */
---color-border-strong: rgba(245, 237, 214, 0.15); /* focus states, card hovers */
-
-/* Text */
---color-text-primary: #F5EDD6;   /* aged paper warm white — NOT pure white */
---color-text-secondary: #C4A882; /* warm muted text */
---color-text-muted: #8B7D6B;     /* labels, placeholders, captions — WCAG AA on chai bg (was #7A6A54) */
-
-/* Accent — Saffron Orange */
---color-accent: #E07B3A;         /* marigold energy — CTAs, active states, links */
---color-accent-hover: #C4612A;   /* darker on hover */
---color-accent-subtle: rgba(224, 123, 58, 0.12); /* accent backgrounds, tinted surfaces */
---color-accent-light: #F4A97B;   /* lighter accent for text on dark accent bg */
-
-/* AI Insight Tint — ONLY for Gemini-generated content */
---color-ai-tint: #A78BFA;        /* soft violet — signals "this came from AI, not raw data" */
---color-ai-subtle: rgba(167, 139, 250, 0.10);
-
-/* Semantic */
---color-success: #4CAF7D;        /* warm-lean green — high ER, confirmed location */
---color-success-subtle: rgba(76, 175, 125, 0.10);
---color-warning: #D97706;        /* amber — "likely" location badges */
---color-warning-bg: rgba(217, 119, 6, 0.10);
---color-error: #E05C5C;          /* error states, low ER warning */
-
-/* Shadows */
---shadow-card: 0 1px 3px rgba(0,0,0,0.4), 0 0 0 1px var(--color-border);
+--color-bg: #082619;             /* deep pond green — background */
+--color-surface: #0A3323;        /* dark green card base */
+--color-surface-raised: #0F4730;
+--color-surface-elevated: #135A3D;
+--color-border: rgba(var(--border-rgb), 0.10);   /* --border-rgb: 247,244,213 (beige) */
+--color-text-primary: #F7F4D5;   /* beige */
+--color-text-secondary: #B8C49B; /* light moss */
+--color-text-muted: #8A9A74;     /* muted moss — WCAG AA on deep green */
+--color-accent: #D3968C;         /* rosy brown — CTAs, active states, links */
+--color-accent-hover: #C07E73;
+--color-accent-light: #E3B5AC;
+--color-success: #9CB36A;  --color-warning: #D9A441;  --color-error: #D9706A;
+--color-info: #2E8198;     --color-ai-tint: #A78BFA;  /* AI-generated content ONLY */
 ```
 
-### Alternative: Warm Cream (light mode, if ever needed)
-- Background: `#FAFAF8` (warm bone, not clinical white)
-- Surface: `#FFFFFF`
-- Text primary: `#1C1410` (warm near-black)
-- Text secondary: `#5C4A30`
-- All accents remain identical (saffron orange, DM Mono, etc.)
+### Light mode (`prefers-color-scheme: light`)
+```css
+--color-bg: #F7F4D5;             /* beige */
+--color-surface: #FFFEF7;
+--color-surface-raised: #EEEACB;
+--color-border: rgba(var(--border-rgb), 0.12);   /* --border-rgb: 10,51,35 (dark green) */
+--color-text-primary: #0A3323;   /* dark green */
+--color-text-secondary: #105666; /* midnight green */
+--color-text-muted: #5C7257;     /* muted green — WCAG AA on beige */
+--color-accent: #C77A6B;         /* rosy brown, deepened for contrast on beige */
+--color-accent-light: #A85A4E;
+--color-success: #5C7A3D;  --color-warning: #B57A12;  --color-error: #C0453E;
+--color-info: #105666;     --color-ai-tint: #6D5BC4;
+```
 
 ## Spacing
 - **Base unit:** 8px
@@ -184,3 +174,4 @@ color: var(--color-text-muted);
 | 2026-06-01 | AI insight tint violet (#A78BFA) | Semantic signal: this color only appears on Gemini-generated content. Users learn to read it. |
 | 2026-06-01 | Warm undertone rule for all neutrals | Discipline that makes the whole system feel coherent vs. assembled from parts. |
 | 2026-06-30 | Muted text #7A6A54 → #8B7D6B | Old value sat at the WCAG AA contrast floor on the chai bg. Lightened a touch while keeping the warm brown undertone. |
+| 2026-06-30 | Chai Dark → Lotus Pond + light/dark | Full palette pivot to pond-green/beige/rosy-brown, driven entirely by CSS vars so the app flips between dark (default) and light via `prefers-color-scheme`. Accent moved saffron → rosy brown. Clerk + Recharts keep fixed hex (can't take vars). |

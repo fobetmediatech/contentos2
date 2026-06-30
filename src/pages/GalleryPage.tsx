@@ -36,7 +36,7 @@ function embedSrc(reel: ContentRecord): string {
 
 function Metrics({ reel, size = 12 }: { reel: ContentRecord; size?: number }) {
   return (
-    <div className="flex items-center gap-3 text-xs text-[#C4A882] font-mono tabular-nums">
+    <div className="flex items-center gap-3 text-xs text-[var(--color-text-secondary)] font-mono tabular-nums">
       <span className="inline-flex items-center gap-1">
         <Eye size={size} />
         {formatCount(reel.videoViewCount)}
@@ -75,10 +75,10 @@ export function GalleryPage() {
   return (
     <div className="max-w-7xl mx-auto">
       <div className="flex items-center gap-2 mb-1">
-        <Clapperboard size={20} className="text-[#E07B3A]" />
-        <h1 className="font-serif italic text-2xl text-[#F5EDD6] tracking-tight">Reel Gallery</h1>
+        <Clapperboard size={20} className="text-[var(--color-accent)]" />
+        <h1 className="font-serif italic text-2xl text-[var(--color-text-primary)] tracking-tight">Reel Gallery</h1>
       </div>
-      <p className="text-sm text-[#C4A882] mb-5">
+      <p className="text-sm text-[var(--color-text-secondary)] mb-5">
         {loading
           ? 'Loading…'
           : `${reels.length} reel${reels.length !== 1 ? 's' : ''} scraped across your searches.`}
@@ -164,8 +164,8 @@ function ReelThumb({ reel }: { reel: ContentRecord }) {
         />
       ) : (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-4 text-center">
-          <Play size={28} className="text-[#E07B3A]" />
-          <span className="text-xs text-[#8B7D6B] line-clamp-3">{reel.caption || 'View reel'}</span>
+          <Play size={28} className="text-[var(--color-accent)]" />
+          <span className="text-xs text-[var(--color-text-muted)] line-clamp-3">{reel.caption || 'View reel'}</span>
         </div>
       )}
     </div>
@@ -174,10 +174,10 @@ function ReelThumb({ reel }: { reel: ContentRecord }) {
 
 function ReelGalleryCard({ reel, onExpand }: { reel: ContentRecord; onExpand: () => void }) {
   return (
-    <div className="bg-[#2C2218] border border-[rgba(245,237,214,0.08)] rounded-xl overflow-hidden flex flex-col">
+    <div className="bg-[var(--color-surface)] border border-[rgba(var(--border-rgb),0.08)] rounded-xl overflow-hidden flex flex-col">
       {/* First click expands into the modal (NOT a direct link out — the modal has that). The
           cover sits behind a transparent overlay button so the embed iframe never steals clicks. */}
-      <div className="relative aspect-[4/5] w-full bg-[#1A1410] overflow-hidden">
+      <div className="relative aspect-[4/5] w-full bg-[var(--color-bg)] overflow-hidden">
         <ReelThumb reel={reel} />
         <button
           type="button"
@@ -186,23 +186,23 @@ function ReelGalleryCard({ reel, onExpand }: { reel: ContentRecord; onExpand: ()
           className="group absolute inset-0 flex items-center justify-center"
         >
           <span className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity" />
-          <span className="relative inline-flex items-center gap-1.5 text-xs font-medium text-[#1A1410] bg-[#E07B3A] px-3 py-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+          <span className="relative inline-flex items-center gap-1.5 text-xs font-medium text-[var(--color-bg)] bg-[var(--color-accent)] px-3 py-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
             <Play size={13} /> Expand
           </span>
         </button>
       </div>
 
       <div className="p-3 flex flex-col gap-2">
-        <span className="text-sm font-semibold text-[#F5EDD6] truncate">@{reel.creatorUsername}</span>
+        <span className="text-sm font-semibold text-[var(--color-text-primary)] truncate">@{reel.creatorUsername}</span>
         <Metrics reel={reel} />
         {reel.hookArchetype && (
           // Hook archetype is Gemini-classified → violet tint per DESIGN.md.
-          <span className="self-start text-xs px-2 py-0.5 rounded-full bg-[#A78BFA]/10 text-[#A78BFA] border border-[#A78BFA]/20">
+          <span className="self-start text-xs px-2 py-0.5 rounded-full bg-[rgba(var(--ai-rgb),0.10)] text-[var(--color-ai-tint)] border border-[rgba(var(--ai-rgb),0.20)]">
             {reel.hookArchetype}
           </span>
         )}
         {reel.caption && (
-          <p className="text-xs text-[#C4A882] leading-snug line-clamp-2">{reel.caption}</p>
+          <p className="text-xs text-[var(--color-text-secondary)] leading-snug line-clamp-2">{reel.caption}</p>
         )}
       </div>
     </div>
@@ -234,13 +234,13 @@ function ReelModal({ reel, onClose }: { reel: ContentRecord; onClose: () => void
         aria-modal="true"
         aria-label={`Reel by @${reel.creatorUsername}`}
         onClick={(e) => e.stopPropagation()}
-        className="relative flex flex-col md:flex-row w-full max-w-4xl max-h-[90vh] overflow-y-auto md:overflow-hidden rounded-2xl border border-[rgba(245,237,214,0.12)] bg-[#1A1410] shadow-[0_24px_80px_rgba(0,0,0,0.7)]"
+        className="relative flex flex-col md:flex-row w-full max-w-4xl max-h-[90vh] overflow-y-auto md:overflow-hidden rounded-2xl border border-[rgba(var(--border-rgb),0.12)] bg-[var(--color-bg)] shadow-[0_24px_80px_rgba(0,0,0,0.7)]"
       >
         <button
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="absolute top-2.5 right-2.5 z-10 flex items-center justify-center w-8 h-8 rounded-full bg-black/50 text-[#F5EDD6] hover:bg-black/70 transition-colors"
+          className="absolute top-2.5 right-2.5 z-10 flex items-center justify-center w-8 h-8 rounded-full bg-black/50 text-[var(--color-text-primary)] hover:bg-black/70 transition-colors"
         >
           <X size={18} />
         </button>
@@ -259,12 +259,12 @@ function ReelModal({ reel, onClose }: { reel: ContentRecord; onClose: () => void
 
         {/* RIGHT — details: header, metrics, caption, transcript (Instagram-desktop side column). */}
         <div className="flex flex-col min-w-0 md:w-[360px] md:max-h-[90vh]">
-          <div className="p-4 border-b border-[rgba(245,237,214,0.08)]">
+          <div className="p-4 border-b border-[rgba(var(--border-rgb),0.08)]">
             <a
               href={`https://www.instagram.com/${reel.creatorUsername}/`}
               target="_blank"
               rel="noreferrer"
-              className="text-base font-semibold text-[#F5EDD6] hover:text-[#F4A97B] transition-colors"
+              className="text-base font-semibold text-[var(--color-text-primary)] hover:text-[var(--color-accent-light)] transition-colors"
             >
               @{reel.creatorUsername}
             </a>
@@ -275,24 +275,24 @@ function ReelModal({ reel, onClose }: { reel: ContentRecord; onClose: () => void
 
           <div className="p-4 md:overflow-y-auto flex flex-col gap-4">
             {reel.hookArchetype && (
-              <span className="self-start text-xs px-2 py-0.5 rounded-full bg-[#A78BFA]/10 text-[#A78BFA] border border-[#A78BFA]/20">
+              <span className="self-start text-xs px-2 py-0.5 rounded-full bg-[rgba(var(--ai-rgb),0.10)] text-[var(--color-ai-tint)] border border-[rgba(var(--ai-rgb),0.20)]">
                 {reel.hookArchetype}
               </span>
             )}
 
             {reel.caption && (
               <section>
-                <h3 className="text-[11px] font-mono uppercase tracking-wide text-[#8B7D6B] mb-1.5">Caption</h3>
-                <p className="text-sm text-[#E6D9BE] leading-relaxed whitespace-pre-wrap">{reel.caption}</p>
+                <h3 className="text-[11px] font-mono uppercase tracking-wide text-[var(--color-text-muted)] mb-1.5">Caption</h3>
+                <p className="text-sm text-[var(--color-text-primary)] leading-relaxed whitespace-pre-wrap">{reel.caption}</p>
               </section>
             )}
 
             <section>
-              <h3 className="text-[11px] font-mono uppercase tracking-wide text-[#8B7D6B] mb-1.5">Transcript</h3>
+              <h3 className="text-[11px] font-mono uppercase tracking-wide text-[var(--color-text-muted)] mb-1.5">Transcript</h3>
               {reel.transcript ? (
-                <p className="text-sm text-[#F5EDD6] leading-relaxed whitespace-pre-wrap">{reel.transcript}</p>
+                <p className="text-sm text-[var(--color-text-primary)] leading-relaxed whitespace-pre-wrap">{reel.transcript}</p>
               ) : (
-                <p className="text-sm text-[#8B7D6B] italic">No transcript captured for this reel.</p>
+                <p className="text-sm text-[var(--color-text-muted)] italic">No transcript captured for this reel.</p>
               )}
             </section>
 
@@ -300,7 +300,7 @@ function ReelModal({ reel, onClose }: { reel: ContentRecord; onClose: () => void
               href={reel.url}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1.5 self-start text-sm text-[#E07B3A] hover:underline"
+              className="inline-flex items-center gap-1.5 self-start text-sm text-[var(--color-accent)] hover:underline"
             >
               <ExternalLink size={14} /> Open on Instagram
             </a>

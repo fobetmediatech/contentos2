@@ -9,7 +9,6 @@ import { useReelAnalysisStore } from './store/reelAnalysisStore'
 import { useCorpusStore } from './store/corpusStore'
 import { AppLayout } from './components/AppLayout'
 import { ChatPage } from './pages/ChatPage'
-import { ReportPage } from './pages/ReportPage'
 import { MemoryPage } from './pages/MemoryPage'
 import { GalleryPage } from './pages/GalleryPage'
 import { CalendarPage } from './pages/CalendarPage'
@@ -109,9 +108,6 @@ export default function App() {
                   /results, /discover/results, and /reel-analysis pages were removed (AUDIT-H6). Any
                   stray link to them falls through to the `*` redirect below. */}
               <Route element={<AppLayout />}>
-                {/* Deep niche report (full-page, client-ready view) */}
-                <Route path="report" element={<ReportPage />} />
-
                 {/* Creator/content memory — browse everything the corpus has remembered */}
                 <Route path="memory" element={<MemoryPage />} />
 

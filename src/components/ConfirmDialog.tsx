@@ -73,7 +73,7 @@ export function ConfirmDialog({
         aria-labelledby="confirm-title"
         aria-describedby={description ? 'confirm-desc' : undefined}
         onClick={(e) => e.stopPropagation()}
-        className="bg-surface border border-[rgba(245,237,214,0.12)] rounded-lg w-full max-w-sm p-5 text-center"
+        className="bg-surface border border-[rgba(var(--border-rgb),0.12)] rounded-lg w-full max-w-sm p-5 text-center"
       >
         {destructive && (
           <div className="w-11 h-11 rounded-full bg-[rgba(224,92,92,0.1)] flex items-center justify-center mx-auto mb-3">
@@ -93,7 +93,7 @@ export function ConfirmDialog({
             ref={cancelRef}
             type="button"
             onClick={onCancel}
-            className="flex-1 text-secondary hover:text-primary text-sm border border-[rgba(245,237,214,0.15)] rounded-md py-2.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="flex-1 text-secondary hover:text-primary text-sm border border-[rgba(var(--border-rgb),0.15)] rounded-md py-2.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             {cancelLabel}
           </button>
@@ -103,7 +103,7 @@ export function ConfirmDialog({
             disabled={busy}
             className={`flex-1 text-chai font-medium text-sm rounded-md py-2.5 transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-surface ${
               destructive
-                ? 'bg-danger hover:bg-[#C44D4D] focus-visible:ring-danger'
+                ? 'bg-danger hover:bg-[var(--color-error)] focus-visible:ring-danger'
                 : 'bg-accent hover:bg-accent-hover focus-visible:ring-accent'
             }`}
           >

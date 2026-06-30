@@ -115,7 +115,7 @@ export function SearchablePicker({
         type="button"
         disabled={disabled}
         onClick={() => (open ? setOpen(false) : openMenu())}
-        className="w-full flex items-center justify-between gap-2 bg-[#3D3025] border border-[rgba(245,237,214,0.08)] rounded-md px-3 py-2 text-sm focus:outline-none focus:border-[#E07B3A] disabled:opacity-60 transition-colors"
+        className="w-full flex items-center justify-between gap-2 bg-[var(--color-surface-raised)] border border-[rgba(var(--border-rgb),0.08)] rounded-md px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] disabled:opacity-60 transition-colors"
       >
         <span className={`truncate ${selectedLabel ? 'text-primary' : 'text-muted'}`}>
           {selectedLabel || placeholder}
@@ -124,8 +124,8 @@ export function SearchablePicker({
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-1 w-full bg-[#4A3C2E] border border-[rgba(245,237,214,0.15)] rounded-md shadow-[0_8px_40px_rgba(0,0,0,0.6)] overflow-hidden">
-          <div className="flex items-center gap-2 px-2.5 py-2 border-b border-[rgba(245,237,214,0.08)]">
+        <div className="absolute z-50 mt-1 w-full bg-[var(--color-surface-elevated)] border border-[rgba(var(--border-rgb),0.15)] rounded-md shadow-[0_8px_40px_rgba(0,0,0,0.6)] overflow-hidden">
+          <div className="flex items-center gap-2 px-2.5 py-2 border-b border-[rgba(var(--border-rgb),0.08)]">
             <Search size={14} className="text-muted shrink-0" />
             <input
               ref={inputRef}
@@ -152,11 +152,11 @@ export function SearchablePicker({
                       onMouseEnter={() => setHighlight(i)}
                       onClick={() => choose(r.value)}
                       className={`w-full flex items-center justify-between gap-2 text-left px-3 py-2 text-sm transition-colors ${
-                        i === highlight ? 'bg-[rgba(224,123,58,0.16)]' : ''
-                      } ${active ? 'text-[#F4A97B]' : 'text-primary'}`}
+                        i === highlight ? 'bg-[rgba(var(--accent-rgb),0.16)]' : ''
+                      } ${active ? 'text-[var(--color-accent-light)]' : 'text-primary'}`}
                     >
                       <span className="truncate">{r.label}</span>
-                      {active && <Check size={14} className="text-[#E07B3A] shrink-0" />}
+                      {active && <Check size={14} className="text-[var(--color-accent)] shrink-0" />}
                     </button>
                   </li>
                 )

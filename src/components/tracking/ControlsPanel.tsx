@@ -115,53 +115,53 @@ export function ControlsPanel({
   }
 
   return (
-    <div className="bg-[#2C2218] border border-[rgba(245,237,214,0.08)] rounded-xl p-5 space-y-5">
-      <h3 className="text-[#F5EDD6] font-medium text-sm">Settings & Controls</h3>
+    <div className="bg-[var(--color-surface)] border border-[rgba(var(--border-rgb),0.08)] rounded-xl p-5 space-y-5">
+      <h3 className="text-[var(--color-text-primary)] font-medium text-sm">Settings & Controls</h3>
 
       {/* Settings fields */}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
-          <label className="text-[#C4A882] text-xs">Scrape window (days)</label>
+          <label className="text-[var(--color-text-secondary)] text-xs">Scrape window (days)</label>
           <input
             type="number"
             min={1}
             max={365}
             value={windowDays}
             onChange={(e) => setWindowDays(Number(e.target.value))}
-            className="w-full bg-[#1A1410] border border-[rgba(245,237,214,0.12)] rounded-md px-3 py-2 text-[#F5EDD6] font-mono text-sm focus:outline-none focus:border-[#E07B3A] transition-colors"
+            className="w-full bg-[var(--color-bg)] border border-[rgba(var(--border-rgb),0.12)] rounded-md px-3 py-2 text-[var(--color-text-primary)] font-mono text-sm focus:outline-none focus:border-[var(--color-accent)] transition-colors"
           />
-          <p className="text-[#8B7D6B] text-[11px]">How far back to scrape reels</p>
+          <p className="text-[var(--color-text-muted)] text-[11px]">How far back to scrape reels</p>
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-[#C4A882] text-xs">Auto-fetch every (days)</label>
+          <label className="text-[var(--color-text-secondary)] text-xs">Auto-fetch every (days)</label>
           <input
             type="number"
             min={1}
             max={30}
             value={intervalDays}
             onChange={(e) => setIntervalDays(Number(e.target.value))}
-            className="w-full bg-[#1A1410] border border-[rgba(245,237,214,0.12)] rounded-md px-3 py-2 text-[#F5EDD6] font-mono text-sm focus:outline-none focus:border-[#E07B3A] transition-colors"
+            className="w-full bg-[var(--color-bg)] border border-[rgba(var(--border-rgb),0.12)] rounded-md px-3 py-2 text-[var(--color-text-primary)] font-mono text-sm focus:outline-none focus:border-[var(--color-accent)] transition-colors"
           />
-          <p className="text-[#8B7D6B] text-[11px]">Cron checks every 6 hours</p>
+          <p className="text-[var(--color-text-muted)] text-[11px]">Cron checks every 6 hours</p>
         </div>
       </div>
 
       <button
         onClick={() => void handleSaveSettings()}
         disabled={saving}
-        className="flex items-center gap-2 text-sm px-3 py-1.5 rounded-md bg-[rgba(224,123,58,0.12)] text-[#E07B3A] hover:bg-[rgba(224,123,58,0.2)] transition-colors disabled:opacity-50"
+        className="flex items-center gap-2 text-sm px-3 py-1.5 rounded-md bg-[rgba(var(--accent-rgb),0.12)] text-[var(--color-accent)] hover:bg-[rgba(var(--accent-rgb),0.2)] transition-colors disabled:opacity-50"
       >
         <Save size={13} />
         {saving ? 'Saving…' : 'Save settings'}
       </button>
 
       {/* Action buttons */}
-      <div className="flex flex-wrap gap-2 pt-1 border-t border-[rgba(245,237,214,0.06)]">
+      <div className="flex flex-wrap gap-2 pt-1 border-t border-[rgba(var(--border-rgb),0.06)]">
         <button
           onClick={onFetchNow}
           disabled={isFetching}
-          className="flex items-center gap-2 text-sm px-3 py-1.5 rounded-md bg-[#E07B3A] text-[#1A1410] font-medium hover:bg-[#F4A97B] transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 text-sm px-3 py-1.5 rounded-md bg-[var(--color-accent)] text-[var(--color-bg)] font-medium hover:bg-[var(--color-accent-light)] transition-colors disabled:opacity-50"
         >
           <RefreshCw size={13} className={isFetching ? 'animate-spin' : ''} />
           {isFetching ? (phaseLabel[fetchPhase ?? ''] ?? 'Fetching…') : 'Fetch now'}
@@ -169,7 +169,7 @@ export function ControlsPanel({
 
         <button
           onClick={() => downloadMd(account, snapshots, reels)}
-          className="flex items-center gap-2 text-sm px-3 py-1.5 rounded-md bg-[#2C2218] border border-[rgba(245,237,214,0.12)] text-[#C4A882] hover:text-[#F5EDD6] hover:border-[rgba(245,237,214,0.2)] transition-colors"
+          className="flex items-center gap-2 text-sm px-3 py-1.5 rounded-md bg-[var(--color-surface)] border border-[rgba(var(--border-rgb),0.12)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:border-[rgba(var(--border-rgb),0.2)] transition-colors"
         >
           <Download size={13} />
           Download report
@@ -178,14 +178,14 @@ export function ControlsPanel({
         {!confirmRemove ? (
           <button
             onClick={() => setConfirmRemove(true)}
-            className="flex items-center gap-2 text-sm px-3 py-1.5 rounded-md text-[#8B7D6B] hover:text-danger transition-colors ml-auto"
+            className="flex items-center gap-2 text-sm px-3 py-1.5 rounded-md text-[var(--color-text-muted)] hover:text-danger transition-colors ml-auto"
           >
             <Trash2 size={13} />
             Stop tracking
           </button>
         ) : (
           <div className="flex items-center gap-2 ml-auto">
-            <span className="text-[#C4A882] text-xs">Delete history too?</span>
+            <span className="text-[var(--color-text-secondary)] text-xs">Delete history too?</span>
             <button
               onClick={() => onRemove(false)}
               className="text-xs px-2.5 py-1 rounded bg-[rgba(224,92,92,0.12)] text-danger hover:bg-[rgba(224,92,92,0.2)] transition-colors"
@@ -200,7 +200,7 @@ export function ControlsPanel({
             </button>
             <button
               onClick={() => setConfirmRemove(false)}
-              className="text-xs text-[#8B7D6B] hover:text-[#C4A882] transition-colors"
+              className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] transition-colors"
             >
               Cancel
             </button>
@@ -209,7 +209,7 @@ export function ControlsPanel({
       </div>
 
       {/* Next scheduled fetch */}
-      <p className="text-[#8B7D6B] text-[11px] font-mono">
+      <p className="text-[var(--color-text-muted)] text-[11px] font-mono">
         Next auto-fetch:{' '}
         {account.next_fetch_at
           ? new Date(account.next_fetch_at).toLocaleString()

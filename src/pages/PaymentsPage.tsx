@@ -28,7 +28,7 @@ const STATUS_BADGE: Record<PaymentStatus, string> = {
 }
 
 const inputCls =
-  'bg-[#3D3025] border border-[rgba(245,237,214,0.08)] rounded-md px-3 py-2.5 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-[#E07B3A]'
+  'bg-[var(--color-surface-raised)] border border-[rgba(var(--border-rgb),0.08)] rounded-md px-3 py-2.5 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-[var(--color-accent)]'
 
 const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 })
 
@@ -124,7 +124,7 @@ export function PaymentsPage() {
   if (!isFinance) {
     return (
       <div className="max-w-4xl mx-auto">
-        <div className="bg-surface border border-[rgba(245,237,214,0.08)] rounded-lg p-12 text-center">
+        <div className="bg-surface border border-[rgba(var(--border-rgb),0.08)] rounded-lg p-12 text-center">
           <Lock size={28} className="mx-auto text-muted mb-3" />
           <h1 className="text-primary text-lg font-medium mb-1">Payments are restricted</h1>
           <p className="text-secondary text-sm">Only finance team members can view this section.</p>
@@ -143,7 +143,7 @@ export function PaymentsPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowClients(true)}
-            className="flex items-center gap-1.5 text-sm text-secondary hover:text-primary border border-[rgba(245,237,214,0.12)] rounded-md px-3 py-2 transition-colors"
+            className="flex items-center gap-1.5 text-sm text-secondary hover:text-primary border border-[rgba(var(--border-rgb),0.12)] rounded-md px-3 py-2 transition-colors"
           >
             <Users size={15} /> Manage clients
           </button>
@@ -167,7 +167,7 @@ export function PaymentsPage() {
       {/* Totals — consolidated to INR (each payment converted at current rates) */}
       <div className="grid grid-cols-3 gap-3 mb-2">
         {STATUSES.map((s) => (
-          <div key={s} className="bg-surface border border-[rgba(245,237,214,0.08)] rounded-lg p-3">
+          <div key={s} className="bg-surface border border-[rgba(var(--border-rgb),0.08)] rounded-lg p-3">
             <div className="flex items-center justify-between">
               <span className={`text-[11px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded ${STATUS_BADGE[s]}`}>
                 {s}
@@ -184,7 +184,7 @@ export function PaymentsPage() {
       </p>
 
       {/* Add payment */}
-      <div className="bg-surface border border-[rgba(245,237,214,0.08)] rounded-lg p-4 mb-6">
+      <div className="bg-surface border border-[rgba(var(--border-rgb),0.08)] rounded-lg p-4 mb-6">
         <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
           <SearchablePicker
             items={clientItems}
@@ -228,7 +228,7 @@ export function PaymentsPage() {
           <button
             onClick={addPayment}
             disabled={!paymentClientId || !amount || !note.trim() || create.isPending}
-            className="col-span-2 sm:col-span-1 flex items-center justify-center gap-1.5 bg-[#E07B3A] hover:bg-[#C4612A] disabled:opacity-50 text-white text-sm font-medium rounded-md px-4 py-2.5 transition-colors"
+            className="col-span-2 sm:col-span-1 flex items-center justify-center gap-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] disabled:opacity-50 text-white text-sm font-medium rounded-md px-4 py-2.5 transition-colors"
           >
             <Plus size={15} /> {create.isPending ? 'Adding…' : 'Add'}
           </button>
@@ -270,7 +270,7 @@ export function PaymentsPage() {
           {payments.map((p) => (
             <li
               key={p.id}
-              className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 bg-surface border border-[rgba(245,237,214,0.08)] rounded-lg px-4 py-3"
+              className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 bg-surface border border-[rgba(var(--border-rgb),0.08)] rounded-lg px-4 py-3"
             >
               <div className="min-w-0 flex-1">
                 <div className="text-primary text-sm font-medium truncate">{clientLabel(p.paymentClientId)}</div>

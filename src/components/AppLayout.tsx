@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Brain, FileText, MessageSquare, CalendarDays, Wallet, BarChart2, Clapperboard, ShieldCheck, Target, Menu, X } from 'lucide-react'
+import { Brain, MessageSquare, CalendarDays, Wallet, BarChart2, Clapperboard, ShieldCheck, Target, Menu, X } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { UserButton } from '@clerk/react'
 import { useCorpusStore } from '../store/corpusStore'
@@ -30,7 +30,6 @@ const NAV_SECTIONS: NavSection[] = [
   { path: '/payments', label: 'Payments', icon: Wallet, financeOnly: true },
   { path: '/memory', label: 'Memory', icon: Brain },
   { path: '/gallery', label: 'Gallery', icon: Clapperboard },
-  { path: '/report', label: 'Report', icon: FileText },
   { path: '/tracking', label: 'Dashboard', icon: BarChart2 },
 ]
 
@@ -47,11 +46,6 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   // Payments (financeOnly) is hidden in the nav unless the user has the finance role.
   const sections = NAV_SECTIONS.filter((s) => !s.financeOnly || isFinance)
-
-  const navClass = (active: boolean) =>
-    `flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md transition-colors flex-shrink-0 whitespace-nowrap ${
-      active ? 'bg-surface-raised text-primary font-medium' : 'text-secondary hover:text-primary hover:bg-surface-raised'
-    }`
 
   const isActive = (s: NavSection) =>
     s.path === '/' ? location.pathname === '/' : location.pathname.startsWith(s.path)
@@ -77,7 +71,7 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
   return (
     <div className={`${noPadding ? 'h-[100dvh] flex flex-col overflow-hidden' : 'min-h-screen'} bg-chai`}>
       {/* Top navigation bar */}
-      <header className="sticky top-0 z-10 bg-surface border-b border-[rgba(245,237,214,0.08)] flex-shrink-0">
+      <header className="sticky top-0 z-10 bg-surface border-b border-[rgba(var(--border-rgb),0.08)] flex-shrink-0">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 h-14 flex items-center justify-between gap-2">
           {/* Left group: mobile hamburger + brand */}
           <div className="flex items-center gap-1.5 min-w-0">
@@ -93,98 +87,120 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
             {/* Brand — Instrument Serif italic */}
             <Link
               to="/"
-              className="font-serif italic text-lg text-primary hover:text-[#F4A97B] transition-colors tracking-tight"
+              className="font-serif italic text-lg text-primary hover:text-[var(--color-accent-light)] transition-colors tracking-tight"
             >
               Content OS
             </Link>
           </div>
 
-          {/* Nav links — derived from NAV_SECTIONS. Desktop only; mobile uses the drawer. */}
-          <nav aria-label="Main" className="hidden md:flex items-center gap-1 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {sections.map((s) => {
-              const Icon = s.icon
-              const active = isActive(s)
-              return (
-                <Link
-                  key={s.path}
-                  to={s.path}
-                  title={s.path === '/memory' && corpusCount > 0 ? `${corpusCount} creators remembered` : undefined}
-                  aria-current={active ? 'page' : undefined}
-                  className={navClass(active)}
-                >
-                  <Icon size={14} className={s.path === '/memory' ? 'text-[#E07B3A]' : undefined} />
-                  {s.label}
-                  {/* Memory-specific corpus count badge */}
-                  {s.path === '/memory' && corpusCount > 0 && (
-                    <span className="ml-0.5 text-[11px] font-medium tabular-nums px-1.5 py-0.5 rounded-full bg-[rgba(224,123,58,0.15)] text-[#F4A97B]">
-                      {corpusCount}
+          {/* Nav — SPOTLIGHT. The open tab takes center stage; the rest huddle at
+              the end as icon chips that expand on hover. Desktop only; mobile = drawer. */}
+          <nav aria-label="Main" className="hidden md:flex items-center flex-1 min-w-0 pl-4">
+            {/* Spotlight: the active tab, centered */}
+            <div className="flex-1 flex justify-center min-w-0">
+              {(() => {
+                const act = sections.find(isActive)
+                if (!act) return null
+                const Icon = act.icon
+                return (
+                  <Link
+                    to={act.path}
+                    aria-current="page"
+                    className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-[rgba(var(--accent-rgb),0.16)] text-[var(--color-accent-light)] font-medium text-[15px] ring-1 ring-[rgba(var(--accent-rgb),0.45)] shadow-[0_0_20px_rgba(var(--accent-rgb),0.16)] whitespace-nowrap transition-colors"
+                  >
+                    <Icon size={16} className={act.path === '/memory' ? 'text-[var(--color-accent)]' : undefined} />
+                    {act.label}
+                    {act.path === '/memory' && corpusCount > 0 && (
+                      <span className="text-[11px] font-medium tabular-nums px-1.5 py-0.5 rounded-full bg-[rgba(var(--accent-rgb),0.24)] text-[var(--color-accent-light)]">
+                        {corpusCount}
+                      </span>
+                    )}
+                  </Link>
+                )
+              })()}
+            </div>
+
+            {/* Cluster: the other tabs, huddled at the end — each expands on hover */}
+            <div className="flex items-center gap-0.5 flex-shrink-0">
+              {sections.filter((s) => !isActive(s)).map((s) => {
+                const Icon = s.icon
+                return (
+                  <Link
+                    key={s.path}
+                    to={s.path}
+                    title={s.path === '/memory' && corpusCount > 0 ? `${s.label} · ${corpusCount} remembered` : s.label}
+                    className="group/chip flex items-center h-9 px-2.5 rounded-full text-secondary hover:text-primary hover:bg-surface-raised hover:-translate-y-0.5 transition-[color,background-color,transform] duration-150"
+                  >
+                    <Icon size={15} className={s.path === '/memory' ? 'text-[var(--color-accent)]' : undefined} />
+                    <span className="max-w-0 overflow-hidden whitespace-nowrap text-sm group-hover/chip:max-w-[140px] group-hover/chip:ml-1.5 transition-[max-width,margin] duration-200">
+                      {s.label}
                     </span>
-                  )}
-                </Link>
-              )
-            })}
+                  </Link>
+                )
+              })}
+            </div>
           </nav>
 
           {/* User avatar — Clerk's UserButton shows initials/photo */}
           <UserButton
             appearance={{
               variables: {
-                colorBackground: '#2C2218',
-                colorText: '#F5EDD6',
-                colorTextSecondary: '#C4A882',
-                colorPrimary: '#E07B3A',
-                colorTextOnPrimaryBackground: '#F5EDD6',
-                colorInputBackground: '#3D3025',
-                colorInputText: '#F5EDD6',
-                colorNeutral: '#C4A882',
+                colorBackground: '#0A3323',
+                colorText: '#F7F4D5',
+                colorTextSecondary: '#B8C49B',
+                colorPrimary: '#D3968C',
+                colorTextOnPrimaryBackground: '#082619',
+                colorInputBackground: '#0F4730',
+                colorInputText: '#F7F4D5',
+                colorNeutral: '#B8C49B',
                 borderRadius: '10px',
                 fontFamily: '"Outfit", sans-serif',
                 fontSize: '14px',
               },
               elements: {
                 card: {
-                  backgroundColor: '#2C2218',
-                  border: '1px solid rgba(245,237,214,0.12)',
-                  boxShadow: '0 8px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(245,237,214,0.06)',
+                  backgroundColor: '#0A3323',
+                  border: '1px solid rgba(var(--border-rgb),0.12)',
+                  boxShadow: '0 8px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(var(--border-rgb),0.06)',
                 },
                 userPreviewMainIdentifier: {
-                  color: '#F5EDD6',
+                  color: '#F7F4D5',
                   fontWeight: '600',
                   fontFamily: '"Outfit", sans-serif',
                 },
                 userPreviewSecondaryIdentifier: {
-                  color: '#C4A882',
+                  color: '#B8C49B',
                   fontFamily: '"DM Mono", monospace',
                   fontSize: '12px',
                   letterSpacing: '0.01em',
                 },
                 userPreviewAvatarBox: {
-                  outline: '2px solid rgba(224,123,58,0.35)',
+                  outline: '2px solid rgba(var(--accent-rgb),0.35)',
                   outlineOffset: '1px',
                 },
                 userButtonPopoverActionButton: {
-                  color: '#F5EDD6',
+                  color: '#F7F4D5',
                   borderRadius: '8px',
                   transition: 'background-color 150ms ease',
                 },
                 userButtonPopoverActionButtonText: {
-                  color: '#F5EDD6',
+                  color: '#F7F4D5',
                   fontFamily: '"Outfit", sans-serif',
                   fontWeight: '500',
                 },
                 userButtonPopoverActionButtonIcon: {
-                  color: '#C4A882',
+                  color: '#B8C49B',
                 },
                 userButtonPopoverFooter: {
-                  borderTop: '1px solid rgba(245,237,214,0.08)',
+                  borderTop: '1px solid rgba(var(--border-rgb),0.08)',
                 },
                 userButtonPopoverFooterPagesLink: {
-                  color: '#8B7D6B',
+                  color: '#8A9A74',
                 },
                 badge: {
-                  backgroundColor: 'rgba(224,123,58,0.15)',
-                  color: '#F4A97B',
-                  border: '1px solid rgba(224,123,58,0.25)',
+                  backgroundColor: 'rgba(var(--accent-rgb),0.15)',
+                  color: '#E3B5AC',
+                  border: '1px solid rgba(var(--accent-rgb),0.25)',
                   fontFamily: '"DM Mono", monospace',
                   letterSpacing: '0.04em',
                 },
@@ -221,9 +237,9 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
           {/* Panel */}
           <nav
             aria-label="Main"
-            className="absolute inset-y-0 left-0 w-[78%] max-w-xs bg-surface border-r border-[rgba(245,237,214,0.08)] flex flex-col animate-[slideInLeft_240ms_ease-out]"
+            className="absolute inset-y-0 left-0 w-[78%] max-w-xs bg-surface border-r border-[rgba(var(--border-rgb),0.08)] flex flex-col animate-[slideInLeft_240ms_ease-out]"
           >
-            <div className="h-14 flex items-center justify-between px-4 border-b border-[rgba(245,237,214,0.08)]">
+            <div className="h-14 flex items-center justify-between px-4 border-b border-[rgba(var(--border-rgb),0.08)]">
               <span className="font-serif italic text-lg text-primary tracking-tight">Content OS</span>
               <button
                 type="button"
@@ -250,10 +266,10 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
                         : 'text-secondary hover:text-primary hover:bg-surface-raised'
                     }`}
                   >
-                    <Icon size={18} className={s.path === '/memory' ? 'text-[#E07B3A]' : undefined} />
+                    <Icon size={18} className={s.path === '/memory' ? 'text-[var(--color-accent)]' : undefined} />
                     {s.label}
                     {s.path === '/memory' && corpusCount > 0 && (
-                      <span className="ml-auto text-[11px] font-medium tabular-nums px-1.5 py-0.5 rounded-full bg-[rgba(224,123,58,0.15)] text-[#F4A97B]">
+                      <span className="ml-auto text-[11px] font-medium tabular-nums px-1.5 py-0.5 rounded-full bg-[rgba(var(--accent-rgb),0.15)] text-[var(--color-accent-light)]">
                         {corpusCount}
                       </span>
                     )}

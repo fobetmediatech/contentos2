@@ -70,12 +70,12 @@ export function AccountRow({
   return (
     <Link
       to={`/tracking/${account.username}`}
-      className="block bg-[#2C2218] border border-[rgba(245,237,214,0.08)] rounded-xl p-4 hover:border-[rgba(245,237,214,0.16)] transition-colors"
+      className="block bg-[var(--color-surface)] border border-[rgba(var(--border-rgb),0.08)] rounded-xl p-4 hover:border-[rgba(var(--border-rgb),0.16)] transition-colors"
     >
       <div className="flex items-center gap-4">
         {/* Avatar */}
         <div className="flex-shrink-0">
-          <div className="w-10 h-10 rounded-full bg-[rgba(224,123,58,0.15)] ring-2 ring-[rgba(224,123,58,0.25)] flex items-center justify-center text-[#E07B3A] font-medium text-sm">
+          <div className="w-10 h-10 rounded-full bg-[rgba(var(--accent-rgb),0.15)] ring-2 ring-[rgba(var(--accent-rgb),0.25)] flex items-center justify-center text-[var(--color-accent)] font-medium text-sm">
             {initials}
           </div>
         </div>
@@ -83,22 +83,22 @@ export function AccountRow({
         {/* Name + username */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-[#F5EDD6] font-medium text-sm truncate">
+            <span className="text-[var(--color-text-primary)] font-medium text-sm truncate">
               {account.full_name ?? `@${account.username}`}
             </span>
             {account.is_verified && (
-              <span className="text-[10px] bg-[rgba(224,123,58,0.12)] text-[#E07B3A] px-1.5 py-0.5 rounded font-mono flex-shrink-0">
+              <span className="text-[10px] bg-[rgba(var(--accent-rgb),0.12)] text-[var(--color-accent)] px-1.5 py-0.5 rounded font-mono flex-shrink-0">
                 ✓
               </span>
             )}
           </div>
-          <span className="text-[#8B7D6B] text-xs font-mono">@{account.username}</span>
+          <span className="text-[var(--color-text-muted)] text-xs font-mono">@{account.username}</span>
         </div>
 
         {/* Metrics */}
         <div className="hidden sm:flex items-center gap-6 flex-shrink-0">
           <div className="text-right">
-            <div className="text-[#F5EDD6] font-mono text-sm tabular-nums">
+            <div className="text-[var(--color-text-primary)] font-mono text-sm tabular-nums">
               {followers != null ? fmt(followers) : '—'}
               {followerDelta && (
                 <span className={`ml-1.5 text-xs ${followerDelta.startsWith('+') ? 'text-success' : 'text-danger'}`}>
@@ -106,35 +106,35 @@ export function AccountRow({
                 </span>
               )}
             </div>
-            <div className="text-[#8B7D6B] text-[10px]">followers</div>
+            <div className="text-[var(--color-text-muted)] text-[10px]">followers</div>
           </div>
 
           <div className="text-right">
-            <div className="text-[#F5EDD6] font-mono text-sm tabular-nums">
+            <div className="text-[var(--color-text-primary)] font-mono text-sm tabular-nums">
               {reelER ?? '—'}
             </div>
-            <div className="text-[#8B7D6B] text-[10px]">view ER</div>
+            <div className="text-[var(--color-text-muted)] text-[10px]">view ER</div>
           </div>
 
           <div className="text-right">
-            <div className="text-[#C4A882] font-mono text-xs tabular-nums">
+            <div className="text-[var(--color-text-secondary)] font-mono text-xs tabular-nums">
               {lastFetched ?? '—'}
             </div>
-            <div className="text-[#8B7D6B] text-[10px]">last fetch</div>
+            <div className="text-[var(--color-text-muted)] text-[10px]">last fetch</div>
           </div>
 
           <div className="text-right">
-            <div className="text-[#C4A882] font-mono text-xs tabular-nums">
+            <div className="text-[var(--color-text-secondary)] font-mono text-xs tabular-nums">
               {nextFetch ?? '—'}
             </div>
-            <div className="text-[#8B7D6B] text-[10px]">next fetch</div>
+            <div className="text-[var(--color-text-muted)] text-[10px]">next fetch</div>
           </div>
         </div>
 
         {/* Status badge */}
         <div className="flex-shrink-0 ml-2">
           {isFetching ? (
-            <span className="flex items-center gap-1.5 text-[10px] font-mono text-[#E07B3A] bg-[rgba(224,123,58,0.1)] px-2 py-1 rounded-full">
+            <span className="flex items-center gap-1.5 text-[10px] font-mono text-[var(--color-accent)] bg-[rgba(var(--accent-rgb),0.1)] px-2 py-1 rounded-full">
               <RefreshCw size={10} className="animate-spin" />
               {fetchPhase}…
             </span>
@@ -149,7 +149,7 @@ export function AccountRow({
           ) : latestSnapshot ? (
             <CheckCircle size={14} className="text-success/60" />
           ) : (
-            <span className="flex items-center gap-1 text-[10px] font-mono text-[#8B7D6B]">
+            <span className="flex items-center gap-1 text-[10px] font-mono text-[var(--color-text-muted)]">
               <Clock size={10} />
               Pending
             </span>

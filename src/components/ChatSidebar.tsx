@@ -34,7 +34,7 @@ export function ChatSidebar({ conversations, activeId, onSwitch, onNew, onDelete
       <button
         onClick={() => setMobileOpen(true)}
         aria-label="Open chat history"
-        className={`md:hidden fixed top-16 left-3 z-30 flex items-center justify-center w-11 h-11 rounded-lg bg-[#2C2218] border border-[rgba(245,237,214,0.08)] text-[#C4A882] hover:text-[#F5EDD6] transition-colors shadow-lg ${mobileOpen ? 'hidden' : ''}`}
+        className={`md:hidden fixed top-16 left-3 z-30 flex items-center justify-center w-11 h-11 rounded-lg bg-[var(--color-surface)] border border-[rgba(var(--border-rgb),0.08)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors shadow-lg ${mobileOpen ? 'hidden' : ''}`}
       >
         <Menu size={18} aria-hidden="true" />
       </button>
@@ -50,7 +50,7 @@ export function ChatSidebar({ conversations, activeId, onSwitch, onNew, onDelete
 
       {/* Sidebar: fixed off-canvas drawer on mobile, in-flow column on desktop. */}
       <div
-        className={`flex flex-col h-full bg-[#2C2218] border-r border-[rgba(245,237,214,0.08)] overflow-hidden
+        className={`flex flex-col h-full bg-[var(--color-surface)] border-r border-[rgba(var(--border-rgb),0.08)] overflow-hidden
           fixed inset-y-0 left-0 z-50 w-[260px] transition-transform duration-[280ms] ease-in-out
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
           md:static md:z-auto md:translate-x-0 md:flex-shrink-0 md:transition-[width] ${open ? 'md:w-[220px]' : 'md:w-10'}`}
@@ -59,13 +59,13 @@ export function ChatSidebar({ conversations, activeId, onSwitch, onNew, onDelete
           <>
             {/* Header */}
             <div className="flex items-center justify-between px-3 pt-4 pb-2 flex-shrink-0">
-              <span className="text-[10px] font-mono uppercase tracking-widest text-[#8B7D6B]">
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--color-text-muted)]">
                 Chats
               </span>
               {/* Desktop collapse */}
               <button
                 onClick={() => setOpen(false)}
-                className="hidden md:inline-flex p-1 rounded-lg text-[#8B7D6B] hover:text-[#C4A882] hover:bg-[#3D3025] transition-colors"
+                className="hidden md:inline-flex p-1 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-raised)] transition-colors"
                 aria-label="Collapse sidebar"
               >
                 <ChevronLeft size={14} aria-hidden="true" />
@@ -73,7 +73,7 @@ export function ChatSidebar({ conversations, activeId, onSwitch, onNew, onDelete
               {/* Mobile close */}
               <button
                 onClick={() => setMobileOpen(false)}
-                className="md:hidden flex items-center justify-center w-10 h-10 -mr-1.5 rounded-lg text-[#8B7D6B] hover:text-[#C4A882] hover:bg-[#3D3025] transition-colors"
+                className="md:hidden flex items-center justify-center w-10 h-10 -mr-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-raised)] transition-colors"
                 aria-label="Close chat history"
               >
                 <X size={18} aria-hidden="true" />
@@ -84,9 +84,9 @@ export function ChatSidebar({ conversations, activeId, onSwitch, onNew, onDelete
             <div className="px-2 pb-2 flex-shrink-0">
               <button
                 onClick={() => { onNew(); setMobileOpen(false) }}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-[#C4A882] border border-[rgba(245,237,214,0.08)] hover:border-[#E07B3A]/40 hover:text-[#F5EDD6] hover:bg-[#3D3025] transition-colors"
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-[var(--color-text-secondary)] border border-[rgba(var(--border-rgb),0.08)] hover:border-[rgba(var(--accent-rgb),0.40)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)] transition-colors"
               >
-                <Plus size={14} className="flex-shrink-0 text-[#E07B3A]" aria-hidden="true" />
+                <Plus size={14} className="flex-shrink-0 text-[var(--color-accent)]" aria-hidden="true" />
                 <span>New chat</span>
               </button>
             </div>
@@ -100,24 +100,24 @@ export function ChatSidebar({ conversations, activeId, onSwitch, onNew, onDelete
                     key={c.id}
                     className={`group relative w-full flex items-center gap-2 px-3 py-2 rounded-xl transition-colors mb-0.5 ${
                       isActive
-                        ? 'bg-[#3D3025] text-[#F5EDD6]'
-                        : 'text-[#C4A882] hover:bg-[#3D3025] hover:text-[#F5EDD6]'
+                        ? 'bg-[var(--color-surface-raised)] text-[var(--color-text-primary)]'
+                        : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-raised)] hover:text-[var(--color-text-primary)]'
                     }`}
                   >
                     {/* Active indicator */}
                     {isActive && (
-                      <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-[#E07B3A] rounded-full" />
+                      <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-[var(--color-accent)] rounded-full" />
                     )}
                     <button
                       onClick={() => { onSwitch(c.id); setMobileOpen(false) }}
-                      className="flex-1 min-w-0 flex items-center gap-2 text-left cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#E07B3A] rounded"
+                      className="flex-1 min-w-0 flex items-center gap-2 text-left cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-accent)] rounded"
                     >
-                      <MessageSquare size={13} className={`flex-shrink-0 ${isActive ? 'text-[#E07B3A]' : 'text-[#8B7D6B]'}`} aria-hidden="true" />
+                      <MessageSquare size={13} className={`flex-shrink-0 ${isActive ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-muted)]'}`} aria-hidden="true" />
                       <span className="flex-1 min-w-0 truncate text-sm">{c.title}</span>
                     </button>
                     <button
                       onClick={() => onDelete(c.id)}
-                      className="flex-shrink-0 flex items-center justify-center w-8 h-8 -my-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 text-[#8B7D6B] hover:text-[#E05C5C] transition-opacity rounded focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#E05C5C]"
+                      className="flex-shrink-0 flex items-center justify-center w-8 h-8 -my-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 text-[var(--color-text-muted)] hover:text-[var(--color-error)] transition-opacity rounded focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-error)]"
                       aria-label={`Delete "${c.title}"`}
                     >
                       <Trash2 size={14} aria-hidden="true" />
@@ -132,7 +132,7 @@ export function ChatSidebar({ conversations, activeId, onSwitch, onNew, onDelete
           <div className="flex flex-col items-center pt-4">
             <button
               onClick={() => setOpen(true)}
-              className="p-2 rounded-lg text-[#8B7D6B] hover:text-[#C4A882] hover:bg-[#3D3025] transition-colors"
+              className="p-2 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-raised)] transition-colors"
               aria-label="Expand sidebar"
             >
               <ChevronRight size={14} aria-hidden="true" />

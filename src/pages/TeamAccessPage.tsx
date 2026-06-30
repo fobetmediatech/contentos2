@@ -18,7 +18,7 @@ const GRANT_ERROR: Record<GrantReason, string> = {
 }
 
 const inputCls =
-  'bg-[#3D3025] border border-[rgba(245,237,214,0.08)] rounded-md px-3 py-2 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-[#E07B3A]'
+  'bg-[var(--color-surface-raised)] border border-[rgba(var(--border-rgb),0.08)] rounded-md px-3 py-2 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-[var(--color-accent)]'
 
 export function TeamAccessPage() {
   const { isAdmin, isLoading } = useIsAdmin()
@@ -70,7 +70,7 @@ export function TeamAccessPage() {
   if (!isAdmin) {
     return (
       <div className="max-w-3xl mx-auto">
-        <div className="bg-surface border border-[rgba(245,237,214,0.08)] rounded-lg p-12 text-center">
+        <div className="bg-surface border border-[rgba(var(--border-rgb),0.08)] rounded-lg p-12 text-center">
           <Lock size={28} className="mx-auto text-muted mb-3" />
           <h1 className="text-primary text-lg font-medium mb-1">Team Access is restricted</h1>
           <p className="text-secondary text-sm">Only admins can manage who has finance access.</p>
@@ -83,7 +83,7 @@ export function TeamAccessPage() {
     <div className="max-w-3xl mx-auto">
       <header className="mb-5">
         <h1 className="font-serif italic text-3xl text-primary flex items-center gap-2">
-          <ShieldCheck size={24} className="text-[#E07B3A]" /> Team Access
+          <ShieldCheck size={24} className="text-[var(--color-accent)]" /> Team Access
         </h1>
         <p className="text-secondary text-sm mt-1">
           Grant or revoke who can see the Payments section (the finance role). Admin only.
@@ -91,7 +91,7 @@ export function TeamAccessPage() {
       </header>
 
       {/* Add by email */}
-      <div className="bg-surface border border-[rgba(245,237,214,0.08)] rounded-lg p-4 mb-3">
+      <div className="bg-surface border border-[rgba(var(--border-rgb),0.08)] rounded-lg p-4 mb-3">
         <div className="flex flex-wrap items-center gap-2">
           <input
             type="email"
@@ -107,7 +107,7 @@ export function TeamAccessPage() {
           <button
             onClick={addMember}
             disabled={!email.trim() || grant.isPending}
-            className="flex items-center gap-1.5 bg-[#E07B3A] hover:bg-[#C4612A] disabled:opacity-50 text-white text-sm font-medium rounded-md px-4 py-2 transition-colors"
+            className="flex items-center gap-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] disabled:opacity-50 text-white text-sm font-medium rounded-md px-4 py-2 transition-colors"
           >
             <UserPlus size={15} /> {grant.isPending ? 'Granting…' : 'Grant finance'}
           </button>
@@ -131,7 +131,7 @@ export function TeamAccessPage() {
           {members.map((m) => (
             <li
               key={m.userId}
-              className="flex items-center gap-3 bg-surface border border-[rgba(245,237,214,0.08)] rounded-lg px-4 py-3"
+              className="flex items-center gap-3 bg-surface border border-[rgba(var(--border-rgb),0.08)] rounded-lg px-4 py-3"
             >
               <div className="min-w-0 flex-1">
                 <div className="text-primary text-sm font-medium truncate">{m.label || m.userId}</div>

@@ -21,7 +21,7 @@ function CopyButton({ text }: { text: string }) {
         setDone(true)
         setTimeout(() => setDone(false), 1200)
       }}
-      className="text-xs px-2 py-1 rounded-md border border-[rgba(245,237,214,0.12)] text-muted hover:text-primary hover:border-accent transition-colors"
+      className="text-xs px-2 py-1 rounded-md border border-[rgba(var(--border-rgb),0.12)] text-muted hover:text-primary hover:border-accent transition-colors"
     >
       {done ? 'Copied' : 'Copy'}
     </button>
@@ -38,7 +38,7 @@ function Section({
   copy?: string
 }) {
   return (
-    <div className="rounded-lg bg-surface-raised border border-[rgba(245,237,214,0.08)] p-3">
+    <div className="rounded-lg bg-surface-raised border border-[rgba(var(--border-rgb),0.08)] p-3">
       <div className="flex items-center justify-between mb-1.5">
         <h4 className="text-sm font-medium text-primary">{title}</h4>
         {copy !== undefined && <CopyButton text={copy} />}
@@ -86,7 +86,7 @@ export default function RepurposeResultMessage({
       </div>
 
       {/* Voice profile summary row */}
-      <div className="rounded-lg bg-surface border border-[rgba(245,237,214,0.08)] px-3 py-2 flex items-center gap-3">
+      <div className="rounded-lg bg-surface border border-[rgba(var(--border-rgb),0.08)] px-3 py-2 flex items-center gap-3">
         <div className="flex-1 min-w-0">
           <div className="text-xs font-medium text-primary truncate">
             {v.displayName || `@${displayHandle}`}
@@ -138,7 +138,7 @@ export default function RepurposeResultMessage({
               {r.beatScript.map((b, i) => (
                 <li key={i} className="relative pl-9">
                   {/* Beat number — DM Mono in a saffron chip, the structural anchor */}
-                  <span className="absolute left-0 top-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-[rgba(224,123,58,0.12)] font-mono text-[11px] tabular-nums text-accent-light">
+                  <span className="absolute left-0 top-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-[rgba(var(--accent-rgb),0.12)] font-mono text-[11px] tabular-nums text-accent-light">
                     {i + 1}
                   </span>
                   {/* Beat function — a quiet stage direction, not the line itself */}
@@ -149,7 +149,7 @@ export default function RepurposeResultMessage({
                   <p className="text-[15px] leading-relaxed text-primary">{b.script}</p>
                   {/* On-screen overlay — distinct violet callout (AI-generated → ai-tint) */}
                   {b.onScreenText && (
-                    <div className="mt-2 flex items-start gap-2 rounded-md border border-[rgba(167,139,250,0.20)] bg-[rgba(167,139,250,0.10)] px-2.5 py-1.5">
+                    <div className="mt-2 flex items-start gap-2 rounded-md border border-[rgba(var(--ai-rgb),0.20)] bg-[rgba(var(--ai-rgb),0.10)] px-2.5 py-1.5">
                       <span className="shrink-0 mt-[3px] font-mono text-[10px] uppercase tracking-[0.1em] text-ai-tint">
                         on-screen
                       </span>
@@ -206,7 +206,7 @@ export default function RepurposeResultMessage({
       {/* Source reel transcript — reference material, collapsed by default so the rewrite stays
           the focus. Already fetched in Stage 2; surfaced here so you can sanity-check the original. */}
       {payload.sourceTranscript && payload.sourceTranscript.trim().length > 0 && (
-        <details className="rounded-lg bg-surface-raised border border-[rgba(245,237,214,0.08)] p-3 [&::-webkit-details-marker]:hidden">
+        <details className="rounded-lg bg-surface-raised border border-[rgba(var(--border-rgb),0.08)] p-3 [&::-webkit-details-marker]:hidden">
           <summary className="flex items-center justify-between cursor-pointer list-none text-sm font-medium text-primary [&::-webkit-details-marker]:hidden">
             <span>Source reel transcript</span>
             <span className="text-xs text-muted">tap to expand</span>

@@ -36,7 +36,7 @@ interface EmptyStateProps {
 export function EmptyState({ icon: Icon, title, description, action, compact = false }: EmptyStateProps) {
   return (
     <div className={`flex flex-col items-center justify-center text-center px-6 ${compact ? 'py-10' : 'py-16'}`}>
-      <div className="w-16 h-16 rounded-full bg-[rgba(224,123,58,0.12)] flex items-center justify-center mb-5">
+      <div className="w-16 h-16 rounded-full bg-[rgba(var(--accent-rgb),0.12)] flex items-center justify-center mb-5">
         <Icon size={28} className="text-accent" aria-hidden="true" />
       </div>
       <h2 className="font-serif italic text-2xl text-primary mb-2 tracking-tight">{title}</h2>

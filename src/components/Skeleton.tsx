@@ -20,7 +20,7 @@ export function Skeleton({ className = '' }: SkeletonProps) {
 /** Card placeholder matching the reel gallery's aspect + metric rows. */
 export function ReelCardSkeleton() {
   return (
-    <div className="bg-[#2C2218] border border-[rgba(245,237,214,0.08)] rounded-xl overflow-hidden flex flex-col">
+    <div className="bg-[var(--color-surface)] border border-[rgba(var(--border-rgb),0.08)] rounded-xl overflow-hidden flex flex-col">
       <Skeleton className="aspect-[4/5] w-full !rounded-none" />
       <div className="p-3 flex flex-col gap-2">
         <Skeleton className="h-4 w-2/3" />
@@ -34,7 +34,7 @@ export function ReelCardSkeleton() {
 /** Row placeholder for list-style surfaces (Memory creators, tracked accounts). */
 export function ListRowSkeleton() {
   return (
-    <div className="flex items-center gap-3 bg-[#2C2218] border border-[rgba(245,237,214,0.08)] rounded-lg px-4 py-3">
+    <div className="flex items-center gap-3 bg-[var(--color-surface)] border border-[rgba(var(--border-rgb),0.08)] rounded-lg px-4 py-3">
       <Skeleton className="w-11 h-11 rounded-full flex-shrink-0" />
       <div className="flex-1 flex flex-col gap-2">
         <Skeleton className="h-4 w-1/3" />

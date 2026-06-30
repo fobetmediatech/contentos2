@@ -43,11 +43,11 @@ export const CompetitorCard = memo(function CompetitorCard({ competitor, profile
       role={onSelect ? 'checkbox' : undefined}
       aria-checked={onSelect ? isSelected : undefined}
       tabIndex={onSelect ? 0 : undefined}
-      className={`bg-[#2C2218] rounded-xl p-4 relative transition-colors ${
+      className={`bg-[var(--color-surface)] rounded-xl p-4 relative transition-colors ${
         isSelected
-          ? 'border-0 ring-2 ring-[#E07B3A] ring-offset-1 ring-offset-[#1A1410]'
-          : 'border border-[rgba(245,237,214,0.08)] hover:border-[rgba(245,237,214,0.15)]'
-      } ${onSelect ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E07B3A]' : ''} ${dismissed ? 'opacity-60 hover:opacity-100' : ''}`}
+          ? 'border-0 ring-2 ring-[var(--color-accent)] ring-offset-1 ring-offset-[var(--color-bg)]'
+          : 'border border-[rgba(var(--border-rgb),0.08)] hover:border-[rgba(var(--border-rgb),0.15)]'
+      } ${onSelect ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]' : ''} ${dismissed ? 'opacity-60 hover:opacity-100' : ''}`}
       onClick={onSelect ? () => onSelect(competitor.username) : undefined}
       onKeyDown={onSelect ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(competitor.username) } } : undefined}
     >
@@ -55,9 +55,9 @@ export const CompetitorCard = memo(function CompetitorCard({ competitor, profile
       {onSelect && (
         <div className="absolute top-3 left-3">
           {isSelected ? (
-            <CheckSquare size={18} className="text-[#E07B3A]" />
+            <CheckSquare size={18} className="text-[var(--color-accent)]" />
           ) : (
-            <Square size={18} className="text-[#8B7D6B]" />
+            <Square size={18} className="text-[var(--color-text-muted)]" />
           )}
         </div>
       )}
@@ -76,7 +76,7 @@ export const CompetitorCard = memo(function CompetitorCard({ competitor, profile
           <img
             src={profile.profilePicUrl}
             alt={`@${competitor.username}`}
-            className="w-12 h-12 rounded-full object-cover flex-shrink-0 bg-[#3D3025]"
+            className="w-12 h-12 rounded-full object-cover flex-shrink-0 bg-[var(--color-surface-raised)]"
             referrerPolicy="no-referrer"
             loading="lazy"
             onError={(e) => {
@@ -88,7 +88,7 @@ export const CompetitorCard = memo(function CompetitorCard({ competitor, profile
         ) : null}
         {/* Initials fallback */}
         <div
-          className={`w-12 h-12 rounded-full bg-[#3D3025] flex items-center justify-center flex-shrink-0 text-[#C4A882] font-semibold text-sm ${
+          className={`w-12 h-12 rounded-full bg-[var(--color-surface-raised)] flex items-center justify-center flex-shrink-0 text-[var(--color-text-secondary)] font-semibold text-sm ${
             profile?.profilePicUrl ? 'hidden' : ''
           }`}
         >
@@ -104,15 +104,15 @@ export const CompetitorCard = memo(function CompetitorCard({ competitor, profile
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => e.stopPropagation()}
-              className="font-semibold text-[#F5EDD6] text-sm hover:text-[#E07B3A] hover:underline transition-colors"
+              className="font-semibold text-[var(--color-text-primary)] text-sm hover:text-[var(--color-accent)] hover:underline transition-colors"
             >@{competitor.username}</a>
             {profile?.verified && (
-              <BadgeCheck size={14} className="text-[#C4A882] flex-shrink-0" />
+              <BadgeCheck size={14} className="text-[var(--color-text-secondary)] flex-shrink-0" />
             )}
             {seen && (
               <span
                 title={seen.detail ? `Seen in ${seen.detail}` : undefined}
-                className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-[rgba(224,123,58,0.12)] text-[#F4A97B] border border-[rgba(224,123,58,0.20)]"
+                className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-[rgba(var(--accent-rgb),0.12)] text-[var(--color-accent-light)] border border-[rgba(var(--accent-rgb),0.20)]"
               >
                 <History size={10} />
                 {seen.label}
@@ -120,7 +120,7 @@ export const CompetitorCard = memo(function CompetitorCard({ competitor, profile
             )}
           </div>
           {profile?.fullName && profile.fullName !== competitor.username && (
-            <p className="text-xs text-[#C4A882] mt-0.5 truncate">{profile.fullName}</p>
+            <p className="text-xs text-[var(--color-text-secondary)] mt-0.5 truncate">{profile.fullName}</p>
           )}
           {profile && (
             <p className="text-xs text-secondary mt-0.5">
@@ -147,13 +147,13 @@ export const CompetitorCard = memo(function CompetitorCard({ competitor, profile
       )}
 
       {/* AI rationale */}
-      <p className="mt-3 text-sm text-[#C4A882] leading-relaxed">
+      <p className="mt-3 text-sm text-[var(--color-text-secondary)] leading-relaxed">
         {competitor.rationale}
       </p>
 
       {/* Feedback (Phase 3) — save/dismiss trains future rankings toward your taste. */}
-      <div className="mt-3 pt-2 border-t border-[rgba(245,237,214,0.06)] flex items-center justify-between">
-        <span className="text-[11px] text-[#8B7D6B]">More like this?</span>
+      <div className="mt-3 pt-2 border-t border-[rgba(var(--border-rgb),0.06)] flex items-center justify-between">
+        <span className="text-[11px] text-[var(--color-text-muted)]">More like this?</span>
         <FeedbackControl username={competitor.username} />
       </div>
     </div>

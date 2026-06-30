@@ -35,7 +35,7 @@ body {
 /* Skeleton shimmer — warm chai surfaces sliding (see components/Skeleton.tsx).
    prefers-reduced-motion below flattens this to a static surface. */
 .skeleton {
-  background: linear-gradient(90deg, #2C2218 25%, #3D3025 50%, #2C2218 75%);
+  background: linear-gradient(90deg, var(--color-surface) 25%, var(--color-surface-raised) 50%, var(--color-surface) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.4s ease-in-out infinite;
 }
@@ -68,9 +68,9 @@ body {
   .report-printable,
   .report-printable * {
     visibility: visible;
-    color: #1a1410 !important;
+    color: #0A3323 !important;
     background: transparent !important;
-    border-color: #d4c5b0 !important;
+    border-color: #C8C39A !important;
   }
   .report-printable {
     position: absolute;

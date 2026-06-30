@@ -10,7 +10,7 @@
  *
  * The transcript prefers `result.segments` (rendered as `[m:ss] text` lines) and falls back
  * to the raw `result.transcript`; it only appears when the transcript text is non-empty.
- * Saffron #E07B3A is the primary accent; the violet AI tint marks the AI-generated header.
+ * rosy brown #D3968C is the primary accent; the violet AI tint marks the AI-generated header.
  */
 
 import { useState } from 'react'
@@ -30,10 +30,10 @@ export function SingleReelResultMessage() {
 
   if (status === 'running') {
     return (
-      <div className="flex items-center gap-2.5 px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(245,237,214,0.08)] text-sm max-w-[80%]">
+      <div className="flex items-center gap-2.5 px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(var(--border-rgb),0.08)] text-sm max-w-[80%]">
         <span className="relative flex h-2.5 w-2.5 flex-shrink-0">
-          <span className="absolute inline-flex h-full w-full rounded-full bg-[#E07B3A] opacity-60 animate-ping" />
-          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#E07B3A]" />
+          <span className="absolute inline-flex h-full w-full rounded-full bg-[var(--color-accent)] opacity-60 animate-ping" />
+          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[var(--color-accent)]" />
         </span>
         <span className="text-secondary">{progress || 'Analysing this reel…'}</span>
       </div>
@@ -57,14 +57,14 @@ export function SingleReelResultMessage() {
     const hasTranscript = result.transcript.trim().length > 0
     return (
       <div className="flex items-start gap-2">
-        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(167,139,250,0.12)] flex items-center justify-center mt-0.5">
-          <Video size={14} className="text-[#A78BFA]" />
+        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(var(--ai-rgb),0.12)] flex items-center justify-center mt-0.5">
+          <Video size={14} className="text-[var(--color-ai-tint)]" />
         </div>
         <div className="flex flex-col gap-3 max-w-[80%] min-w-0">
           {/* Case study — markdown rendered with the themed renderer. */}
-          <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(245,237,214,0.08)]">
+          <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(var(--border-rgb),0.08)]">
             <div className="flex items-center gap-2 mb-2">
-              <Bot size={14} className="text-[#A78BFA] flex-shrink-0" />
+              <Bot size={14} className="text-[var(--color-ai-tint)] flex-shrink-0" />
               <span className="font-semibold text-primary text-sm">Reel case study</span>
             </div>
             <CaseStudyMarkdown markdown={result.markdown} />
@@ -78,7 +78,7 @@ export function SingleReelResultMessage() {
                 setCopied(true)
                 setTimeout(() => setCopied(false), 2000)
               }}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-[rgba(224,123,58,0.12)] text-[#F4A97B] border border-[#E07B3A]/30 hover:bg-[rgba(224,123,58,0.20)] transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-[rgba(var(--accent-rgb),0.12)] text-[var(--color-accent-light)] border border-[rgba(var(--accent-rgb),0.30)] hover:bg-[rgba(var(--accent-rgb),0.20)] transition-colors"
             >
               <Copy size={12} />
               {copied ? 'Copied' : 'Copy case study'}
@@ -87,7 +87,7 @@ export function SingleReelResultMessage() {
 
           {/* Collapsible transcript */}
           {hasTranscript && (
-            <div className="rounded-xl bg-surface border border-[rgba(245,237,214,0.08)] overflow-hidden">
+            <div className="rounded-xl bg-surface border border-[rgba(var(--border-rgb),0.08)] overflow-hidden">
               <button
                 onClick={() => setShowTranscript((v) => !v)}
                 aria-expanded={showTranscript}
@@ -101,7 +101,7 @@ export function SingleReelResultMessage() {
                 )}
               </button>
               {showTranscript && (
-                <div className="px-4 pb-3 pt-1 border-t border-[rgba(245,237,214,0.08)]">
+                <div className="px-4 pb-3 pt-1 border-t border-[rgba(var(--border-rgb),0.08)]">
                   <ReelTranscriptView result={result} />
                 </div>
               )}

@@ -47,7 +47,7 @@ export function InfoPopover({ title, formula, significance, align = 'right' }: I
           setOpen((v) => !v)
         }}
         aria-label={`What is ${title}?`}
-        className={`transition-colors ${open ? 'text-[#E07B3A]' : 'text-[#8B7D6B] hover:text-[#E07B3A]'}`}
+        className={`transition-colors ${open ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-muted)] hover:text-[var(--color-accent)]'}`}
       >
         <Info size={13} />
       </button>
@@ -56,13 +56,13 @@ export function InfoPopover({ title, formula, significance, align = 'right' }: I
           onClick={(e) => e.stopPropagation()}
           className={`absolute top-full mt-2 z-30 w-60 ${
             align === 'right' ? 'right-0' : 'left-0'
-          } bg-[#4A3C2E] border border-[rgba(245,237,214,0.15)] rounded-[10px] p-3 space-y-1.5 text-left normal-case tracking-normal shadow-[0_8px_40px_rgba(0,0,0,0.6)]`}
+          } bg-[var(--color-surface-elevated)] border border-[rgba(var(--border-rgb),0.15)] rounded-[10px] p-3 space-y-1.5 text-left normal-case tracking-normal shadow-[0_8px_40px_rgba(0,0,0,0.6)]`}
         >
-          <p className="text-[#F5EDD6] text-xs font-medium">{title}</p>
+          <p className="text-[var(--color-text-primary)] text-xs font-medium">{title}</p>
           {formula && (
-            <p className="text-[#F4A97B] font-mono text-[11px] leading-relaxed">{formula}</p>
+            <p className="text-[var(--color-accent-light)] font-mono text-[11px] leading-relaxed">{formula}</p>
           )}
-          <p className="text-[#C4A882] text-[11px] leading-relaxed">{significance}</p>
+          <p className="text-[var(--color-text-secondary)] text-[11px] leading-relaxed">{significance}</p>
         </div>
       )}
     </span>
