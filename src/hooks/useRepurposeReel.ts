@@ -169,6 +169,10 @@ export function useRepurposeReel() {
         handle, displayName: `@${handle}`, reelCount: reels.length, builtAt: Date.now(), fromScripts: false,
         exemplars: pickExemplars(transcripts),
       })
+      // Preserve a user's explicit language override across a Rebuild — it's a preference, not a
+      // derived field, so re-synthesis shouldn't silently reset it to 'auto'.
+      const priorLang = useCorpusStore.getState().voiceProfiles[handle]?.outputLanguage
+      if (priorLang) profile.outputLanguage = priorLang
       await useCorpusStore.getState().setVoiceProfile(handle, profile)
       return profile
     },

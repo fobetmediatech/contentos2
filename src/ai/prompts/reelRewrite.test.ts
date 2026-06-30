@@ -1,6 +1,6 @@
 // src/ai/prompts/reelRewrite.test.ts
 import { describe, it, expect } from 'vitest'
-import { buildReelRewritePrompt, parseReelRewrite, REEL_REWRITE_SCHEMA } from './reelRewrite'
+import { buildReelRewritePrompt, parseReelRewrite, resolveTargetLanguage, REEL_REWRITE_SCHEMA } from './reelRewrite'
 import type { VoiceProfile } from './voiceProfile'
 import type { SingleReelResult } from '../../store/singleReelStore'
 
@@ -80,11 +80,43 @@ describe('reelRewrite', () => {
     expect(p).toContain("let's dive in")                 // a named AI tell to avoid
   })
 
-  it('anchors output language to the CLIENT, not the source reel (the Hinglish bug)', () => {
+  it('emits a HARD English directive that tells the model to ignore the source language', () => {
     const p = buildReelRewritePrompt(SOURCE, { ...VOICE, language: 'mostly English with occasional Hindi words' })
-    expect(p).toContain('mostly English with occasional Hindi words')      // surfaced in the voice block
-    expect(p).toMatch(/match the CLIENT, NOT the source/i)                 // the fix
-    expect(p).toMatch(/do NOT turn an English-speaking creator into Hinglish/i)
-    expect(p).toMatch(/DEFAULT TO ENGLISH/)
+    expect(p).toContain('mostly English with occasional Hindi words') // still surfaced in the voice block
+    expect(p).toMatch(/LANGUAGE \(NON-NEGOTIABLE\)/)
+    expect(p).toMatch(/Write EVERY field in ENGLISH/)
+    expect(p).toMatch(/SOURCE reel is in Hindi\/Hinglish — IGNORE/)
+  })
+
+  it('emits a HARD Hinglish directive for a Hinglish creator', () => {
+    const p = buildReelRewritePrompt(SOURCE, { ...VOICE, language: 'heavy Hinglish' })
+    expect(p).toMatch(/Write EVERY field in natural HINGLISH/)
+  })
+})
+
+describe('resolveTargetLanguage', () => {
+  const base: VoiceProfile = { ...VOICE }
+
+  it('a manual override beats everything else', () => {
+    // english override wins despite a Hinglish field + Hinglish exemplars
+    expect(resolveTargetLanguage({ ...base, outputLanguage: 'english', language: 'heavy Hinglish', exemplars: ['bhai yeh kaise hota hai'] })).toBe('english')
+    // hinglish override wins despite an English field
+    expect(resolveTargetLanguage({ ...base, outputLanguage: 'hinglish', language: 'English' })).toBe('hinglish')
+  })
+
+  it('reads the language field when no override is set', () => {
+    expect(resolveTargetLanguage({ ...base, language: 'English' })).toBe('english')
+    expect(resolveTargetLanguage({ ...base, language: 'mostly English with occasional Hindi words' })).toBe('english')
+    expect(resolveTargetLanguage({ ...base, language: 'roughly half-and-half Hinglish' })).toBe('hinglish')
+    expect(resolveTargetLanguage({ ...base, language: 'heavy Hinglish' })).toBe('hinglish')
+  })
+
+  it('falls back to an exemplar/vocabulary heuristic for stale profiles (no field)', () => {
+    expect(resolveTargetLanguage({ ...base, language: undefined, exemplars: ['Bhai yeh kaise hota hai, suno aur samajh lo abhi'] })).toBe('hinglish')
+    expect(resolveTargetLanguage({ ...base, language: undefined, exemplars: ['Stop scrolling, this is the one mistake everyone makes daily'] })).toBe('english')
+  })
+
+  it('defaults to ENGLISH when there is no usable signal', () => {
+    expect(resolveTargetLanguage({ ...base, language: undefined, exemplars: [], vocabulary: [] })).toBe('english')
   })
 })

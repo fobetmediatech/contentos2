@@ -9,10 +9,20 @@
 
 export const VOICE_PROFILE_PROMPT_VERSION = 3
 
+/** User-set output-language override for repurposed scripts (Memory → Voices). */
+export type VoiceLanguageMode = 'auto' | 'english' | 'hinglish'
+
 export interface VoiceProfile {
   handle: string
   displayName: string
   fromScripts: boolean
+  /**
+   * User override for the repurposed OUTPUT language, set in Memory → Voices. 'auto' (or
+   * undefined, for profiles built before this existed) = detect from the `language` field +
+   * exemplars; 'english' / 'hinglish' force that language regardless of what detection says.
+   * Code-owned — never produced by the LLM, so it is absent from VOICE_PROFILE_SCHEMA.
+   */
+  outputLanguage?: VoiceLanguageMode
   vocabulary: string[]
   /**
    * The language + English↔Hindi balance the creator ACTUALLY uses (e.g. "English", "mostly English
