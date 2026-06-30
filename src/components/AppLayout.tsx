@@ -100,7 +100,7 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
     <div className={`${noPadding ? 'h-[100dvh] flex flex-col overflow-hidden' : 'min-h-screen'} bg-chai`}>
       {/* Top navigation bar — shares the page tone (no panel), just a whisper edge */}
       <header className="sticky top-0 z-10 bg-chai border-b border-[rgba(var(--border-rgb),0.05)] flex-shrink-0">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 h-14 flex items-center justify-between gap-2">
+        <div className="w-full px-4 sm:px-6 h-14 flex items-center justify-between gap-2">
           {/* Left group: mobile hamburger + brand */}
           <div className="flex items-center gap-1.5 min-w-0">
             <button
