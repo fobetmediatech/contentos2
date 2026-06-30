@@ -77,6 +77,7 @@ export function ChatPage() {
   const niche = useAnalysisStore((s) => s.niche)
   const stepProgressDetail = useAnalysisStore((s) => s.stepProgressDetail)
   const analysisDidExpand = useAnalysisStore((s) => s.didExpand)
+  const analysisUnverified = useAnalysisStore((s) => s.unverified)
   const analysisError = useAnalysisStore((s) => s.error)
   const startChat = useAnalysisStore((s) => s.startChat)
   const setStatus = useAnalysisStore((s) => s.setStatus)
@@ -248,28 +249,35 @@ export function ChatPage() {
           niche: niche || prior?.niche || '',
           profiles: mergedProfiles,
           didExpand: analysisDidExpand,
+          // Web-fallback result (Apify down): handles are web-sourced + unverified, metrics estimated.
+          unverified: analysisUnverified || undefined,
           // Re-run context for "Start over": same handles + reused clarification answer.
           handles: useAnalysisStore.getState().params?.handles ?? prior?.handles ?? [],
           nicheContext: useAnalysisStore.getState().params?.nicheContext ?? prior?.nicheContext ?? '',
           clarificationAnswer: useAnalysisStore.getState().clarificationAnswer ?? prior?.clarificationAnswer ?? '',
         },
       })
-      // Write shown profiles (username → category) to the per-conversation cache so a rerun
-      // excludes them and tracks per-category relevant counts. Fire-and-forget, best-effort.
-      void addShownProfiles(
-        convId,
-        useAnalysisStore.getState().params?.handles ?? [],
-        competitors.map((c) => ({ username: c.username, category: c.category })),
-      ).catch(() => {})
-      // Remember these creators in the cross-search corpus (untrimmed, so topHashtags
-      // survive as signal). Fire-and-forget — a corpus write never blocks the chat.
-      void useCorpusStore
-        .getState()
-        .remember(harvestCompetitors(competitors, matched, niche, Date.now()))
-        .catch(() => {})
+      // Unverified web-fallback results are NOT written to the learning stores: the handles weren't
+      // scrape-verified and the metrics are estimates, so harvesting them would poison the shared
+      // corpus and the per-conversation shown-cache with low-confidence data.
+      if (!analysisUnverified) {
+        // Write shown profiles (username → category) to the per-conversation cache so a rerun
+        // excludes them and tracks per-category relevant counts. Fire-and-forget, best-effort.
+        void addShownProfiles(
+          convId,
+          useAnalysisStore.getState().params?.handles ?? [],
+          competitors.map((c) => ({ username: c.username, category: c.category })),
+        ).catch(() => {})
+        // Remember these creators in the cross-search corpus (untrimmed, so topHashtags
+        // survive as signal). Fire-and-forget — a corpus write never blocks the chat.
+        void useCorpusStore
+          .getState()
+          .remember(harvestCompetitors(competitors, matched, niche, Date.now()))
+          .catch(() => {})
+      }
       setStatus('chatting')
     }
-  }, [status, competitors, summary, niche, candidateProfiles, analysisDidExpand, addMessageTo, competitorRunConversationId, activeConversationId, setStatus])
+  }, [status, competitors, summary, niche, candidateProfiles, analysisDidExpand, analysisUnverified, addMessageTo, competitorRunConversationId, activeConversationId, setStatus])
 
   // 2.4: Reset reelActiveRef when a run ends so the next run can add its marker.
   // The marker itself is now added imperatively in handleAnalyzeReels / dispatchTool

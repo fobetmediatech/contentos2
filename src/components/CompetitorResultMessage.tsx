@@ -9,7 +9,7 @@
  */
 
 import { useState } from 'react'
-import { Bot, CheckCircle, Check, Clipboard, Download, Video, X } from 'lucide-react'
+import { Bot, CheckCircle, Check, Clipboard, Download, Video, X, AlertTriangle } from 'lucide-react'
 import type { CompetitorResultPayload } from '../store/analysisStore'
 import { CompetitorCard } from './CompetitorCard'
 import { COMPETITOR_CATEGORIES } from '../shared/utils/categories'
@@ -36,7 +36,7 @@ export function CompetitorResultMessage({
   onStartOver,
   reelActive,
 }: Props) {
-  const { competitors, summary, niche, didExpand } = payload
+  const { competitors, summary, niche, didExpand, unverified } = payload
   const { profileMap, cohortAvgER, top, trending } = deriveCompetitorView(payload)
   const [copied, setCopied] = useState(false)
 
@@ -67,9 +67,11 @@ export function CompetitorResultMessage({
             <p className="text-secondary">
               Found {competitors.length} competitor{competitors.length !== 1 ? 's' : ''}
               {niche ? ` in the ${niche} space` : ''}.
-              Ranked by engagement, location fit, and partnership readiness.
+              {unverified
+                ? ' Sourced from a live web search and ranked by web knowledge.'
+                : ' Ranked by engagement, location fit, and partnership readiness.'}
             </p>
-            {didExpand && (
+            {didExpand && !unverified && (
               <p className="text-xs text-warning mt-1.5">
                 Sparse niche — results may be limited. Try a different reference account for a broader pool.
               </p>
@@ -100,6 +102,20 @@ export function CompetitorResultMessage({
         </div>
       </div>
 
+      {/* Scrape-blocked fallback banner — handles are real but unverified, metrics are estimates. */}
+      {unverified && (
+        <div className="flex items-start gap-2 px-4 py-3 bg-[rgba(224,123,58,0.10)] border border-[#E07B3A]/30 rounded-xl">
+          <AlertTriangle size={15} className="text-[#E07B3A] flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-[#E3B98E] leading-relaxed">
+            <span className="font-semibold text-[#E07B3A]">Instagram blocked live scraping</span>, so these
+            competitors were gathered from a web search instead. The handles are real, but follower
+            counts and engagement are <span className="font-semibold">rough estimates</span> shown as
+            <span className="font-mono"> ~</span> / <span className="font-mono">—</span> — not verified
+            metrics. Re-run later to get exact numbers once scraping recovers.
+          </p>
+        </div>
+      )}
+
       {/* AI summary — violet AI tint + Gemini eyebrow per DESIGN.md */}
       {summary && (
         <div className="px-4 py-3 bg-[rgba(var(--ai-rgb),0.08)] border border-[rgba(var(--ai-rgb),0.20)] rounded-xl">
@@ -123,6 +139,7 @@ export function CompetitorResultMessage({
                 cohortAvgER={cohortAvgER}
                 isSelected={selectedHandles.includes(c.username)}
                 onSelect={reelActive ? undefined : onToggleSelect}
+                unverified={unverified}
               />
             ))}
           </div>
@@ -142,6 +159,7 @@ export function CompetitorResultMessage({
                 cohortAvgER={cohortAvgER}
                 isSelected={selectedHandles.includes(c.username)}
                 onSelect={reelActive ? undefined : onToggleSelect}
+                unverified={unverified}
               />
             ))}
           </div>

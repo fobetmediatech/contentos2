@@ -24,6 +24,7 @@ import { ACTORS, buildProfileScraperInput, buildHashtagScraperInput, buildSearch
 import { normalizeProfiles, type ApifyProfileRaw, type NormalizedProfile } from './transformers'
 import { startRun, pollRun, fetchDataset, chunk, withKeyFailover } from './apifyCore'
 import { generateNicheSeeds, matchesIntendedIdentity, SEARCH_RESULT_CAP } from './knowledgeSeed'
+import { deriveNicheFromProfiles } from './deriveNiche'
 
 // Re-export shared error class so existing callers don't need to change their imports
 export { ApifyError, type ApifyErrorCode } from './apifyCore'
@@ -194,25 +195,26 @@ async function discoverSpeculativeSources(
   apifyKeys: string[],
   mode: 'precise' | 'broad',
   signal?: AbortSignal,
-): Promise<NormalizedProfile[]> {
+): Promise<{ profiles: NormalizedProfile[]; nicheBriefing: string }> {
   const seenInput = new Set(inputProfiles.map((p) => p.username.toLowerCase()))
 
-  const [knowledgeProfiles, searchProfiles] = await Promise.all([
-    // A + B: AI names creators (web-grounded) → scrape-verify → identity gate → tag 'knowledge'.
-    (async (): Promise<NormalizedProfile[]> => {
-      const seeds = await generateNicheSeeds(geminiKeys, niche, inputProfiles, mode, signal)
-      const handles = seeds.map((s) => s.handle).filter((h) => !seenInput.has(h))
-      if (handles.length === 0) return []
+  const [knowledge, searchProfiles] = await Promise.all([
+    // A + B: AI web-researches the niche (briefing) AND names creators in ONE grounded call →
+    // scrape-verify → identity gate → tag 'knowledge'. The briefing rides out for the ranking prompt.
+    (async (): Promise<{ profiles: NormalizedProfile[]; briefing: string }> => {
+      const { briefing, candidates } = await generateNicheSeeds(geminiKeys, niche, inputProfiles, mode, signal)
+      const handles = candidates.map((s) => s.handle).filter((h) => !seenInput.has(h))
+      if (handles.length === 0) return { profiles: [], briefing }
       const scraped = await scrapeHandlesIsolated(handles, apifyKeys, signal)
-      const seedByHandle = new Map(seeds.map((s) => [s.handle, s]))
+      const seedByHandle = new Map(candidates.map((s) => [s.handle, s]))
       const verified = scraped.filter((p) => {
         const seed = seedByHandle.get(p.username.toLowerCase())
         return seed ? matchesIntendedIdentity(p, seed) : false
       })
       const dropped = scraped.length - verified.length
       if (dropped > 0) devLog(`[knowledge] identity gate dropped ${dropped}/${scraped.length} scraped seeds (possible wrong-person matches)`)
-      return verified.map((p) => ({ ...p, discoverySource: 'knowledge' as const }))
-    })().catch((): NormalizedProfile[] => []),
+      return { profiles: verified.map((p) => ({ ...p, discoverySource: 'knowledge' as const })), briefing }
+    })().catch((): { profiles: NormalizedProfile[]; briefing: string } => ({ profiles: [], briefing: '' })),
     // C: IG keyword/account search → scrape-verify → tag 'search'.
     (async (): Promise<NormalizedProfile[]> => {
       const usernames = await scrapeSearchUsernames(niche, apifyKeys, signal).catch(() => [] as string[])
@@ -223,8 +225,8 @@ async function discoverSpeculativeSources(
     })().catch((): NormalizedProfile[] => []),
   ])
 
-  devLog(`[speculative] knowledge: ${knowledgeProfiles.length}, search: ${searchProfiles.length}`)
-  return [...knowledgeProfiles, ...searchProfiles]
+  devLog(`[speculative] knowledge: ${knowledge.profiles.length}, search: ${searchProfiles.length}`)
+  return { profiles: [...knowledge.profiles, ...searchProfiles], nicheBriefing: knowledge.briefing }
 }
 
 // ----- Public API: 2-round competitor discovery -----
@@ -232,6 +234,9 @@ async function discoverSpeculativeSources(
 export interface ScrapeResult {
   inputProfiles: NormalizedProfile[]
   candidateProfiles: NormalizedProfile[]
+  /** Web-grounded niche/sub-niche briefing from the knowledge-seed call — fed into the ranking
+   *  prompt for sharper subniche understanding. Empty when no niche was given or grounding failed. */
+  nicheBriefing?: string
 }
 
 // Round 3 pool-expansion caps. Standard always runs Round 3 now — the depth gate
@@ -281,12 +286,18 @@ export async function discoverCompetitors(
     ? await scrapeHandles(inputHandles, apifyKeys, signal)
     : []
 
+  // Web-search fallback: a bare `@handle` search (no explicit niche) whose relatedProfiles graph
+  // is closed yields an empty pool and the "no related public accounts" dead-end. Derive a niche
+  // from the scraped reference profile so the web-grounded seed sources can still build a pool from
+  // creators the graph can't reach. A given niche always wins; derivation only fills the gap.
+  const effectiveNiche = niche || deriveNicheFromProfiles(inputProfiles)
+
   // Kick off the SPECULATIVE recall sources NOW (knowledge A/B + search C). They only need the
   // niche + reference profiles and run on a dedicated limiter, so they execute CONCURRENTLY with
-  // the graph walk below instead of queueing behind it (CR-1). No niche → no speculative pool.
-  const speculativePromise: Promise<NormalizedProfile[]> = niche
-    ? discoverSpeculativeSources(niche, inputProfiles, geminiKeys, apifyKeys, mode, signal)
-    : Promise.resolve([])
+  // the graph walk below instead of queueing behind it (CR-1). No derivable niche → no speculative pool.
+  const speculativePromise: Promise<{ profiles: NormalizedProfile[]; nicheBriefing: string }> = effectiveNiche
+    ? discoverSpeculativeSources(effectiveNiche, inputProfiles, geminiKeys, apifyKeys, mode, signal)
+    : Promise.resolve({ profiles: [], nicheBriefing: '' })
 
   // Build seen set to avoid re-scraping any handle
   const seenHandles = new Set(inputHandles.map((h) => h.replace(/^@/, '').toLowerCase()))
@@ -406,7 +417,7 @@ export async function discoverCompetitors(
 
   // Merge graph-walk + speculative sources, dedup by username (source precedence), and order
   // strongest-signal-first so the ranker's top-down read reinforces SOURCE PRIORITY.
-  const speculativeProfiles = await speculativePromise
+  const { profiles: speculativeProfiles, nicheBriefing } = await speculativePromise
   const merged = dedupBySource([...graphCandidates, ...speculativeProfiles])
     .sort((a, b) => (SOURCE_PRECEDENCE[a.discoverySource ?? ''] ?? 99) - (SOURCE_PRECEDENCE[b.discoverySource ?? ''] ?? 99))
   devLog(`[pipeline] merged candidates: ${merged.length} (graph: ${graphCandidates.length}, speculative: ${speculativeProfiles.length})`)
@@ -429,6 +440,6 @@ export async function discoverCompetitors(
     devLog(`[dead-account-gate] removed ${removedCount} inactive accounts (0 posts or last post >180 days ago)`)
   }
 
-  return { inputProfiles, candidateProfiles }
+  return { inputProfiles, candidateProfiles, nicheBriefing }
 }
 

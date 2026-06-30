@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { buildCompetitorPrompt, buildClarificationPrompt, buildContentPrompt, buildPreferenceBlock, buildNicheSeedPrompt } from './prompts'
+import { buildCompetitorPrompt, buildClarificationPrompt, buildContentPrompt, buildPreferenceBlock, buildNicheSeedPrompt, buildWebFallbackPrompt } from './prompts'
 import type { NormalizedProfile } from '../lib/transformers'
 import type { PreferenceExemplars } from '../lib/corpus'
 
@@ -173,6 +173,36 @@ describe('buildCompetitorPrompt — clarificationAnswer injection', () => {
     expect(refinementPos).toBeGreaterThan(-1)
     expect(nicheContextPos).toBeGreaterThan(-1)
     expect(refinementPos).toBeLessThan(nicheContextPos)
+  })
+})
+
+describe('buildCompetitorPrompt — web research (niche briefing) injection', () => {
+  // nicheBriefing is the trailing 8th positional arg (after mode), so back-compat is preserved.
+  const briefing = 'Home-gym strength coaching; sub-niches: kettlebell flows, calisthenics progressions.'
+
+  it('injects a WEB RESEARCH block carrying the briefing when provided', () => {
+    const prompt = buildCompetitorPrompt(
+      [inputProfile], [makeProfile()], undefined, undefined, undefined, undefined, 'precise', briefing,
+    )
+    expect(prompt).toContain('WEB RESEARCH ON THIS NICHE')
+    expect(prompt).toContain(briefing)
+  })
+
+  it('does not inject the WEB RESEARCH block when briefing is empty/undefined', () => {
+    expect(buildCompetitorPrompt([inputProfile], [makeProfile()])).not.toContain('WEB RESEARCH ON THIS NICHE')
+    expect(
+      buildCompetitorPrompt([inputProfile], [makeProfile()], undefined, undefined, undefined, undefined, 'precise', '   '),
+    ).not.toContain('WEB RESEARCH ON THIS NICHE')
+  })
+
+  it('keeps the strategist EXPLICIT NICHE CONTEXT as the authoritative boundary (briefing appears after it)', () => {
+    const prompt = buildCompetitorPrompt(
+      [inputProfile], [makeProfile()], 'fitness coaching', undefined, undefined, undefined, 'precise', briefing,
+    )
+    const nichePos = prompt.indexOf('EXPLICIT NICHE CONTEXT')
+    const webPos = prompt.indexOf('WEB RESEARCH ON THIS NICHE')
+    expect(nichePos).toBeGreaterThan(-1)
+    expect(webPos).toBeGreaterThan(nichePos)
   })
 })
 
@@ -462,6 +492,102 @@ describe('buildNicheSeedPrompt — knowledge seed generator (Components A + B)',
     const precise = buildNicheSeedPrompt('fitness', [], 20, 'precise')
     expect(broad).toContain('Adjacent sub-niches that share the audience are acceptable')
     expect(precise).toContain('Stay strictly within this exact sub-niche')
+  })
+
+  it('asks the model to web-research the sub-niche first and return a briefing + accounts object', () => {
+    const prompt = buildNicheSeedPrompt('home-workout coaches', [], 20, 'precise')
+    // Requests a niche briefing field (improves the ranking model's subniche understanding)...
+    expect(prompt).toContain('niche_brief')
+    // ...alongside the candidate accounts in an object wrapper (so the model reasons about the
+    // sub-niche before naming accounts — better-targeted candidates).
+    expect(prompt).toContain('"accounts"')
+    // Still asks for real handles with names (the identity gate depends on the name).
+    expect(prompt).toContain('"handle"')
+    expect(prompt).toContain('"name"')
+  })
+})
+
+describe('buildNicheSeedPrompt — India + local geography constraint', () => {
+  it('constrains candidates to India-based creators and excludes diaspora/global accounts', () => {
+    const prompt = buildNicheSeedPrompt('home-workout coaches', [], 20, 'precise')
+    // Only India-based creators are eligible (strong prompt-level constraint).
+    expect(prompt).toContain('India-based')
+    // Global / NRI / Indian-diaspora accounts are explicitly out of scope, even if large.
+    expect(prompt).toMatch(/diaspora|NRI/)
+  })
+
+  it('prefers creators local to the reference accounts (same city/region/language)', () => {
+    const ref = makeProfile({ username: 'refcoach', biography: 'Mumbai home workout plans' })
+    const prompt = buildNicheSeedPrompt('home-workout coaches', [ref], 20, 'precise')
+    expect(prompt.toLowerCase()).toContain('local')
+    expect(prompt).toMatch(/same (city|region)/i)
+    expect(prompt.toLowerCase()).toContain('language')
+  })
+
+  it('scopes the niche_brief to the Indian market for this niche, not the global scene', () => {
+    const prompt = buildNicheSeedPrompt('home-workout coaches', [], 20, 'precise')
+    expect(prompt).toContain('Indian market')
+  })
+
+  // The India constraint must hold in BOTH modes — broad widens the sub-niche, not the geography.
+  it('keeps the India constraint in broad mode', () => {
+    const prompt = buildNicheSeedPrompt('fitness', [], 20, 'broad')
+    expect(prompt).toContain('India-based')
+  })
+})
+
+describe('buildWebFallbackPrompt — scrape-blocked web-only ranking', () => {
+  it('asks the model to rank competitors directly via web search and emits the JSON contract', () => {
+    const prompt = buildWebFallbackPrompt(['themoneylancer'], 'personal finance', {})
+    expect(prompt).toContain('personal finance')
+    // Top/Trending split + per-account fields, including the coarse size band (no fabricated metrics).
+    expect(prompt).toContain('"category"')
+    expect(prompt).toContain('"size_band"')
+    expect(prompt).toContain('"handle"')
+    expect(prompt).toContain('"rationale"')
+  })
+
+  it('reuses the India + local geography constraint', () => {
+    const prompt = buildWebFallbackPrompt(['themoneylancer'], 'personal finance', {})
+    expect(prompt).toContain('India-based')
+    expect(prompt).toMatch(/diaspora|NRI/)
+  })
+
+  it('forbids fabricating follower/engagement metrics (we cannot scrape to verify)', () => {
+    const prompt = buildWebFallbackPrompt(['themoneylancer'], 'personal finance', {})
+    expect(prompt.toLowerCase()).toMatch(/do not (fabricate|invent|make up).{0,40}(metric|follower|engagement|number)/)
+  })
+
+  it('handles the niche-less hard-block case: tells the model to research the reference handles', () => {
+    const prompt = buildWebFallbackPrompt(['themoneylancer'], '', {})
+    expect(prompt).toContain('@themoneylancer')
+    expect(prompt.toLowerCase()).toContain('research')
+  })
+
+  it('reuses an existing briefing and already-named seed candidates when present', () => {
+    const prompt = buildWebFallbackPrompt(['themoneylancer'], 'personal finance', {
+      briefing: 'Indian personal-finance creators; sub-niches: stock-market basics, tax saving.',
+      seedCandidates: [{ handle: 'ca.rachana', name: 'CA Rachana' }],
+    })
+    expect(prompt).toContain('stock-market basics')
+    expect(prompt).toContain('ca.rachana')
+  })
+})
+
+describe('CREATOR TYPE (talking-face) preference — shared by the seed + fallback prompts', () => {
+  // Prefer on-camera, named personal-brand creators; exclude faceless meme/repost/aggregator/brand pages.
+  it('biases the niche seed toward on-camera personal-brand creators and excludes faceless pages', () => {
+    const prompt = buildNicheSeedPrompt('home-workout coaches', [], 20, 'precise').toLowerCase()
+    expect(prompt).toMatch(/on camera|face-to-camera|talking[- ]head/)
+    expect(prompt).toContain('personal brand')
+    expect(prompt).toMatch(/faceless|meme|aggregator|repost/)
+  })
+
+  it('biases the web fallback toward on-camera personal-brand creators and excludes faceless pages', () => {
+    const prompt = buildWebFallbackPrompt(['themoneylancer'], 'personal finance', {}).toLowerCase()
+    expect(prompt).toMatch(/on camera|face-to-camera|talking[- ]head/)
+    expect(prompt).toContain('personal brand')
+    expect(prompt).toMatch(/faceless|meme|aggregator|repost/)
   })
 })
 
