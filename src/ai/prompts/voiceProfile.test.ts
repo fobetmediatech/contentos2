@@ -38,6 +38,14 @@ describe('voiceProfile', () => {
     expect(req).not.toContain('reelCount')   // code-attached
   })
 
+  it('detects the language / English-Hindi ratio (anchors the rewrite language)', () => {
+    const req = (VOICE_PROFILE_SCHEMA as { required: string[] }).required
+    expect(req).toContain('language')
+    const p = buildVoiceProfilePrompt('aanya', ['hi'], [])
+    expect(p).toMatch(/\*\*language\*\*/)
+    expect(p).toMatch(/do NOT label a mostly-English creator/i)
+  })
+
   it('instructs Latin-script / Hinglish field values (no Devanagari)', () => {
     const p = buildVoiceProfilePrompt('aanya', [], [])
     expect(p).toMatch(/Hinglish/i)
