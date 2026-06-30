@@ -1,0 +1,8 @@
+# Vitest/eval files are NOT serverless functions. Without this, Vercel turns every api/*.ts
+# into a Serverless Function — so the test files (which import vitest and would crash at runtime)
+# both waste deploy slots and count against the Hobby plan's 12-function limit. Exclude them from
+# the deployment; CI still runs them from the git checkout.
+api/*.test.ts
+api/*.eval.test.ts
+api/**/*.test.ts
+api/**/*.eval.test.ts
