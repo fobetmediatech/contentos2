@@ -13,6 +13,12 @@ interface CompetitorCardProps {
   cohortAvgER: number
   isSelected?: boolean
   onSelect?: (handle: string) => void
+  /**
+   * Web-fallback (scrape-blocked) result: render the follower count as a `~… est` estimate, show ER
+   * as an explicit `—` (we couldn't scrape it), and hide the save/dismiss control so unverified
+   * web-sourced accounts never train future rankings.
+   */
+  unverified?: boolean
 }
 
 function formatFollowers(n: number): string {
@@ -21,7 +27,7 @@ function formatFollowers(n: number): string {
   return String(n)
 }
 
-export const CompetitorCard = memo(function CompetitorCard({ competitor, profile, cohortAvgER, isSelected, onSelect }: CompetitorCardProps) {
+export const CompetitorCard = memo(function CompetitorCard({ competitor, profile, cohortAvgER, isSelected, onSelect, unverified }: CompetitorCardProps) {
   const category = COMPETITOR_CATEGORIES[competitor.category]
   const er = profile?.engagementRate ?? null
   const erAboveAvg = er !== null && er >= cohortAvgER
@@ -124,7 +130,9 @@ export const CompetitorCard = memo(function CompetitorCard({ competitor, profile
           )}
           {profile && (
             <p className="text-xs text-secondary mt-0.5">
-              {formatFollowers(profile.followersCount)} followers
+              {unverified
+                ? `~${formatFollowers(profile.followersCount)} followers (est.)`
+                : `${formatFollowers(profile.followersCount)} followers`}
             </p>
           )}
         </div>
@@ -145,17 +153,27 @@ export const CompetitorCard = memo(function CompetitorCard({ competitor, profile
           </span>
         </div>
       )}
+      {/* Scrape-blocked: ER can't be computed without a scrape — show an explicit dash, not a fake 0%. */}
+      {er === null && unverified && (
+        <div className="mt-3 flex items-baseline gap-1.5">
+          <span className="text-xl font-bold tabular-nums text-[#7A6A54]">—</span>
+          <span className="text-xs text-secondary">ER unavailable (not scraped)</span>
+        </div>
+      )}
 
       {/* AI rationale */}
       <p className="mt-3 text-sm text-[#C4A882] leading-relaxed">
         {competitor.rationale}
       </p>
 
-      {/* Feedback (Phase 3) — save/dismiss trains future rankings toward your taste. */}
-      <div className="mt-3 pt-2 border-t border-[rgba(245,237,214,0.06)] flex items-center justify-between">
-        <span className="text-[11px] text-[#7A6A54]">More like this?</span>
-        <FeedbackControl username={competitor.username} />
-      </div>
+      {/* Feedback (Phase 3) — save/dismiss trains future rankings toward your taste. Hidden for
+          unverified web-fallback picks so low-confidence accounts never train the corpus. */}
+      {!unverified && (
+        <div className="mt-3 pt-2 border-t border-[rgba(245,237,214,0.06)] flex items-center justify-between">
+          <span className="text-[11px] text-[#7A6A54]">More like this?</span>
+          <FeedbackControl username={competitor.username} />
+        </div>
+      )}
     </div>
   )
 })

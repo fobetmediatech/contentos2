@@ -24,7 +24,10 @@ import { useMutation } from '@tanstack/react-query'
 import { useAnalysisStore, type AnalysisParams } from '../store/analysisStore'
 import { useConversationsStore } from '../store/conversationsStore'
 import { useKeysStore } from '../store/keysStore'
-import { discoverCompetitors } from '../lib/apifyClient'
+import { discoverCompetitors, type ScrapeResult } from '../lib/apifyClient'
+import { webFallbackCompetitors } from '../lib/webFallback'
+import { deriveNicheFromProfiles } from '../lib/deriveNiche'
+import type { NormalizedProfile } from '../lib/transformers'
 import { analyzeCompetitors, generateClarificationQuestion } from '../ai/gemini'
 import { buildPipelineErrorMessage, sparseSeedMessage, ALL_DISMISSED_MESSAGE, alreadyCollectedMessage, poolExhaustedMessage } from '../lib/errorMessages'
 import { getShownProfiles } from '../lib/competitorCache'
@@ -35,6 +38,11 @@ import { dropDismissedCandidates, selectPreferenceExemplars } from '../lib/corpu
 import { buildCorpusSignals } from '../ai/prompts'
 
 const TIMEOUT_MS = 150_000
+// The web fallback runs AFTER a scrape failure, so it cannot share the run's abort budget — on a
+// timeout that budget is already spent (the signal is aborted, which is what killed the scrape).
+// It gets its own fresh timer (one grounded web-search call, ~10–30s), linked only to the external
+// steer signal so a genuine user supersede still cancels it.
+const FALLBACK_TIMEOUT_MS = 60_000
 const MIN_COMPETITOR_RESULTS = 8
 // Below this many on-pool picks after the strict niche pass, attempt a relaxed top-up to avoid
 // very thin results. Conservative (< the 8 sparse threshold) so the precision-first ranking is
@@ -64,6 +72,36 @@ export function useCompetitorAnalysis() {
   const { startAnalysis, setStep, setResults, setError, reset, setClarification, setStepProgressDetail, setDidExpand, answerClarification: storeAnswerClarification } = store
   const { geminiKeys, apifyKeys, pickKey } = useKeysStore()
 
+  // Web fallback (Apify-block degrade): rank competitors DIRECTLY from web search when scraping is
+  // unavailable. Returns true if it produced + set a result; false to let the caller surface the
+  // original error. `ctx` carries whatever survived the failed scrape — reference profiles + the
+  // knowledge-seed briefing on a SOFT block (empty pool), nothing on a HARD Round-1 block.
+  const attemptWebFallback = async (
+    params: AnalysisParams,
+    externalSignal: AbortSignal | undefined,
+    ctx: { inputProfiles?: NormalizedProfile[]; briefing?: string } = {},
+  ): Promise<boolean> => {
+    // Fresh abort budget — NEVER the caller's run signal, which is already aborted on the timeout
+    // path. Linked to the external (agent-loop) steer signal so a new user message still cancels it.
+    const fbAbort = linkAbort(FALLBACK_TIMEOUT_MS, externalSignal)
+    try {
+      const refProfiles = ctx.inputProfiles ?? []
+      const niche = (params.nicheContext || '').trim() || deriveNicheFromProfiles(refProfiles)
+      const { output, profiles } = await webFallbackCompetitors(
+        geminiKeys,
+        { handles: params.handles, niche, briefing: ctx.briefing, refProfiles, mode: params.mode ?? 'precise' },
+        fbAbort.signal,
+      )
+      if (output.competitors.length === 0) return false
+      // The stub profiles ARE the candidate set here; flag unverified so the UI banners the result
+      // (`~est`/`—` metrics) and the corpus harvest is skipped.
+      setResults(output, refProfiles, profiles.length, profiles, true)
+      return true
+    } finally {
+      fbAbort.cleanup()
+    }
+  }
+
   // ── Phase 1: Discovery + clarification question generation ────────────────
 
   const discoverMutation = useMutation({
@@ -79,19 +117,32 @@ export function useCompetitorAnalysis() {
 
         // Step 1: Scraping reference accounts (steps 2–4 inside discoverCompetitors)
         setStep(1)
-        const { inputProfiles, candidateProfiles } = await discoverCompetitors(
-          params.handles,
-          apifyKeys,
-          abort.signal,
-          params.depth,
-          { niche: params.nicheContext, geminiKeys, mode: params.mode ?? 'precise' },
-        )
+        // HARD-block path: when Instagram blocks Apify, the scrape throws (timeout/hang, rate-limit,
+        // run-failed). Rather than dead-ending, rank competitors from web search instead.
+        let discovered: ScrapeResult
+        try {
+          discovered = await discoverCompetitors(
+            params.handles,
+            apifyKeys,
+            abort.signal,
+            params.depth,
+            { niche: params.nicheContext, geminiKeys, mode: params.mode ?? 'precise' },
+          )
+        } catch (scrapeErr) {
+          if (abort.wasSuperseded()) return undefined
+          console.warn('[analysis:discover] scrape failed — attempting web fallback:', scrapeErr)
+          if (await attemptWebFallback(params, externalSignal)) return undefined
+          throw scrapeErr // fallback found nothing → surface the original Apify error
+        }
+        const { inputProfiles, candidateProfiles, nicheBriefing } = discovered
 
-        // Fail fast on an empty candidate pool. An invalid/too-sparse reference handle yields zero
-        // candidates; running clarification + ranking on nothing just dead-ends ~2 minutes later
-        // with a confusing "no verified competitors". A clear, actionable message here lets the
-        // user fix the handle immediately. (wasSuperseded is checked first in catch → silent steer.)
+        // SOFT-block / empty-pool path: the run SUCCEEDED but returned no usable candidates — most
+        // often Instagram served a login wall (empty dataset), sometimes a genuinely sparse niche.
+        // Try the web fallback first (reusing the briefing + reference profiles that survived — the
+        // knowledge seed is a Gemini call, so it can outlive an Apify block); only then dead-end.
         if (candidateProfiles.length === 0) {
+          console.warn('[analysis:discover] empty candidate pool — attempting web fallback')
+          if (await attemptWebFallback(params, externalSignal, { inputProfiles, briefing: nicheBriefing })) return undefined
           throw new Error(sparseSeedMessage(params.handles, inputProfiles.length > 0))
         }
 
@@ -126,7 +177,8 @@ export function useCompetitorAnalysis() {
           : { question: 'Which direction best fits your client?', options: ['Exact niche match', 'Broader category'] }
 
         // Store the discovery data so Phase 2 (analyzeMutation) can read it from the store.
-        setClarification({ inputProfiles, candidateProfiles: candidates, clarificationQuestion })
+        // The web-grounded niche briefing rides along so ranking gets the same subniche context.
+        setClarification({ inputProfiles, candidateProfiles: candidates, clarificationQuestion, nicheBriefing })
 
         // Re-run path ("Start over"): an autoAnswer reuses the first run's clarification silently —
         // skip the card and fire ranking directly. storeAnswerClarification flips status to 'running'
@@ -231,6 +283,7 @@ export function useCompetitorAnalysis() {
           preferenceExemplars,
           corpusArg,
           mode,
+          discovery.nicheBriefing || undefined,
         )
         const competitors = output.competitors.filter(inPool)
 
@@ -252,6 +305,9 @@ export function useCompetitorAnalysis() {
             preferenceExemplars,
             corpusArg,
             mode,
+            // Keep the niche briefing even on the relaxed pass: it's subniche UNDERSTANDING, not a
+            // narrowing filter, so it sharpens the broader picks without re-imposing the strict gate.
+            discovery.nicheBriefing || undefined,
           )
           const seen = new Set(competitors.map((c) => normHandle(c.username)))
           for (const c of relaxed.competitors) {
