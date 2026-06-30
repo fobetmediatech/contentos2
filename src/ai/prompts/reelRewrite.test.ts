@@ -79,4 +79,12 @@ describe('reelRewrite', () => {
     expect(p).toMatch(/BANNED/)                          // anti-slop list present
     expect(p).toContain("let's dive in")                 // a named AI tell to avoid
   })
+
+  it('anchors output language to the CLIENT, not the source reel (the Hinglish bug)', () => {
+    const p = buildReelRewritePrompt(SOURCE, { ...VOICE, language: 'mostly English with occasional Hindi words' })
+    expect(p).toContain('mostly English with occasional Hindi words')      // surfaced in the voice block
+    expect(p).toMatch(/match the CLIENT, NOT the source/i)                 // the fix
+    expect(p).toMatch(/do NOT turn an English-speaking creator into Hinglish/i)
+    expect(p).toMatch(/DEFAULT TO ENGLISH/)
+  })
 })

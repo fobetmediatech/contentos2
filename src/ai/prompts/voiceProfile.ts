@@ -7,13 +7,20 @@
  * useRepurposeReel (build) and the rewrite prompt (reelRewrite.ts).
  */
 
-export const VOICE_PROFILE_PROMPT_VERSION = 2
+export const VOICE_PROFILE_PROMPT_VERSION = 3
 
 export interface VoiceProfile {
   handle: string
   displayName: string
   fromScripts: boolean
   vocabulary: string[]
+  /**
+   * The language + English↔Hindi balance the creator ACTUALLY uses (e.g. "English", "mostly English
+   * with occasional Hindi words", "heavy Hinglish"). Anchors the rewrite's output language so a
+   * mostly-English creator isn't collapsed into full Hinglish. Optional for back-compat with profiles
+   * built before this field existed (those fall back to ratio-matching on the exemplars).
+   */
+  language?: string
   formality: string
   sentenceRhythm: string
   audienceAddress: string
@@ -42,6 +49,7 @@ export const VOICE_PROFILE_SCHEMA = {
   type: 'object',
   properties: {
     vocabulary: { type: 'array', items: { type: 'string' } },
+    language: { type: 'string' },
     formality: { type: 'string' },
     sentenceRhythm: { type: 'string' },
     audienceAddress: { type: 'string' },
@@ -52,7 +60,7 @@ export const VOICE_PROFILE_SCHEMA = {
     personaConsistencyScore: { type: 'integer' },
   },
   required: [
-    'vocabulary', 'formality', 'sentenceRhythm', 'audienceAddress',
+    'vocabulary', 'language', 'formality', 'sentenceRhythm', 'audienceAddress',
     'toneDescriptors', 'hookHabits', 'emotionalRegister', 'structuralPattern',
     'personaConsistencyScore',
   ],
@@ -77,14 +85,15 @@ LANGUAGE & SCRIPT (strict): write every field value in Latin/Roman script only. 
 Focus on HOW they communicate, not WHAT topics they cover:
 
 1. **vocabulary** — signature words, phrases, slang, filler, or jargon they reuse (verbatim where possible).
-2. **formality** — one phrase placing them on the casual↔polished axis.
-3. **sentenceRhythm** — pacing: short punchy lines vs long flowing ones; typical opener length.
-4. **audienceAddress** — do they say "you", "we", "guys", third person? How intimate/direct?
-5. **toneDescriptors** — 3-6 adjectives for their overall vibe.
-6. **hookHabits** — 3-5 recurring ways they OPEN a reel (templated, e.g. "POV: you just…").
-7. **emotionalRegister** — the primary emotions and any arc (e.g. humour → urgency → reassurance).
-8. **structuralPattern** — their usual hook → body → CTA shape, in one or two sentences.
-9. **personaConsistencyScore** — 1-10: how consistent the voice is across the samples (10 = identical persona every reel).
+2. **language** — the language(s) they speak and the English↔Hindi balance, stated as a precise ratio: e.g. "English", "mostly English with occasional Hindi words", "roughly half-and-half Hinglish", "heavy Hinglish". This decides what language their repurposed scripts come out in, so be accurate — do NOT label a mostly-English creator "Hinglish". Judge from how the SAMPLES actually read, not from the creator being Indian.
+3. **formality** — one phrase placing them on the casual↔polished axis.
+4. **sentenceRhythm** — pacing: short punchy lines vs long flowing ones; typical opener length.
+5. **audienceAddress** — do they say "you", "we", "guys", third person? How intimate/direct?
+6. **toneDescriptors** — 3-6 adjectives for their overall vibe.
+7. **hookHabits** — 3-5 recurring ways they OPEN a reel (templated, e.g. "POV: you just…").
+8. **emotionalRegister** — the primary emotions and any arc (e.g. humour → urgency → reassurance).
+9. **structuralPattern** — their usual hook → body → CTA shape, in one or two sentences.
+10. **personaConsistencyScore** — 1-10: how consistent the voice is across the samples (10 = identical persona every reel).
 
 ## Spoken transcripts
 
@@ -114,6 +123,7 @@ export function parseVoiceProfile(
   return {
     ...attach,
     vocabulary: strArr(r.vocabulary),
+    language: str(r.language),
     formality: str(r.formality),
     sentenceRhythm: str(r.sentenceRhythm),
     audienceAddress: str(r.audienceAddress),

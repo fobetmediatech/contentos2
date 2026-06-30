@@ -47,6 +47,7 @@ export const REEL_REWRITE_SCHEMA = {
 
 function voiceBlock(v: VoiceProfile): string {
   return [
+    `- Language / English-Hindi mix: ${v.language || '—'}`,
     `- Vocabulary / signature phrases: ${v.vocabulary.join(', ') || '—'}`,
     `- Formality: ${v.formality || '—'}`,
     `- Sentence rhythm: ${v.sentenceRhythm || '—'}`,
@@ -114,7 +115,8 @@ ${exemplarsBlock(voice)}
 
 ## Rules
 
-- LANGUAGE & SCRIPT (strict): write EVERY field in Latin/Roman script only. If @${voice.handle}'s voice is Hindi or a Hindi-English mix, write it in HINGLISH — Hindi spelled phonetically in English letters ("Dekho, yeh viral ho gaya", NOT "देखो, ये वायरल हो गया"). English voices stay in English. NEVER output Devanagari or any non-Latin script in any field.
+- LANGUAGE — match the CLIENT, NOT the source reel: write in the SAME language and the SAME English↔Hindi mix that @${voice.handle} actually uses (judge from their Language field + the exemplar lines above). If their samples are mostly or fully English, write in English and only drop in Hindi words to the SAME small degree they do — do NOT turn an English-speaking creator into Hinglish. If their samples are genuinely heavy Hinglish, match that. When the client's mix is unclear, DEFAULT TO ENGLISH. The source reel's own language is IRRELEVANT — only the client's voice decides this.
+- SCRIPT: Latin/Roman letters only. Romanize any Hindi as Hinglish ("yeh viral ho gaya"), and NEVER output Devanagari or any non-Latin script in any field.
 - Preserve the source's beat structure EXACTLY: same number of beats, same beat functions, same CTA placement. Replace ONLY the words and energy — NEVER copy the source's wording.
 - spokenHook: the rewritten opening line (verbatim, ready to say to camera).
 - beatScript: one entry per source beat — beatLabel (its function), script (what they say, flowing on from the previous beat), onScreenText (the overlay).
