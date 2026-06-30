@@ -50,8 +50,8 @@ export function ChatSidebar({ conversations, activeId, onSwitch, onNew, onDelete
 
       {/* Sidebar: fixed off-canvas drawer on mobile, in-flow column on desktop. */}
       <div
-        className={`flex flex-col h-full bg-[var(--color-surface)] border-r border-[rgba(var(--border-rgb),0.08)] overflow-hidden
-          fixed inset-y-0 left-0 z-50 w-[260px] transition-transform duration-[280ms] ease-in-out
+        className={`flex flex-col h-full bg-chai border-r border-[rgba(var(--border-rgb),0.05)] overflow-hidden
+          fixed inset-y-0 left-0 z-50 w-[260px] transition-transform duration-[280ms] ease-in-out shadow-2xl md:shadow-none
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
           md:static md:z-auto md:translate-x-0 md:flex-shrink-0 md:transition-[width] ${open ? 'md:w-[220px]' : 'md:w-10'}`}
       >

@@ -1,14 +1,17 @@
 import { SignIn } from '@clerk/react'
+import { useColorScheme } from '../hooks/useColorScheme'
+import { clerkVariables } from '../lib/clerkTheme'
 
 /**
- * Sign-in page for the auth gate. Centered on a chai dark background so the
- * Clerk card looks at home in the DESIGN.md colour system.
+ * Sign-in page for the auth gate. Centered on the app background so the Clerk
+ * card looks at home in the DESIGN.md colour system.
  *
- * Clerk's appearance.variables map directly to its internal CSS tokens — no
- * extra stylesheet needed. elements.card / elements.formButtonPrimary let us
- * tweak the shadow and button corners via Tailwind.
+ * Clerk's appearance.variables need real hex (it derives shades in JS), so they
+ * are scheme-keyed via clerkVariables() and flip with the OS light/dark theme —
+ * no more dark card stranded on a light page. element colors use CSS vars.
  */
 export function SignInPage() {
+  const scheme = useColorScheme()
   return (
     <div className="min-h-screen bg-chai flex flex-col items-center justify-center gap-6 px-4">
       {/* Brand header — keeps the app feeling cohesive above the Clerk card */}
@@ -22,25 +25,11 @@ export function SignInPage() {
         path="/sign-in"
         fallbackRedirectUrl="/"
         appearance={{
-          variables: {
-            colorBackground: '#2E221A',           // surface — slightly lifted from chai
-            colorText: '#F5DFC5',                 // primary text
-            colorTextSecondary: '#CBB093',        // secondary text
-            colorPrimary: '#DFA477',              // fawn accent
-            colorTextOnPrimaryBackground: '#221913', // dark text on rosy button
-            colorDanger: '#CB5F4F',               // error red (Terracotta)
-            colorInputBackground: '#3B2C21',      // surface-raised
-            colorInputText: '#F5DFC5',
-            colorNeutral: '#CBB093',
-            borderRadius: '0.5rem',
-            fontFamily: '"Outfit", system-ui, sans-serif',
-          },
+          variables: { ...clerkVariables(scheme), borderRadius: '0.5rem' },
           elements: {
-            // Subtle border to match other cards in the app
+            // Blend into the page: no heavy shadow, just a whisper border
             card: 'shadow-none border border-[rgba(var(--border-rgb),0.08)]',
-            // Keep the primary button rounded to match the design system
             formButtonPrimary: 'rounded-md font-medium',
-            // Muted divider lines
             dividerLine: 'bg-[rgba(var(--border-rgb),0.08)]',
           },
         }}

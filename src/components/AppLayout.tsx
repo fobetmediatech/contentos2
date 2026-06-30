@@ -6,6 +6,8 @@ import { UserButton } from '@clerk/react'
 import { useCorpusStore } from '../store/corpusStore'
 import { useIsFinance } from '../hooks/useIsFinance'
 import { useIsAdmin } from '../hooks/useIsAdmin'
+import { useColorScheme } from '../hooks/useColorScheme'
+import { clerkVariables } from '../lib/clerkTheme'
 
 /**
  * NAV_SECTIONS — single source of truth for app navigation (Phase 7 item 7.2).
@@ -43,6 +45,7 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
   const corpusCount = useCorpusStore((s) => s.count)
   const { isFinance } = useIsFinance()
   const { isAdmin } = useIsAdmin()
+  const scheme = useColorScheme()
   const [drawerOpen, setDrawerOpen] = useState(false)
   // Payments (financeOnly) is hidden in the nav unless the user has the finance role.
   const sections = NAV_SECTIONS.filter((s) => !s.financeOnly || isFinance)
@@ -95,8 +98,8 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
 
   return (
     <div className={`${noPadding ? 'h-[100dvh] flex flex-col overflow-hidden' : 'min-h-screen'} bg-chai`}>
-      {/* Top navigation bar */}
-      <header className="sticky top-0 z-10 bg-surface border-b border-[rgba(var(--border-rgb),0.08)] flex-shrink-0">
+      {/* Top navigation bar — shares the page tone (no panel), just a whisper edge */}
+      <header className="sticky top-0 z-10 bg-chai border-b border-[rgba(var(--border-rgb),0.05)] flex-shrink-0">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 h-14 flex items-center justify-between gap-2">
           {/* Left group: mobile hamburger + brand */}
           <div className="flex items-center gap-1.5 min-w-0">
@@ -153,35 +156,24 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
             </div>
           </nav>
 
-          {/* User avatar — Clerk's UserButton shows initials/photo */}
+          {/* User avatar — Clerk's UserButton. variables need real hex (Clerk derives
+              shades in JS) so they're scheme-keyed; element colors use CSS vars and flip. */}
           <UserButton
             appearance={{
-              variables: {
-                colorBackground: '#2E221A',
-                colorText: '#F5DFC5',
-                colorTextSecondary: '#CBB093',
-                colorPrimary: '#DFA477',
-                colorTextOnPrimaryBackground: '#221913',
-                colorInputBackground: '#3B2C21',
-                colorInputText: '#F5DFC5',
-                colorNeutral: '#CBB093',
-                borderRadius: '10px',
-                fontFamily: '"Outfit", sans-serif',
-                fontSize: '14px',
-              },
+              variables: clerkVariables(scheme),
               elements: {
                 card: {
-                  backgroundColor: '#2E221A',
-                  border: '1px solid rgba(var(--border-rgb),0.12)',
-                  boxShadow: '0 8px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(var(--border-rgb),0.06)',
+                  backgroundColor: 'var(--color-surface)',
+                  border: '1px solid var(--color-border-strong)',
+                  boxShadow: '0 8px 40px rgba(0,0,0,0.4), 0 0 0 1px var(--color-border)',
                 },
                 userPreviewMainIdentifier: {
-                  color: '#F5DFC5',
+                  color: 'var(--color-text-primary)',
                   fontWeight: '600',
                   fontFamily: '"Outfit", sans-serif',
                 },
                 userPreviewSecondaryIdentifier: {
-                  color: '#CBB093',
+                  color: 'var(--color-text-secondary)',
                   fontFamily: '"DM Mono", monospace',
                   fontSize: '12px',
                   letterSpacing: '0.01em',
@@ -191,27 +183,27 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
                   outlineOffset: '1px',
                 },
                 userButtonPopoverActionButton: {
-                  color: '#F5DFC5',
+                  color: 'var(--color-text-primary)',
                   borderRadius: '8px',
                   transition: 'background-color 150ms ease',
                 },
                 userButtonPopoverActionButtonText: {
-                  color: '#F5DFC5',
+                  color: 'var(--color-text-primary)',
                   fontFamily: '"Outfit", sans-serif',
                   fontWeight: '500',
                 },
                 userButtonPopoverActionButtonIcon: {
-                  color: '#CBB093',
+                  color: 'var(--color-text-secondary)',
                 },
                 userButtonPopoverFooter: {
-                  borderTop: '1px solid rgba(var(--border-rgb),0.08)',
+                  borderTop: '1px solid var(--color-border)',
                 },
                 userButtonPopoverFooterPagesLink: {
-                  color: '#A89177',
+                  color: 'var(--color-text-muted)',
                 },
                 badge: {
-                  backgroundColor: 'rgba(var(--accent-rgb),0.15)',
-                  color: '#ECC09B',
+                  backgroundColor: 'var(--color-accent-subtle)',
+                  color: 'var(--color-accent-light)',
                   border: '1px solid rgba(var(--accent-rgb),0.25)',
                   fontFamily: '"DM Mono", monospace',
                   letterSpacing: '0.04em',

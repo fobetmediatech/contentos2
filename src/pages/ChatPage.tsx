@@ -873,8 +873,8 @@ export function ChatPage() {
         )}
       </div>
 
-      {/* ── Input area ────────────────────────────────────────────────── */}
-      <div className="flex-shrink-0 bg-surface border-t border-[rgba(var(--border-rgb),0.08)] px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))]">
+      {/* ── Input area — blends into the chat canvas; the field is a soft pill ── */}
+      <div className="flex-shrink-0 bg-chai px-4 pt-2 pb-[max(12px,env(safe-area-inset-bottom))]">
         {/* Centered to the same max-width as the conversation column above. */}
         <div className="flex items-end gap-2 max-w-4xl mx-auto w-full">
           <div className="relative flex-1">
@@ -889,7 +889,7 @@ export function ChatPage() {
               rows={1}
               disabled={!ready}
               aria-label="Message input"
-              className="w-full px-3 py-2.5 text-sm bg-[var(--color-bg)] text-primary border border-[rgba(var(--border-rgb),0.12)] rounded-xl focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)] resize-none disabled:opacity-40 disabled:cursor-not-allowed leading-relaxed placeholder:text-muted"
+              className="w-full px-4 py-3 text-sm bg-[var(--color-surface)] text-primary border border-[rgba(var(--border-rgb),0.10)] rounded-2xl shadow-sm focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)] resize-none disabled:opacity-40 disabled:cursor-not-allowed leading-relaxed placeholder:text-muted"
             />
             {inputText.length >= 400 && (
               <span
@@ -906,7 +906,7 @@ export function ChatPage() {
             onClick={handleSend}
             disabled={!canSend}
             aria-label="Send message"
-            className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full bg-[var(--color-accent)] text-[var(--color-bg)] hover:bg-[var(--color-accent-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
           >
             <Send size={15} />
           </button>

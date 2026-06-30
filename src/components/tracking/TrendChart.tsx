@@ -38,7 +38,7 @@ const GRID_COLOR = 'rgba(245,223,197,0.06)'
 const AXIS_COLOR = '#A89177'
 
 const tooltipStyle: React.CSSProperties = {
-  backgroundColor: '#2E221A',
+  backgroundColor: '#382B21',
   border: '1px solid rgba(245,223,197,0.12)',
   borderRadius: '8px',
   color: '#F5DFC5',
@@ -150,7 +150,7 @@ export function TrendChart({
           stroke={color}
           strokeWidth={2}
           dot={false}
-          activeDot={{ r: 4, fill: color, stroke: '#221913', strokeWidth: 2 }}
+          activeDot={{ r: 4, fill: color, stroke: '#2C2119', strokeWidth: 2 }}
         />
       </LineChart>
     </ResponsiveContainer>

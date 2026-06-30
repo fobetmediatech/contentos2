@@ -21,10 +21,10 @@
   --ai-rgb: 167, 139, 250;       /* violet (AI tint) */
 
   /* ── Surfaces ─────────────────────────────────────────────────────── */
-  --color-bg: #221913;              /* warm espresso — the background */
-  --color-surface: #2E221A;         /* terracotta-stained card base */
-  --color-surface-raised: #3B2C21; /* raised / hover state */
-  --color-surface-elevated: #483728;
+  --color-bg: #2C2119;              /* warm mocha — the background (lifted, not near-black) */
+  --color-surface: #382B21;         /* terracotta-stained card base — gentle lift off bg */
+  --color-surface-raised: #463629; /* raised / hover state */
+  --color-surface-elevated: #534234;
   --color-border: rgba(var(--border-rgb), 0.10);
   --color-border-strong: rgba(var(--border-rgb), 0.20);
 
