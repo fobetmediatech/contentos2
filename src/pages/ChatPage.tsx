@@ -8,7 +8,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
-import { Bot, ChevronDown, Send, Video } from 'lucide-react'
+import { Bot, ChevronDown, Send, Video, X } from 'lucide-react'
 import { useAnalysisStore } from '../store/analysisStore'
 import { useConversationsStore, sortConversations } from '../store/conversationsStore'
 import { useDiscoveryStore } from '../store/discoveryStore'
@@ -33,6 +33,10 @@ import { useSingleReelStore } from '../store/singleReelStore'
 import { useRepurposeStore } from '../store/repurposeStore'
 import { useTranscriptStore } from '../store/transcriptStore'
 import { PIPELINE_REGISTRY } from '../tools/registry'
+import { SlashCommandMenu } from '../components/SlashCommandMenu'
+import { CHAT_TOOL_COMMANDS } from '../shared/utils/toolCommands'
+import type { ChatToolCommand } from '../shared/utils/toolCommands'
+import { useSlashMenu } from '../hooks/useSlashMenu'
 import type { NormalizedProfile } from '../lib/transformers'
 import type { ChatMessage as ChatMessageData } from '../store/analysisStore'
 import { useCorpusStore } from '../store/corpusStore'
@@ -44,15 +48,6 @@ import { mergeCompetitorResults } from '../components/competitorResultView'
 import { alreadyCollectedMessage } from '../lib/errorMessages'
 import { TARGET_PER_CATEGORY } from '../hooks/useCompetitorAnalysis'
 import type { CompetitorResultPayload } from '../domain/chat'
-
-// Tool chips shown in the empty state — one per independent tool, so all three
-// are discoverable at a glance. Tapping prefills the input with a representative prompt.
-const TOOL_CHIPS: { tool: string; example: string; hint: string }[] = [
-  { tool: 'Find competitors', example: 'Top fitness creators like @nike.training', hint: 'See who is winning in a niche' },
-  { tool: 'Discover by city', example: 'Food bloggers in Mumbai', hint: 'Find creators based in a location' },
-  { tool: 'Break down hooks', example: "Analyze @garyvee's reel hooks", hint: 'Reverse-engineer viral hook patterns' },
-  { tool: 'Analyze one reel', example: 'https://www.instagram.com/reel/...', hint: 'Paste a reel link for a full breakdown + transcript' },
-]
 
 // Slim a profile before it's snapshotted into a persisted result message: drop the heavy
 // fields the result cards never render (bio, related handles, top hashtags) so the localStorage
@@ -137,6 +132,10 @@ export function ChatPage() {
   const resetTranscript = useTranscriptStore((s) => s.reset)
 
   const [inputText, setInputText] = useState('')
+  // The tool armed via a "/" pick or a chip tap. While set, the input shows the
+  // tool's placeholder and the user types only their own values; handleSend
+  // wraps that raw input with the tool's routing template. null = free chat.
+  const [armedTool, setArmedTool] = useState<ChatToolCommand | null>(null)
   const [isNearBottom, setIsNearBottom] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -162,6 +161,25 @@ export function ChatPage() {
   // reaches a terminal state; "done" once synthesis succeeds or fails.
   const isReelDone = activeHandles.length > 0 && (synthesisStatus === 'done' || synthesisStatus === 'failed')
   const canSend = ready && inputText.trim().length > 0
+
+  // Slash-command menu. Available any time the input is ready (not just the
+  // empty welcome state) so it fixes mid-conversation misrouting, which is the
+  // whole point of the feature (see plan-eng-review Issue 3). State lives in
+  // this render tree but the logic is extracted for testability.
+  // Arming a tool (from the menu or a chip): clear the input, show the tool's
+  // placeholder, and refocus so the user types their own IDs. No fake example.
+  const armTool = (command: ChatToolCommand) => {
+    setArmedTool(command)
+    setInputText('')
+    textareaRef.current?.focus()
+  }
+
+  const slash = useSlashMenu({
+    inputText,
+    setInputText,
+    ready,
+    onSelectCommand: armTool,
+  })
 
   // On mount: the active conversation is restored by conversationsStore. analysisStore isn't
   // persisted, so its status is 'idle' on reload — make it live. (A dead transient from a
@@ -432,13 +450,21 @@ export function ChatPage() {
 
   const handleSend = async () => {
     if (!canSend) return
-    const text = inputText.trim()
+    const raw = inputText.trim()
+    // If a tool is armed, wrap the user's raw input with its routing template so
+    // the right pipeline fires; otherwise send the free-typed text as-is.
+    const text = armedTool ? armedTool.buildPrompt(raw) : raw
     setInputText('')
+    setArmedTool(null)
+    slash.close()
     resetTextareaHeight()
     await agentConv.sendMessage(text)
   }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // The slash menu gets first crack at the event. If it consumed it (nav /
+    // select / escape), stop — do NOT fall through to the send path.
+    if (slash.handleKeyDown(e)) return
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSend()
@@ -643,23 +669,21 @@ export function ChatPage() {
               What do you want to research?
             </h2>
             <p className="text-sm text-secondary text-center max-w-sm leading-relaxed">
-              Three tools, one chat — find competitors, discover creators by city, or break down what makes reels go viral. Just describe it.
+              One chat for every tool — find competitors, discover creators by city, break down reel hooks, or repurpose and transcribe reels. Just describe it, or type <span className="font-mono text-[var(--color-accent-light)]">/</span> to pick a tool.
             </p>
             <div className="mt-6 flex flex-col gap-2 w-full max-w-sm">
-              {TOOL_CHIPS.map(({ tool, example, hint }) => (
+              {CHAT_TOOL_COMMANDS.map((command) => (
                 <button
-                  key={tool}
+                  key={command.id}
                   onClick={() => {
                     if (!ready) return
-                    setInputText(example)
-                    textareaRef.current?.focus()
+                    armTool(command)
                   }}
                   disabled={!ready}
                   className="group px-3.5 py-2.5 text-left bg-surface border border-[rgba(var(--border-rgb),0.08)] rounded-xl hover:border-[var(--color-accent)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  <span className="block text-xs font-semibold text-[var(--color-accent-light)] mb-0.5">{tool}</span>
-                  <span className="block text-sm text-secondary group-hover:text-primary transition-colors">"{example}"</span>
-                  <span className="block text-[11px] text-muted mt-0.5">{hint}</span>
+                  <span className="block text-xs font-semibold text-[var(--color-accent-light)] mb-0.5">{command.label}</span>
+                  <span className="block text-sm text-secondary group-hover:text-primary transition-colors">{command.hint}</span>
                 </button>
               ))}
             </div>
@@ -883,16 +907,51 @@ export function ChatPage() {
 
       {/* ── Input area — blends into the chat canvas; the field is a soft pill ── */}
       <div className="flex-shrink-0 bg-chai px-4 pt-2 pb-[max(12px,env(safe-area-inset-bottom))]">
+        {/* Armed-tool pill: shows which tool the next message routes to, with a
+            clear (✕) to drop back to free chat. */}
+        {armedTool && (
+          <div className="max-w-4xl mx-auto w-full mb-1.5 flex">
+            <span className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full text-xs font-medium bg-[rgba(var(--accent-rgb),0.12)] text-[var(--color-accent)]">
+              {armedTool.label}
+              <button
+                type="button"
+                onClick={() => {
+                  setArmedTool(null)
+                  textareaRef.current?.focus()
+                }}
+                aria-label={`Clear ${armedTool.label} tool`}
+                className="rounded-full p-0.5 hover:bg-[rgba(var(--accent-rgb),0.20)] transition-colors"
+              >
+                <X size={12} />
+              </button>
+            </span>
+          </div>
+        )}
         {/* Centered to the same max-width as the conversation column above. */}
         <div className="flex items-end gap-2 max-w-4xl mx-auto w-full">
           <div className="relative flex-1">
+            {slash.open && (
+              <SlashCommandMenu
+                commands={slash.commands}
+                highlightedIndex={slash.highlightedIndex}
+                onSelect={slash.onSelect}
+                onHighlight={slash.setHighlightedIndex}
+              />
+            )}
             <textarea
               ref={textareaRef}
               value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
+              onChange={(e) => slash.onInputChange(e.target.value)}
               onKeyDown={handleKeyDown}
               onInput={handleTextareaInput}
-              placeholder={showRunPlaceholder ? 'Ask a follow-up — or type new instructions to redirect (this stops the current run)' : 'Describe a niche, location, or paste handles…'}
+              onBlur={slash.close}
+              placeholder={
+                armedTool
+                  ? armedTool.placeholder
+                  : showRunPlaceholder
+                    ? 'Ask a follow-up — or type new instructions to redirect (this stops the current run)'
+                    : 'Describe a niche, location, or paste handles… (type / for tools)'
+              }
               maxLength={500}
               rows={1}
               disabled={!ready}
