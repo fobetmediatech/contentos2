@@ -8,6 +8,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Bot, ChevronDown, Send, Video, X } from 'lucide-react'
 import { useAnalysisStore } from '../store/analysisStore'
 import { useConversationsStore, sortConversations } from '../store/conversationsStore'
@@ -82,7 +83,6 @@ export function ChatPage() {
   // array, or useSyncExternalStore loops forever. Derive the list/messages in the render body.
   const conversations = useConversationsStore((s) => s.conversations)
   const activeConversationId = useConversationsStore((s) => s.activeId)
-  const addMessage = useConversationsStore((s) => s.addMessage)
   const addMessageTo = useConversationsStore((s) => s.addMessageTo)
   const startNew = useConversationsStore((s) => s.startNew)
   const switchConversation = useConversationsStore((s) => s.switchTo)
@@ -153,6 +153,12 @@ export function ChatPage() {
 
   // Selection state — shared across competitor + discovery results
   const [selectedHandles, setSelectedHandles] = useState<string[]>([])
+
+  // Router state — the Memory page navigates here with creators to deep-analyze.
+  const location = useLocation()
+  const navigate = useNavigate()
+  // Guards the Memory launch against StrictMode's double-effect + state clears.
+  const memoryLaunchRef = useRef(false)
 
   // Phase 1: keys are server-side — isReady() always returns true; the !ready banner is removed.
   // Kept as a local const to avoid touching canSend / disabled props throughout.
@@ -568,21 +574,55 @@ export function ChatPage() {
     })
   }
 
-  const handleAnalyzeReels = () => {
-    const handles = [...selectedHandles]
+  // Core reel-analysis launch, given an explicit handle list. Used by the
+  // in-chat "Analyze reels for selected creators" action (targets the current
+  // conversation) AND by the Memory page (targets a freshly-created chat — see
+  // the effect below). `conversationId` defaults to the active conversation.
+  const launchReelAnalysis = (handles: string[], conversationId?: string) => {
+    if (handles.length === 0) return
+    const convId = conversationId ?? activeConversationId
     setSelectedHandles([])
     snapshotCurrentReelRun() // if a finished reel run is on screen, preserve it before this supersedes it
     // 2.4: set conversation binding + add marker BEFORE startReelAnalysis resets the store,
     // so back-to-back runs each get their own marker regardless of React batching.
     reelActiveRef.current = true
-    setReelConversationId(activeConversationId)
-    addMessage({
+    setReelConversationId(convId)
+    addMessageTo(convId, {
       role: 'assistant',
       type: 'reel',
       content: `Analyzing reels for ${handles.map((h) => `@${h}`).join(', ')}.`,
     })
     startReelAnalysis(handles)  // sets activeHandles in the reel store
   }
+
+  // Wrapper bound to the current selection — used as the onAnalyzeReels callback
+  // (must take no meaningful args; result components call it from onClick).
+  const handleAnalyzeReels = () => launchReelAnalysis([...selectedHandles])
+
+  // Deep-analysis launch handoff from the Memory page: it navigates here with
+  // `{ analyzeHandles: [...] }` in router state. Fire once, then clear the state
+  // so a refresh or StrictMode re-run doesn't relaunch the same analysis.
+  useEffect(() => {
+    const handles = (location.state as { analyzeHandles?: string[] } | null)?.analyzeHandles
+    if (!handles || handles.length === 0 || memoryLaunchRef.current) return
+    // Defer the launch one macrotask. Launching synchronously in this mount
+    // effect races useReelAnalysis's mount-count abort: in dev StrictMode
+    // (mount → cleanup → mount), the cleanup drops mountCount to 0 and aborts
+    // the run we just started, and the guard blocks the relaunch — leaving a
+    // blank chat. By the time this timeout fires, the StrictMode churn has
+    // settled and mountCount is stably 1. The ref is set inside the callback
+    // (not before scheduling) so the cleared-then-rescheduled timer still fires.
+    const timer = setTimeout(() => {
+      memoryLaunchRef.current = true
+      navigate('.', { replace: true, state: null })
+      // Spin the analysis up in its own fresh chat (reuses a blank one if the
+      // active conversation is already empty), then read the resulting id.
+      startNew()
+      launchReelAnalysis(handles, useConversationsStore.getState().activeId)
+    }, 0)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state])
 
   // Pipeline-targeted retry: re-fire the reel pipeline for the SAME handles directly (no agent
   // loop / re-routing), reusing the existing reel marker. Used by the failed-state Retry button.
