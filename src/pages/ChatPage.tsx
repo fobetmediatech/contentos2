@@ -579,12 +579,22 @@ export function ChatPage() {
   useEffect(() => {
     const handles = (location.state as { analyzeHandles?: string[] } | null)?.analyzeHandles
     if (!handles || handles.length === 0 || memoryLaunchRef.current) return
-    memoryLaunchRef.current = true
-    navigate('.', { replace: true, state: null })
-    // Spin the analysis up in its own fresh chat (reuses a blank one if the
-    // active conversation is already empty), then read the resulting active id.
-    startNew()
-    launchReelAnalysis(handles, useConversationsStore.getState().activeId)
+    // Defer the launch one macrotask. Launching synchronously in this mount
+    // effect races useReelAnalysis's mount-count abort: in dev StrictMode
+    // (mount → cleanup → mount), the cleanup drops mountCount to 0 and aborts
+    // the run we just started, and the guard blocks the relaunch — leaving a
+    // blank chat. By the time this timeout fires, the StrictMode churn has
+    // settled and mountCount is stably 1. The ref is set inside the callback
+    // (not before scheduling) so the cleared-then-rescheduled timer still fires.
+    const timer = setTimeout(() => {
+      memoryLaunchRef.current = true
+      navigate('.', { replace: true, state: null })
+      // Spin the analysis up in its own fresh chat (reuses a blank one if the
+      // active conversation is already empty), then read the resulting id.
+      startNew()
+      launchReelAnalysis(handles, useConversationsStore.getState().activeId)
+    }, 0)
+    return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state])
 
