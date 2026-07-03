@@ -7,8 +7,8 @@
  */
 
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Brain, BadgeCheck, ChevronDown, ChevronUp, History, Search } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Brain, BadgeCheck, Check, ChevronDown, ChevronUp, History, Search, Sparkles, X } from 'lucide-react'
 import { useCorpusStore } from '../store/corpusStore'
 import { corpus } from '../lib/corpusIdb'
 import { sortCreators, creatorContexts } from '../lib/corpus'
@@ -43,10 +43,29 @@ export function MemoryPage() {
   const creators = useCorpusStore((s) => s.creators)
   const voiceProfiles = useCorpusStore((s) => s.voiceProfiles)
   const { rebuildVoiceProfile } = useRepurposeReel()
+  const navigate = useNavigate()
   const [tab, setTab] = useState<'creators' | 'voices'>('creators')
   const [sort, setSort] = useState<CorpusSort>('lastSeenAt')
   const [verdict, setVerdict] = useState<VerdictFilter>('all')
   const [query, setQuery] = useState('')
+  // Multi-select for batch deep analysis. Holds usernames; survives re-sort/filter.
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+
+  const toggleSelected = (username: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(username)) next.delete(username)
+      else next.add(username)
+      return next
+    })
+  const clearSelected = () => setSelected(new Set())
+
+  // Hand the selected creators to the chat, which owns the reel-analysis pipeline
+  // and renders its live progress + results inline (results-as-messages).
+  const runDeepAnalysis = () => {
+    if (selected.size === 0) return
+    navigate('/', { state: { analyzeHandles: [...selected] } })
+  }
   const list = useMemo(() => sortCreators(Object.values(creators), sort), [creators, sort])
   const filtered = useMemo(
     () => (verdict === 'all' ? list : list.filter((r) => r.feedback === verdict)),
@@ -156,7 +175,12 @@ export function MemoryPage() {
               ) : (
                 <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
                   {searched.map((r) => (
-                    <MemoryCreatorCard key={r.username} record={r} />
+                    <MemoryCreatorCard
+                      key={r.username}
+                      record={r}
+                      selected={selected.has(r.username)}
+                      onToggleSelect={() => toggleSelected(r.username)}
+                    />
                   ))}
                 </div>
               )}
@@ -186,11 +210,44 @@ export function MemoryPage() {
           )}
         </div>
       )}
+
+      {/* Batch action bar — floats above the list while creators are selected. */}
+      {tab === 'creators' && selected.size > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 pl-4 pr-2 py-2 rounded-full bg-[var(--color-surface-elevated)] border border-[rgba(var(--border-rgb),0.14)] shadow-lg">
+          <span className="text-sm text-[var(--color-text-primary)] tabular-nums">
+            {selected.size} selected
+          </span>
+          <button
+            type="button"
+            onClick={runDeepAnalysis}
+            className="inline-flex items-center gap-1.5 text-sm font-medium px-3.5 py-1.5 rounded-full bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] transition-colors"
+          >
+            <Sparkles size={14} />
+            Analyze reels
+          </button>
+          <button
+            type="button"
+            onClick={clearSelected}
+            aria-label="Clear selection"
+            className="rounded-full p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)] transition-colors"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
     </div>
   )
 }
 
-function MemoryCreatorCard({ record }: { record: CreatorRecord }) {
+function MemoryCreatorCard({
+  record,
+  selected,
+  onToggleSelect,
+}: {
+  record: CreatorRecord
+  selected: boolean
+  onToggleSelect: () => void
+}) {
   const [expanded, setExpanded] = useState(false)
   const [content, setContent] = useState<ContentRecord[] | null>(null)
   const [loading, setLoading] = useState(false)
@@ -221,8 +278,27 @@ function MemoryCreatorCard({ record }: { record: CreatorRecord }) {
   const dismissed = record.feedback === 'dismissed'
 
   return (
-    <div className={`bg-[var(--color-surface)] border border-[rgba(var(--border-rgb),0.08)] rounded-xl p-4 ${dismissed ? 'opacity-60 hover:opacity-100' : ''}`}>
+    <div
+      className={`bg-[var(--color-surface)] border rounded-xl p-4 transition-colors ${
+        selected ? 'border-[var(--color-accent)]' : 'border-[rgba(var(--border-rgb),0.08)]'
+      } ${dismissed ? 'opacity-60 hover:opacity-100' : ''}`}
+    >
       <div className="flex items-start gap-3">
+        {/* Selection checkbox for batch deep analysis. */}
+        <button
+          type="button"
+          onClick={onToggleSelect}
+          role="checkbox"
+          aria-checked={selected}
+          aria-label={`Select @${record.username}`}
+          className={`mt-0.5 w-5 h-5 rounded-md border flex items-center justify-center flex-shrink-0 transition-colors ${
+            selected
+              ? 'bg-[var(--color-accent)] border-[var(--color-accent)] text-white'
+              : 'border-[rgba(var(--border-rgb),0.25)] hover:border-[var(--color-accent)]'
+          }`}
+        >
+          {selected && <Check size={13} strokeWidth={3} />}
+        </button>
         <div className="relative w-12 h-12 rounded-full bg-[var(--color-surface-raised)] flex items-center justify-center flex-shrink-0 text-[var(--color-text-secondary)] font-semibold text-sm overflow-hidden">
           <span>{initials}</span>
           {record.profilePicUrl && (
