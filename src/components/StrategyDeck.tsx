@@ -7,11 +7,11 @@
  * Colors come from `colors` (per-client) via CSS variables. Each `.deck-slide` prints as one
  * landscape PDF page (print CSS in index.css).
  */
-import type { CSSProperties } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import {
   Target, Users, Layers, MapPin, BarChart3, Anchor, Lightbulb, PieChart as PieIcon, Volume2,
   ShieldCheck, Flag, Video, LayoutGrid, CircleDot, ArrowRight, Quote, Sparkles, TrendingUp,
-  BadgeCheck, Trophy, Compass, Crosshair, Check, Megaphone, X, type LucideIcon,
+  BadgeCheck, Trophy, Compass, Crosshair, Check, Megaphone, X, ChevronLeft, ChevronRight, type LucideIcon,
 } from 'lucide-react'
 import type { StrategyResult } from '../domain/strategy'
 import { themeVars, type DeckColors } from '../lib/deckThemes'
@@ -60,8 +60,42 @@ export function StrategyDeck({ result, colors }: { result: StrategyResult; color
     ? doc.whatsWorking
     : result.hookSummaries.flatMap((s) => s.dominantHooks.slice(0, 2).map((h) => `@${s.handle} — ${h.pattern}`)).slice(0, 6)
 
+  // Horizontal one-slide-at-a-time deck: native scroll-snap track + arrow controls. All slides
+  // stay in the DOM so print (each .deck-slide → one landscape page) is unaffected.
+  const trackRef = useRef<HTMLDivElement>(null)
+  const [index, setIndex] = useState(0)
+  const [count, setCount] = useState(0)
+
+  useLayoutEffect(() => {
+    setCount(trackRef.current?.querySelectorAll('.deck-slide').length ?? 0)
+  }, [result])
+
+  const goTo = (i: number) => {
+    const el = trackRef.current
+    if (!el) return
+    const next = Math.max(0, Math.min(count - 1, i))
+    el.scrollTo({ left: next * el.clientWidth, behavior: 'smooth' })
+  }
+  const onScroll = () => {
+    const el = trackRef.current
+    if (!el) return
+    setIndex(Math.round(el.scrollLeft / el.clientWidth))
+  }
+
+  // ←/→ keys page through the deck when it's on screen.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight') goTo(index + 1)
+      else if (e.key === 'ArrowLeft') goTo(index - 1)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index, count])
+
   return (
-    <div className="deck-printable flex flex-col gap-5" style={themeVars(colors) as CSSProperties}>
+    <div className="deck-viewport relative">
+      <div ref={trackRef} onScroll={onScroll} className="deck-printable deck-scroll" style={themeVars(colors) as CSSProperties}>
       {/* Cover */}
       <Slide center>
         <div className="flex flex-col items-center">
@@ -291,6 +325,34 @@ export function StrategyDeck({ result, colors }: { result: StrategyResult; color
           <p className="text-sm mt-3 max-w-xl" style={vMuted}>Repeat what works, eliminate what doesn't.</p>
         </div>
       </Slide>
+      </div>
+
+      {/* Arrow controls + slide counter (screen only — hidden in print) */}
+      <button
+        type="button"
+        onClick={() => goTo(index - 1)}
+        disabled={index <= 0}
+        aria-label="Previous slide"
+        className="no-print absolute left-2 top-1/2 -translate-y-1/2 z-10 grid place-items-center w-11 h-11 rounded-full bg-black/50 text-white backdrop-blur-sm hover:bg-black/75 disabled:opacity-0 disabled:pointer-events-none transition-colors"
+      >
+        <ChevronLeft size={24} />
+      </button>
+      <button
+        type="button"
+        onClick={() => goTo(index + 1)}
+        disabled={index >= count - 1}
+        aria-label="Next slide"
+        className="no-print absolute right-2 top-1/2 -translate-y-1/2 z-10 grid place-items-center w-11 h-11 rounded-full bg-black/50 text-white backdrop-blur-sm hover:bg-black/75 disabled:opacity-0 disabled:pointer-events-none transition-colors"
+      >
+        <ChevronRight size={24} />
+      </button>
+      {count > 1 && (
+        <div className="no-print absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2">
+          <div className="font-mono text-xs text-white bg-black/50 backdrop-blur-sm rounded-full px-2.5 py-1">
+            {index + 1} / {count}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -6,8 +6,9 @@
  * idea → draft → scheduled → posted (→ skipped). Never auto-publishes.
  */
 import { useMemo, useState } from 'react'
+import { useAuth } from '@clerk/react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, Plus, X, Trash2, CalendarDays } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, X, Trash2, CalendarDays, Globe, Lock } from 'lucide-react'
 import {
   listAccounts,
   listScheduledPosts,
@@ -64,10 +65,14 @@ interface Draft {
   hook: string
   caption: string
   status: PostStatus
+  isPublic: boolean
 }
 
 export function CalendarPage() {
   const qc = useQueryClient()
+  const { userId } = useAuth()
+  // Others' public events are visible but not editable (owner-only RLS) → open them read-only.
+  const [readOnly, setReadOnly] = useState(false)
   const [month, setMonth] = useState(() => {
     const n = new Date()
     return new Date(n.getFullYear(), n.getMonth(), 1)
@@ -104,6 +109,7 @@ export function CalendarPage() {
   const closeModal = () => {
     setDraft(null)
     setEditingId(null)
+    setReadOnly(false)
   }
 
   const save = useMutation({
@@ -115,6 +121,7 @@ export function CalendarPage() {
         hook: d.hook.trim() || null,
         caption: d.caption.trim() || null,
         status: d.status,
+        isPublic: d.isPublic,
       }
       if (editingId) await updateScheduledPost(editingId, fields)
       else await createScheduledPost({ accountUsername: d.accountUsername, ...fields })
@@ -140,6 +147,7 @@ export function CalendarPage() {
 
   const openCreate = (date: Date) => {
     setEditingId(null)
+    setReadOnly(false)
     setDraft({
       accountUsername: accountFilter !== 'all' ? accountFilter : (accounts[0]?.username ?? ''),
       scheduledFor: noonMs(date),
@@ -148,11 +156,14 @@ export function CalendarPage() {
       hook: '',
       caption: '',
       status: 'idea',
+      isPublic: false,
     })
   }
 
   const openEdit = (p: ScheduledPost) => {
     setEditingId(p.id)
+    // You can only edit your own events; someone else's public event opens read-only.
+    setReadOnly(!!p.createdBy && p.createdBy !== userId)
     setDraft({
       accountUsername: p.accountUsername,
       scheduledFor: p.scheduledFor,
@@ -161,6 +172,7 @@ export function CalendarPage() {
       hook: p.hook ?? '',
       caption: p.caption ?? '',
       status: p.status,
+      isPublic: p.isPublic,
     })
   }
 
@@ -184,7 +196,14 @@ export function CalendarPage() {
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-primary text-lg font-medium">{editingId ? 'Edit post' : 'New post'}</h2>
+            <h2 className="text-primary text-lg font-medium flex items-center gap-2">
+              {readOnly ? 'Post' : editingId ? 'Edit post' : 'New post'}
+              {readOnly && (
+                <span className="flex items-center gap-1 text-[11px] font-mono uppercase tracking-wide text-muted border border-[rgba(var(--border-rgb),0.14)] rounded px-1.5 py-0.5">
+                  <Globe size={11} /> read-only
+                </span>
+              )}
+            </h2>
             <button onClick={closeModal} aria-label="Close" className="text-muted hover:text-primary">
               <X size={18} />
             </button>
@@ -198,7 +217,7 @@ export function CalendarPage() {
                 value={d.accountUsername}
                 onChange={(v) => setDraft({ ...d, accountUsername: v })}
                 placeholder="Select an account…"
-                disabled={!!editingId}
+                disabled={!!editingId || readOnly}
                 className="mt-1"
               />
             </label>
@@ -212,6 +231,7 @@ export function CalendarPage() {
                   onChange={(e) => {
                     if (e.target.value) setDraft({ ...d, scheduledFor: parseYmd(e.target.value) })
                   }}
+                  disabled={readOnly}
                   className={inputCls}
                 />
               </label>
@@ -220,6 +240,7 @@ export function CalendarPage() {
                 <select
                   value={d.contentType}
                   onChange={(e) => setDraft({ ...d, contentType: e.target.value as ContentType })}
+                  disabled={readOnly}
                   className={inputCls}
                 >
                   {CONTENT_TYPES.map((t) => (
@@ -238,6 +259,7 @@ export function CalendarPage() {
                 onChange={(e) => setDraft({ ...d, title: e.target.value })}
                 maxLength={120}
                 placeholder="e.g. Morning routine reel"
+                disabled={readOnly}
                 className={inputCls}
               />
             </label>
@@ -249,6 +271,7 @@ export function CalendarPage() {
                 onChange={(e) => setDraft({ ...d, hook: e.target.value })}
                 maxLength={200}
                 placeholder="The opening line"
+                disabled={readOnly}
                 className={inputCls}
               />
             </label>
@@ -260,6 +283,7 @@ export function CalendarPage() {
                 onChange={(e) => setDraft({ ...d, caption: e.target.value })}
                 rows={3}
                 maxLength={2000}
+                disabled={readOnly}
                 className={`${inputCls} resize-none`}
               />
             </label>
@@ -269,6 +293,7 @@ export function CalendarPage() {
               <select
                 value={d.status}
                 onChange={(e) => setDraft({ ...d, status: e.target.value as PostStatus })}
+                disabled={readOnly}
                 className={inputCls}
               >
                 {STATUSES.map((s) => (
@@ -278,8 +303,48 @@ export function CalendarPage() {
                 ))}
               </select>
             </label>
+
+            {/* Visibility — private by default; public shares to everyone on the platform. */}
+            <div>
+              <span className="text-xs text-muted">Visibility</span>
+              <div className="mt-1 grid grid-cols-2 gap-2">
+                {([
+                  { pub: false, icon: Lock, label: 'Private', hint: 'Only you' },
+                  { pub: true, icon: Globe, label: 'Public', hint: 'Everyone can see' },
+                ] as const).map(({ pub, icon: Icon, label, hint }) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => !readOnly && setDraft({ ...d, isPublic: pub })}
+                    disabled={readOnly}
+                    aria-pressed={d.isPublic === pub}
+                    className={`flex items-center gap-2 rounded-md border px-3 py-2 text-left transition-colors disabled:cursor-not-allowed ${
+                      d.isPublic === pub
+                        ? 'border-[var(--color-accent)] bg-[rgba(var(--accent-rgb),0.14)] text-[var(--color-accent-light)]'
+                        : 'border-[rgba(var(--border-rgb),0.12)] text-secondary hover:text-primary'
+                    }`}
+                  >
+                    <Icon size={15} className="shrink-0" />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium leading-tight">{label}</span>
+                      <span className="block text-[11px] text-muted leading-tight">{hint}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
+          {readOnly ? (
+            <div className="flex items-center justify-between mt-5">
+              <span className="flex items-center gap-1.5 text-xs text-muted">
+                <Globe size={13} /> Public event by another teammate — read-only.
+              </span>
+              <button onClick={closeModal} className="text-sm text-secondary hover:text-primary px-3 py-2">
+                Close
+              </button>
+            </div>
+          ) : (
           <div className="flex items-center justify-between mt-5">
             {editingId ? (
               confirmDeleteId === editingId ? (
@@ -312,7 +377,8 @@ export function CalendarPage() {
               </button>
             </div>
           </div>
-          {save.isError && <p className="text-danger text-xs mt-2">Couldn&apos;t save — try again.</p>}
+          )}
+          {!readOnly && save.isError && <p className="text-danger text-xs mt-2">Couldn&apos;t save — try again.</p>}
         </div>
       </div>
     )
@@ -452,10 +518,13 @@ export function CalendarPage() {
                         <button
                           key={p.id}
                           onClick={() => openEdit(p)}
-                          className={`text-left text-sm rounded-md px-3 py-2.5 ${STATUS_STYLES[p.status]}`}
+                          className={`flex items-center gap-1.5 text-left text-sm rounded-md px-3 py-2.5 ${STATUS_STYLES[p.status]}`}
                         >
-                          {accountFilter === 'all' && <span className="opacity-70">{accountLabel(p.accountUsername)}: </span>}
-                          {p.title || p.contentType}
+                          {p.isPublic && <Globe size={13} className="shrink-0 opacity-80" />}
+                          <span className="min-w-0 truncate">
+                            {accountFilter === 'all' && <span className="opacity-70">{accountLabel(p.accountUsername)}: </span>}
+                            {p.title || p.contentType}
+                          </span>
                         </button>
                       ))}
                     </div>
@@ -507,22 +576,29 @@ export function CalendarPage() {
                   <Plus size={13} />
                 </button>
               </div>
-              {dayPosts.map((p) => (
-                <button
-                  key={p.id}
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData('text/plain', p.id)
-                    e.dataTransfer.effectAllowed = 'move'
-                  }}
-                  onClick={() => openEdit(p)}
-                  title={`${accountLabel(p.accountUsername)} — ${p.title || p.contentType}`}
-                  className={`text-left text-[11px] leading-tight rounded px-1.5 py-1 truncate cursor-pointer ${STATUS_STYLES[p.status]}`}
-                >
-                  {accountFilter === 'all' && <span className="opacity-70">{accountLabel(p.accountUsername)}: </span>}
-                  {p.title || p.contentType}
-                </button>
-              ))}
+              {dayPosts.map((p) => {
+                const owned = p.createdBy === userId
+                return (
+                  <button
+                    key={p.id}
+                    draggable={owned}
+                    onDragStart={(e) => {
+                      if (!owned) { e.preventDefault(); return }
+                      e.dataTransfer.setData('text/plain', p.id)
+                      e.dataTransfer.effectAllowed = 'move'
+                    }}
+                    onClick={() => openEdit(p)}
+                    title={`${accountLabel(p.accountUsername)} — ${p.title || p.contentType}${p.isPublic ? ' · public' : ''}`}
+                    className={`flex items-center gap-1 text-left text-[11px] leading-tight rounded px-1.5 py-1 cursor-pointer ${STATUS_STYLES[p.status]}`}
+                  >
+                    {p.isPublic && <Globe size={10} className="shrink-0 opacity-80" />}
+                    <span className="truncate">
+                      {accountFilter === 'all' && <span className="opacity-70">{accountLabel(p.accountUsername)}: </span>}
+                      {p.title || p.contentType}
+                    </span>
+                  </button>
+                )
+              })}
             </div>
           )
         })}
