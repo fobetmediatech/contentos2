@@ -78,3 +78,33 @@ export interface StrategyResult {
   hookSummaries: CreatorHookSummary[]  // HookMap synthesis per analyzed creator
   generatedAt: number
 }
+
+/**
+ * A strategy saved to the shared team list (Supabase `client_strategies`). Wraps the full
+ * StrategyResult so it re-opens/re-prints with no re-analysis; brandName/offer are denormalized
+ * from the brief for the list view. createdBy = Clerk user id (audit only).
+ */
+export interface SavedClientStrategy {
+  id: string
+  brandName: string
+  offer: string
+  result: StrategyResult
+  createdBy: string | null
+  createdAt: number
+  updatedAt: number
+}
+
+/**
+ * A reference file attached to a saved client (Supabase `client_strategy_attachments` + the
+ * `client-strategy-files` storage bucket). Informational only — never drives any pipeline.
+ */
+export interface StrategyAttachment {
+  id: string
+  strategyId: string
+  fileName: string
+  storagePath: string        // path inside the client-strategy-files bucket
+  mimeType: string | null
+  sizeBytes: number | null
+  uploadedBy: string | null
+  createdAt: number
+}

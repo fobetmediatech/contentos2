@@ -47,6 +47,8 @@ function rowToPost(r: Record<string, unknown>): ScheduledPost {
     status: ((r.status as string) ?? 'idea') as PostStatus,
     assignee: (r.assignee as string | null) ?? null,
     notes: (r.notes as string | null) ?? null,
+    isPublic: (r.is_public as boolean | null) ?? false,
+    createdBy: (r.created_by as string | null) ?? null,
   }
 }
 
@@ -78,6 +80,7 @@ export async function createScheduledPost(input: ScheduledPostInput): Promise<Sc
       status: input.status ?? 'idea',
       assignee: input.assignee ?? null,
       notes: input.notes ?? null,
+      is_public: input.isPublic ?? false,
     })
     .select()
     .single()
@@ -98,6 +101,7 @@ export async function updateScheduledPost(
   if (patch.status !== undefined) row.status = patch.status
   if (patch.assignee !== undefined) row.assignee = patch.assignee
   if (patch.notes !== undefined) row.notes = patch.notes
+  if (patch.isPublic !== undefined) row.is_public = patch.isPublic
   const { error } = await supabase.from('scheduled_posts').update(row).eq('id', id)
   if (error) throw error
 }

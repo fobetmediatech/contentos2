@@ -109,6 +109,24 @@ body {
   }
 }
 
+/* Deck carousel (screen) — one 16:9 slide at a time on a horizontal scroll-snap track; the
+   arrow buttons in StrategyDeck scroll it. All slides stay mounted so print is unaffected. */
+.deck-scroll {
+  display: flex;
+  flex-direction: row;
+  gap: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;          /* Firefox */
+  border-radius: 0.5rem;
+}
+.deck-scroll::-webkit-scrollbar { display: none; }  /* WebKit */
+.deck-scroll > .deck-slide {
+  flex: 0 0 100%;
+  scroll-snap-align: center;
+}
+
 /* Content Strategy slide deck — each .deck-slide prints as a landscape 16:9 page with its
    theme colors preserved (named page so it doesn't disturb the portrait report above). */
 @page deck-page {
@@ -142,5 +160,14 @@ body {
   }
   .deck-slide:last-child {
     page-break-after: auto;
+  }
+  /* Undo the horizontal carousel for print: stack every slide, one per page, nothing clipped. */
+  .deck-printable.deck-scroll {
+    display: block;
+    overflow: visible;
+  }
+  .deck-scroll > .deck-slide {
+    flex: none;
+    scroll-snap-align: none;
   }
 }

@@ -18,6 +18,7 @@ import { TrackingListPage } from './pages/TrackingListPage'
 import { TrackingAccountPage } from './pages/TrackingAccountPage'
 import { TeamAccessPage } from './pages/TeamAccessPage'
 import { StrategyPage } from './pages/StrategyPage'
+import { StrategyClientPage } from './pages/StrategyClientPage'
 import { BreakGlassListener } from './components/BreakGlassListener'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ChaiToaster } from './components/ChaiToaster'
@@ -124,6 +125,7 @@ export default function App() {
 
                 {/* Content Strategizing — onboarding form → AI content strategy document (PDF) */}
                 <Route path="strategy" element={<StrategyPage />} />
+                <Route path="strategy/:id" element={<StrategyClientPage />} />
 
                 {/* Instagram account tracking — list + per-account detail */}
                 <Route path="tracking" element={<TrackingListPage />} />

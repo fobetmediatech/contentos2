@@ -27,6 +27,8 @@ export interface ScheduledPost {
   status: PostStatus
   assignee: string | null
   notes: string | null
+  isPublic: boolean         // true = visible to everyone on the platform; false = only the creator
+  createdBy: string | null  // Clerk user id of the creator (owns edit/delete rights)
 }
 
 export interface ScheduledPostInput {
@@ -39,6 +41,7 @@ export interface ScheduledPostInput {
   status?: PostStatus
   assignee?: string | null
   notes?: string | null
+  isPublic?: boolean
 }
 
 export type PaymentStatus = 'due' | 'paid' | 'overdue'
