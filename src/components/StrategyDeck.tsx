@@ -152,6 +152,20 @@ export function StrategyDeck({ result, colors }: { result: StrategyResult; color
     setCount(trackRef.current?.querySelectorAll('.deck-slide').length ?? 0)
   }, [result])
 
+  // Force landscape 16:9 print pages ONLY while the deck is on screen. A CSS named @page
+  // (`@page deck-page`) is silently ignored by Chrome's print path — the deck printed onto
+  // portrait Letter, so every 13.333in-wide slide was clipped on the right and left the bottom
+  // of the page blank. A global @page reliably sets the size/orientation and drops the browser
+  // header/footer (margin: 0); we inject it on mount and remove it on unmount so the portrait
+  // report export elsewhere in the app is unaffected.
+  useEffect(() => {
+    const style = document.createElement('style')
+    style.setAttribute('data-deck-print', '')
+    style.textContent = '@media print { @page { size: 13.333in 7.5in; margin: 0; } }'
+    document.head.appendChild(style)
+    return () => { style.remove() }
+  }, [])
+
   const goTo = (i: number) => {
     const el = trackRef.current
     if (!el) return

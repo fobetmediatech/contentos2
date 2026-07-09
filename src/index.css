@@ -127,12 +127,10 @@ body {
   scroll-snap-align: center;
 }
 
-/* Content Strategy slide deck — each .deck-slide prints as a landscape 16:9 page with its
-   theme colors preserved (named page so it doesn't disturb the portrait report above). */
-@page deck-page {
-  size: 13.333in 7.5in;
-  margin: 0;
-}
+/* Content Strategy slide deck — each .deck-slide prints as a landscape 16:9 page with its theme
+   colors preserved. The landscape @page size/orientation is injected at runtime by StrategyDeck
+   (only while the deck is mounted) so the portrait report export above stays portrait; a CSS
+   named @page was unreliable in Chrome and left the deck printing clipped onto portrait Letter. */
 @media print {
   .deck-printable,
   .deck-printable * {
@@ -146,7 +144,6 @@ body {
     gap: 0 !important;
   }
   .deck-slide {
-    page: deck-page;
     width: 13.333in;
     height: 7.5in;
     box-sizing: border-box;
