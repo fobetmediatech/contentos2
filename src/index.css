@@ -136,11 +136,19 @@ body {
   .deck-printable * {
     visibility: visible;
   }
+  /* On screen, .deck-viewport is position:relative so the carousel arrows overlay the slides. In
+     print that makes it the containing block for the absolutely-positioned track, which pins the
+     slides inside the centered, padded page shell — offset to the right, clipped on the right edge,
+     and pushed down so each slide spills onto a blank/black second page. Make it static so the
+     track resolves against the page box itself, exactly like the working report export. */
+  .deck-viewport {
+    position: static !important;
+  }
   .deck-printable {
     position: absolute;
     left: 0;
     top: 0;
-    width: 100%;
+    width: 13.333in;
     gap: 0 !important;
   }
   .deck-slide {
