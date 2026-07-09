@@ -19,7 +19,7 @@ export const SAMPLE_RESULT: StrategyResult = {
     brandColors: '',
     dislikes: 'no cringe videos',
     offLimits: 'anything negative about Dubai',
-    theme: { preset: 'black-gold', accent: '', bg: '' },
+    theme: { preset: 'cream-yellow', accent: '', bg: '' },
   },
   accounts: [
     { username: 'propertytalkswithad', fullName: 'Akash Deep', followers: 56328, engagementRate: 19.79, verified: true, source: 'competitor', profilePicUrl: '' },
@@ -39,6 +39,26 @@ export const SAMPLE_RESULT: StrategyResult = {
     positioning: 'Ankur Sharma is the definitive end-to-end Dubai relocation and investment consultant for HNIs — guidance that goes far beyond just real estate.',
     audienceInsight: 'HNIs relocating to Dubai want a secure, efficient, luxurious transition for their families — they fear bureaucracy, misinformed investments, and a fragmented process.',
     competitiveSummary: 'The niche is saturated with agents focused on property transactions and high-energy sales. There is a clear gap for a trusted advisor offering a holistic 360° solution across visas, schools, compliance and real estate.',
+    clientUnderstanding: 'Ankur Sharma is selling a high-trust Dubai relocation and investment service to HNIs who need one reliable advisor across visas, schools, compliance, lifestyle and real estate.',
+    currentMarketingFlaw: 'The category usually looks like property sales content: listings, skyline shots and generic investment promises. That makes the offer feel transactional instead of advisory.',
+    categoryTension: {
+      headline: 'Dubai relocation is aspirational, but the decision feels risky without a trusted human guide.',
+      bullets: [
+        'HNIs want the Dubai upside, but fear paperwork, poor property choices and fragmented vendors.',
+        'Most competitors sell inventory before they build trust.',
+        'The opportunity is to make Ankur the calm, expert face who simplifies the entire move.',
+      ],
+    },
+    benchmarks: [
+      { name: '@rizwan.sajan', metric: '1.47M followers', lesson: 'Founder-led authority can turn business expertise into mass trust.' },
+      { name: '@propertytalkswithad', metric: '56K followers / 19.8% ER', lesson: 'Direct audience questions and myth-busting hooks create strong engagement.' },
+      { name: 'Zerodha / Groww model', metric: 'Multi-handle education ecosystem', lesson: 'One company handle plus focused content lanes compounds category authority.' },
+    ],
+    heroHubHygiene: [
+      { name: 'Hero', role: 'WHAT + WHY', description: 'Big narrative reels that reframe Dubai relocation as a complete life and wealth move.', examples: ['Why Dubai is not just a tax decision', 'The hidden cost of doing relocation alone', 'Dubai 2026: the HNI opportunity'] },
+      { name: 'Hub', role: 'WHEN', description: 'Situational content for moments when the audience is actively comparing options.', examples: ['Golden Visa vs investor visa', 'Off-plan vs ready property', 'School selection before buying a home'] },
+      { name: 'Hygiene', role: 'HOW', description: 'Practical explainers that reduce fear and show Ankur has the operating depth.', examples: ['Relocation checklist', 'Compliance documents', 'Cost of setting up in Dubai'] },
+    ],
     whatsWorking: [
       'Direct questions to the audience drive the strongest opens (e.g. "Par main aapse kyun lun, main toh direct developer se bhi le sakta hun?")',
       'Addressing Dubai misconceptions head-on builds trust ("Logon ko galat lagta hai, sach yeh hai…")',
@@ -73,6 +93,41 @@ export const SAMPLE_RESULT: StrategyResult = {
     ],
     cadence: { postsPerWeek: '4–5 posts per week', notes: '3–4 Reels + 1–2 Carousels weekly, supplemented with daily Stories.' },
     voiceAndTone: 'Authoritative, knowledgeable, sophisticated and trustworthy — aspirational yet approachable, in a natural Hinglish blend that resonates with a global HNI audience.',
+    executionRoadmap: [
+      { phase: 'Step 1', title: 'Strategy & Governance', description: 'Lock category narrative, monthly priorities, content pillars and approval rhythm.' },
+      { phase: 'Step 2', title: 'Creative & Production', description: 'Script founder-led reels, shoot authority content, and design carousels around relocation decisions.' },
+      { phase: 'Step 3', title: 'Publishing & Optimisation', description: 'Publish consistently, review retention and engagement, then double down on winning IPs.' },
+    ],
+    creatorFirstFormats: ['Studio talking-head reels', 'Outdoor lifestyle storytelling', 'Stitch/reaction to Dubai myths', 'Mixed-media voiceover explainers', 'Carousel checklists', 'Story polls and Q&As'],
+    operatingRhythm: ['Monthly content calendar', 'Weekly hook and retention review', 'DM and comment insight capture', 'Monthly pruning of weak IPs', 'Scale formats with the strongest saves/shares'],
+    kpiFramework: {
+      leading: ['Organic reach', 'Organic views', 'Average view duration'],
+      mid: ['Shares, saves, comments', 'DM volume', 'Profile visits'],
+      lag: ['Follower growth rate', 'Brand search increase', 'Qualified inquiry lift'],
+    },
+    successGoals: [
+      { metric: 'Follower base', target: 'Build a qualified HNI audience over 6 months' },
+      { metric: 'Organic views', target: 'Sustain 500K+ monthly organic views' },
+      { metric: 'Engagement rate', target: 'Maintain strong saves, shares, comments and DMs' },
+      { metric: 'Inbound trust', target: 'Increase qualified relocation consultations' },
+    ],
+    monthlyDeliverables: [
+      { platform: 'Instagram', format: 'Face-led brand reels', frequency: 'Up to 12 per month' },
+      { platform: 'Instagram', format: 'Carousels', frequency: 'Up to 8 per month' },
+      { platform: 'Instagram', format: 'Stories', frequency: 'Daily prompts, polls and Q&A' },
+    ],
+    teamSystem: [
+      { role: 'Head of Client Relations', responsibility: 'Primary POC, escalation, timelines and client alignment.' },
+      { role: 'Content Strategist', responsibility: 'Research, strategy, calendar planning and optimisation.' },
+      { role: 'Content Writer', responsibility: 'Hooks, scripts, captions and content IP development.' },
+      { role: 'Video Editor', responsibility: 'Short-form editing, pacing, subtitles and post-production.' },
+      { role: 'Growth Analyst', responsibility: 'Performance tracking, trend monitoring and recommendations.' },
+    ],
+    commercials: {
+      monthlyRetainer: 'To be discussed',
+      lineItems: [{ label: 'Strategy, scripting, production guidance, publishing and optimisation', amount: 'Custom quote' }],
+      longTermValue: ['A permanent content library that compounds trust.', 'A stronger founder-led digital presence.', 'More qualified inbound demand by educating before selling.'],
+    },
     dos: ['Use Hinglish in Latin script only', 'Lead with high-value, comprehensive information', 'Showcase the luxury, aspirational lifestyle', 'Engage directly with audience questions'],
     donts: ['Produce cringe or inauthentic content', 'Post anything negative about Dubai', 'Use Devanagari script', 'Focus only on real estate, ignoring relocation + compliance'],
   },

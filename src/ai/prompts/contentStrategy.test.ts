@@ -17,6 +17,9 @@ describe('parseContentStrategyDoc', () => {
     expect(doc.contentPillars).toEqual([])
     expect(doc.dos).toEqual([])
     expect(doc.cadence).toEqual({ postsPerWeek: '', notes: '' })
+    expect(doc.categoryTension).toEqual({ headline: '', bullets: [] })
+    expect(doc.kpiFramework).toEqual({ leading: [], mid: [], lag: [] })
+    expect(doc.commercials).toEqual({ monthlyRetainer: '', lineItems: [], longTermValue: [] })
   })
 
   it('keeps valid fields and filters malformed array items', () => {
@@ -26,12 +29,21 @@ describe('parseContentStrategyDoc', () => {
       hookFormulas: [{ name: 'Myth', template: 'X is wrong because Y', example: 'Dubai tax myth' }],
       contentIdeas: [{ title: 'A', hook: 'h', format: 'Reel', pillar: 'Visas' }],
       cadence: { postsPerWeek: '4', notes: 'mornings' },
+      categoryTension: { headline: 'Trust gap', bullets: ['fear beats greed', 99] },
+      benchmarks: [{ name: 'Groww', metric: '1M+', lesson: 'build education lanes' }],
+      heroHubHygiene: [{ name: 'Hero', role: 'WHAT', description: 'big narrative', examples: ['myth'] }],
+      kpiFramework: { leading: ['reach'], mid: ['DMs'], lag: ['search'] },
+      commercials: { monthlyRetainer: 'TBD', lineItems: [{ label: 'Strategy', amount: 'TBD' }], longTermValue: ['content library'] },
       dos: ['be specific', 42],
       donts: ['no cringe'],
     })
     expect(doc.positioning).toBe('Own the HNI-relocation niche')
     expect(doc.contentPillars).toHaveLength(1)
     expect(doc.cadence.postsPerWeek).toBe('4')
+    expect(doc.categoryTension.bullets).toEqual(['fear beats greed'])
+    expect(doc.benchmarks[0]?.lesson).toBe('build education lanes')
+    expect(doc.kpiFramework.mid).toEqual(['DMs'])
+    expect(doc.commercials.monthlyRetainer).toBe('TBD')
     expect(doc.dos).toEqual(['be specific'])
   })
 })

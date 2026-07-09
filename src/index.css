@@ -127,26 +127,31 @@ body {
   scroll-snap-align: center;
 }
 
-/* Content Strategy slide deck — each .deck-slide prints as a landscape 16:9 page with its
-   theme colors preserved (named page so it doesn't disturb the portrait report above). */
-@page deck-page {
-  size: 13.333in 7.5in;
-  margin: 0;
-}
+/* Content Strategy slide deck — each .deck-slide prints as a landscape 16:9 page with its theme
+   colors preserved. The landscape @page size/orientation is injected at runtime by StrategyDeck
+   (only while the deck is mounted) so the portrait report export above stays portrait; a CSS
+   named @page was unreliable in Chrome and left the deck printing clipped onto portrait Letter. */
 @media print {
   .deck-printable,
   .deck-printable * {
     visibility: visible;
   }
+  /* On screen, .deck-viewport is position:relative so the carousel arrows overlay the slides. In
+     print that makes it the containing block for the absolutely-positioned track, which pins the
+     slides inside the centered, padded page shell — offset to the right, clipped on the right edge,
+     and pushed down so each slide spills onto a blank/black second page. Make it static so the
+     track resolves against the page box itself, exactly like the working report export. */
+  .deck-viewport {
+    position: static !important;
+  }
   .deck-printable {
     position: absolute;
     left: 0;
     top: 0;
-    width: 100%;
+    width: 13.333in;
     gap: 0 !important;
   }
   .deck-slide {
-    page: deck-page;
     width: 13.333in;
     height: 7.5in;
     box-sizing: border-box;
