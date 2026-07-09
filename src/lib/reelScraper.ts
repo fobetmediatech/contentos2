@@ -1,7 +1,7 @@
 /**
  * Reel scraper — fetches the top N reels by views for an Instagram handle.
  *
- * Uses apify~instagram-scraper with resultsLimit: 30 (recent posts),
+ * Uses apify~instagram-scraper with resultsLimit: 120 (recent posts),
  * filters to clips (productType === 'clips') — NO view-count gate. Small/new reels
  * legitimately report 0 or missing views, and the actor sometimes reports views under
  * playCount/viewCount rather than videoViewCount; gating on videoViewCount > 0 produced
@@ -107,15 +107,17 @@ export async function scrapeTopReels(
   signal?: AbortSignal,
 ): Promise<ReelData[]> {
   return apifyLimiter(async () => {
-    // Build actor input: fetch 30 recent posts, filter to reels client-side
-    const input = buildReelScraperInput(handle, 30)
+    // Build actor input: fetch up to 120 recent posts (fewer if the account has fewer),
+    // filter to reels client-side
+    const input = buildReelScraperInput(handle, 120)
 
     // One actor lifecycle, with per-run key failover: if the chosen account is out of credit
     // (402) or rate-limited, the run rolls over to the next funded key instead of failing.
     const rawPosts = await withKeyFailover(apifyKeys, async (apiKey) => {
       const { runId, datasetId, keyIndex } = await startRun(ACTORS.REEL_SCRAPER, input, apiKey, signal)
-      // Poll until SUCCEEDED — 3 min timeout for apify~instagram-scraper cold starts
-      await pollRun(runId, apiKey, signal, 180_000, keyIndex)
+      // Poll until SUCCEEDED — 5 min idle budget (10 min hard ceiling) for
+      // apify~instagram-scraper cold starts + the larger 120-post scrape.
+      await pollRun(runId, apiKey, signal, 300_000, keyIndex)
       return fetchDataset<RawPost>(datasetId, apiKey, signal, keyIndex)
     })
 
