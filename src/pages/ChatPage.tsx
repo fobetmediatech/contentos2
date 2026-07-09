@@ -9,7 +9,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Bot, ChevronDown, Send, Video, X } from 'lucide-react'
+import { Bot, ChevronDown, Send, Video, Paperclip, X } from 'lucide-react'
 import { useAnalysisStore } from '../store/analysisStore'
 import { useConversationsStore, sortConversations } from '../store/conversationsStore'
 import { useDiscoveryStore } from '../store/discoveryStore'
@@ -47,6 +47,8 @@ import { buildReelResultPayload } from '../lib/reelSnapshot'
 import { addShownProfiles, getShownProfiles } from '../lib/competitorCache'
 import { mergeCompetitorResults } from '../components/competitorResultView'
 import { alreadyCollectedMessage } from '../lib/errorMessages'
+import { MAX_INPUT_CHARS } from '../lib/constants'
+import { readAttachment, ACCEPT_ATTR, type ChatAttachment } from '../lib/attachment'
 import { TARGET_PER_CATEGORY } from '../hooks/useCompetitorAnalysis'
 import type { CompetitorResultPayload } from '../domain/chat'
 
@@ -136,6 +138,8 @@ export function ChatPage() {
   // tool's placeholder and the user types only their own values; handleSend
   // wraps that raw input with the tool's routing template. null = free chat.
   const [armedTool, setArmedTool] = useState<ChatToolCommand | null>(null)
+  const [attachment, setAttachment] = useState<ChatAttachment | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [isNearBottom, setIsNearBottom] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -166,7 +170,7 @@ export function ChatPage() {
   // Reel run state (derived from the reel store). A run is "running" until synthesis
   // reaches a terminal state; "done" once synthesis succeeds or fails.
   const isReelDone = activeHandles.length > 0 && (synthesisStatus === 'done' || synthesisStatus === 'failed')
-  const canSend = ready && inputText.trim().length > 0
+  const canSend = ready && (inputText.trim().length > 0 || attachment !== null)
 
   // Slash-command menu. Available any time the input is ready (not just the
   // empty welcome state) so it fixes mid-conversation misrouting, which is the
@@ -460,11 +464,24 @@ export function ChatPage() {
     // If a tool is armed, wrap the user's raw input with its routing template so
     // the right pipeline fires; otherwise send the free-typed text as-is.
     const text = armedTool ? armedTool.buildPrompt(raw) : raw
+    const file = attachment
     setInputText('')
     setArmedTool(null)
+    setAttachment(null)
     slash.close()
     resetTextareaHeight()
-    await agentConv.sendMessage(text)
+    await agentConv.sendMessage(text, file ?? undefined)
+  }
+
+  const handleFilePick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // let the same file be re-picked after removal
+    if (!file) return
+    try {
+      setAttachment(await readAttachment(file))
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Could not attach that file.')
+    }
   }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -968,55 +985,94 @@ export function ChatPage() {
           </div>
         )}
         {/* Centered to the same max-width as the conversation column above. */}
-        <div className="flex items-end gap-2 max-w-4xl mx-auto w-full">
-          <div className="relative flex-1">
-            {slash.open && (
-              <SlashCommandMenu
-                commands={slash.commands}
-                highlightedIndex={slash.highlightedIndex}
-                onSelect={slash.onSelect}
-                onHighlight={slash.setHighlightedIndex}
-              />
-            )}
-            <textarea
-              ref={textareaRef}
-              value={inputText}
-              onChange={(e) => slash.onInputChange(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onInput={handleTextareaInput}
-              onBlur={slash.close}
-              placeholder={
-                armedTool
-                  ? armedTool.placeholder
-                  : showRunPlaceholder
-                    ? 'Ask a follow-up — or type new instructions to redirect (this stops the current run)'
-                    : 'Describe a niche, location, or paste handles… (type / for tools)'
-              }
-              maxLength={500}
-              rows={1}
-              disabled={!ready}
-              aria-label="Message input"
-              className="w-full px-4 py-3 text-sm bg-[var(--color-surface)] text-primary border border-[rgba(var(--border-rgb),0.10)] rounded-2xl shadow-sm focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)] resize-none disabled:opacity-40 disabled:cursor-not-allowed leading-relaxed placeholder:text-muted"
-            />
-            {inputText.length >= 400 && (
-              <span
-                className={`absolute bottom-2.5 right-2.5 text-[10px] font-mono tabular-nums ${
-                  inputText.length >= 480 ? 'text-danger' : 'text-muted'
-                }`}
-              >
-                {inputText.length}/500
+        <div className="max-w-4xl mx-auto w-full">
+          {/* Selected-file chip — shows above the composer until sent or removed. */}
+          {attachment && (
+            <div className="mb-2 inline-flex items-center gap-2 max-w-full px-3 py-1.5 rounded-xl bg-[var(--color-surface)] border border-[rgba(var(--border-rgb),0.10)] text-xs text-primary">
+              <Paperclip size={13} className="flex-shrink-0 text-[var(--color-accent)]" />
+              <span className="truncate">{attachment.name}</span>
+              <span className="flex-shrink-0 font-mono text-[10px] text-muted">
+                {attachment.size >= 1024 * 1024
+                  ? `${(attachment.size / 1024 / 1024).toFixed(1)} MB`
+                  : `${Math.max(1, Math.round(attachment.size / 1024))} KB`}
               </span>
-            )}
-          </div>
+              <button
+                onClick={() => setAttachment(null)}
+                aria-label="Remove attachment"
+                className="flex-shrink-0 text-muted hover:text-danger transition-colors"
+              >
+                <X size={13} />
+              </button>
+            </div>
+          )}
 
-          <button
-            onClick={handleSend}
-            disabled={!canSend}
-            aria-label="Send message"
-            className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full bg-[var(--color-accent)] text-[var(--color-bg)] hover:bg-[var(--color-accent-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
-          >
-            <Send size={15} />
-          </button>
+          <div className="flex items-end gap-2 w-full">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={ACCEPT_ATTR}
+              onChange={handleFilePick}
+              className="hidden"
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={!ready}
+              aria-label="Attach a document"
+              title="Attach a PDF, image, or text file"
+              className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full text-muted hover:text-[var(--color-accent)] hover:bg-[var(--color-surface)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <Paperclip size={17} />
+            </button>
+
+            <div className="relative flex-1">
+              {slash.open && (
+                <SlashCommandMenu
+                  commands={slash.commands}
+                  highlightedIndex={slash.highlightedIndex}
+                  onSelect={slash.onSelect}
+                  onHighlight={slash.setHighlightedIndex}
+                />
+              )}
+              <textarea
+                ref={textareaRef}
+                value={inputText}
+                onChange={(e) => slash.onInputChange(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onInput={handleTextareaInput}
+                onBlur={slash.close}
+                placeholder={
+                  armedTool
+                    ? armedTool.placeholder
+                    : showRunPlaceholder
+                      ? 'Ask a follow-up — or type new instructions to redirect (this stops the current run)'
+                      : 'Describe a niche, location, or paste handles… (type / for tools)'
+                }
+                maxLength={MAX_INPUT_CHARS}
+                rows={1}
+                disabled={!ready}
+                aria-label="Message input"
+                className="w-full px-4 py-3 text-sm bg-[var(--color-surface)] text-primary border border-[rgba(var(--border-rgb),0.10)] rounded-2xl shadow-sm focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)] resize-none disabled:opacity-40 disabled:cursor-not-allowed leading-relaxed placeholder:text-muted"
+              />
+              {inputText.length >= MAX_INPUT_CHARS * 0.9 && (
+                <span
+                  className={`absolute bottom-2.5 right-2.5 text-[10px] font-mono tabular-nums ${
+                    inputText.length >= MAX_INPUT_CHARS * 0.96 ? 'text-danger' : 'text-muted'
+                  }`}
+                >
+                  {inputText.length}/{MAX_INPUT_CHARS}
+                </span>
+              )}
+            </div>
+
+            <button
+              onClick={handleSend}
+              disabled={!canSend}
+              aria-label="Send message"
+              className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full bg-[var(--color-accent)] text-[var(--color-bg)] hover:bg-[var(--color-accent-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
+            >
+              <Send size={15} />
+            </button>
+          </div>
         </div>
 
         <p className="mt-1.5 text-[10px] font-mono text-muted">

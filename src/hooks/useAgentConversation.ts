@@ -34,6 +34,8 @@ import type { AgentAction } from '../tools/agentTools'
 import { generateHashtags } from '../lib/hashtagGenerator'
 import { scrapeHashtagUsernames } from '../lib/apifyClient'
 import { friendlyGemini } from '../lib/errorMessages'
+import { MAX_INPUT_CHARS } from '../lib/constants'
+import type { ChatAttachment } from '../lib/attachment'
 
 const HISTORY_WINDOW = 8       // turns sent to the model per call (cap context cost)
 const THINKING_BUDGET = 512    // small budget so ask-vs-act reasons without big latency (6A)
@@ -143,15 +145,25 @@ export function useAgentConversation() {
     return ctx
   }
 
-  const sendMessage = async (text: string) => {
-    const safeText = text.replace(/[\n\r]/g, ' ').trim().slice(0, 500)
-    if (!safeText) return
+  const sendMessage = async (text: string, attachment?: ChatAttachment) => {
+    // Keep newlines (pasted briefs are multi-line); just normalize CRLF and cap length.
+    const safeText = text.replace(/\r\n/g, '\n').trim().slice(0, MAX_INPUT_CHARS)
+    if (!safeText && !attachment) return
+
+    // What the chat bubble shows: the text plus a paperclip note for the attached file.
+    const displayContent = attachment
+      ? safeText
+        ? `${safeText}\n\n📎 ${attachment.name}`
+        : `📎 ${attachment.name}`
+      : safeText
 
     // 5.1: mid-clarification typed answer — route to the HOOK's answerClarification so the
     // user's free-text refines the ranking prompt AND Phase 2 (ranking) actually fires.
     // The STORE action only flips status→'running' + saves the answer; it never calls
     // analyzeMutation.mutate(), which left the run stuck spinning on step 4 forever.
-    if (useAnalysisStore.getState().status === 'clarifying') {
+    // Skip this shortcut when a file is attached — the clarification sub-flow can't carry
+    // bytes, so route the whole thing through the main agent loop (which sees the file).
+    if (safeText && !attachment && useAnalysisStore.getState().status === 'clarifying') {
       addMessage({ role: 'user', content: safeText, type: 'text' })
       answerAnalysisClarification(safeText, currentRun.current?.signal)
       return
@@ -169,7 +181,7 @@ export function useAgentConversation() {
       bot('Switched — picking up your new request.') // TD4 steer feedback
     }
 
-    addMessage({ role: 'user', content: safeText, type: 'text' })
+    addMessage({ role: 'user', content: displayContent, type: 'text' })
 
     const controller = new AbortController()
     currentRun.current = controller
@@ -177,6 +189,14 @@ export function useAgentConversation() {
     setIsThinking(true)
     try {
       const history = buildHistory() // live state — includes the user message just added above
+      // Attach the file's bytes to the turn we just added. Ephemeral — it rides this one
+      // agent turn only; the persisted history keeps just the text note built above.
+      if (attachment && history.length > 0) {
+        const last = history[history.length - 1]
+        if (last.role === 'user') {
+          last.parts.push({ inlineData: { mimeType: attachment.mimeType, data: attachment.data } })
+        }
+      }
       const callModel = (h: GeminiTurn[], repairNote?: string) =>
         callGeminiWithTools(
           geminiKeys,
