@@ -1,7 +1,7 @@
 /**
  * Reel scraper — fetches the top N reels by views for an Instagram handle.
  *
- * Uses apify~instagram-scraper with resultsLimit: 30 (recent posts),
+ * Uses apify~instagram-scraper with resultsLimit: 120 (recent posts),
  * filters to clips (productType === 'clips') — NO view-count gate. Small/new reels
  * legitimately report 0 or missing views, and the actor sometimes reports views under
  * playCount/viewCount rather than videoViewCount; gating on videoViewCount > 0 produced
@@ -107,8 +107,9 @@ export async function scrapeTopReels(
   signal?: AbortSignal,
 ): Promise<ReelData[]> {
   return apifyLimiter(async () => {
-    // Build actor input: fetch 30 recent posts, filter to reels client-side
-    const input = buildReelScraperInput(handle, 30)
+    // Build actor input: fetch up to 120 recent posts (fewer if the account has fewer),
+    // filter to reels client-side
+    const input = buildReelScraperInput(handle, 120)
 
     // One actor lifecycle, with per-run key failover: if the chosen account is out of credit
     // (402) or rate-limited, the run rolls over to the next funded key instead of failing.
