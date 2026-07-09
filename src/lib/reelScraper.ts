@@ -115,8 +115,9 @@ export async function scrapeTopReels(
     // (402) or rate-limited, the run rolls over to the next funded key instead of failing.
     const rawPosts = await withKeyFailover(apifyKeys, async (apiKey) => {
       const { runId, datasetId, keyIndex } = await startRun(ACTORS.REEL_SCRAPER, input, apiKey, signal)
-      // Poll until SUCCEEDED — 3 min timeout for apify~instagram-scraper cold starts
-      await pollRun(runId, apiKey, signal, 180_000, keyIndex)
+      // Poll until SUCCEEDED — 5 min idle budget (10 min hard ceiling) for
+      // apify~instagram-scraper cold starts + the larger 120-post scrape.
+      await pollRun(runId, apiKey, signal, 300_000, keyIndex)
       return fetchDataset<RawPost>(datasetId, apiKey, signal, keyIndex)
     })
 
