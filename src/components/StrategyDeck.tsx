@@ -23,7 +23,13 @@ const vMuted: CSSProperties = { color: 'var(--dk-muted)' }
 const vAccent: CSSProperties = { color: 'var(--dk-accent)' }
 const vSurface: CSSProperties = { background: 'var(--dk-surface)', borderColor: 'var(--dk-divider)' }
 const vChip: CSSProperties = { background: 'var(--dk-accent)', color: 'var(--dk-accent-text)' }
+const vFill: CSSProperties = { background: 'var(--dk-fill)', color: 'var(--dk-fill-text)' }
 const vAccentBorder: CSSProperties = { borderColor: 'var(--dk-accent)' }
+
+// The reference deck opens the proposal and closes the commercials on solid black slides.
+const DARK_BG = '#0A0A0A'
+const DARK_TEXT = '#F5EDD6'
+const DARK_MUTED = '#B8B0A8'
 
 const PILLAR_ICONS: LucideIcon[] = [Compass, TrendingUp, Users, Trophy]
 const formatIcon = (f: string): LucideIcon => (/carou/i.test(f) ? LayoutGrid : /stor/i.test(f) ? CircleDot : Video)
@@ -31,18 +37,22 @@ const list = (items: string[] | undefined, fallback: string[] = []) => (items?.l
 
 function Title({ icon: Icon, children }: { icon: LucideIcon; children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-2 self-start mb-3 shrink-0">
-      <span className="grid place-items-center rounded" style={{ ...vChip, width: 30, height: 30 }}><Icon size={17} /></span>
-      <span className="text-[15px] font-bold uppercase tracking-wide px-2 py-0.5 rounded" style={vChip}>{children}</span>
+    <div className="self-start mb-4 shrink-0">
+      <div className="flex items-center gap-2">
+        <Icon size={18} style={vAccent} />
+        <h3 className="text-xl font-bold tracking-tight uppercase" style={{ color: 'var(--dk-text)' }}>{children}</h3>
+      </div>
+      <div className="mt-1.5 h-[3px] w-14 rounded-full" style={{ background: 'var(--dk-accent)' }} />
     </div>
   )
 }
 
-function Slide({ icon, title, children, center }: { icon?: LucideIcon; title?: string; children: React.ReactNode; center?: boolean }) {
+function Slide({ icon, title, children, center, dark }: { icon?: LucideIcon; title?: string; children: React.ReactNode; center?: boolean; dark?: boolean }) {
+  const surface = dark ? { background: DARK_BG, color: DARK_TEXT } : vBg
   return (
     <section
       className={`deck-slide relative aspect-[16/9] w-full rounded-lg overflow-hidden border px-10 py-7 flex flex-col ${center ? 'items-center justify-center text-center' : ''}`}
-      style={{ ...vBg, borderColor: 'var(--dk-divider)' }}
+      style={{ ...surface, borderColor: dark ? 'rgba(255,255,255,0.12)' : 'var(--dk-divider)' }}
     >
       {!center && icon && title && <Title icon={icon}>{title}</Title>}
       {center ? children : <div className="flex-1 flex flex-col justify-center min-h-0">{children}</div>}
@@ -205,17 +215,18 @@ export function StrategyDeck({ result, colors }: { result: StrategyResult; color
               ['Distribution as a service', 'Channel creation, creator selection, content ideation, publishing, and scaling.'],
               ['360 degree social capital', 'A multi-platform ecosystem across video, social storytelling, PR, and community signals.'],
             ].map(([title, body]) => (
-              <div key={title} className="rounded-lg border p-5" style={vSurface}>
-                <div className="text-base font-semibold" style={vAccent}>{title}</div>
-                <p className="text-sm mt-2">{body}</p>
+              <div key={title} className="rounded-2xl p-5" style={vFill}>
+                <div className="text-lg font-bold">{title}</div>
+                <p className="text-sm mt-3 opacity-90">{body}</p>
               </div>
             ))}
           </div>
+          <p className="text-center font-bold text-lg mt-6">Stop chasing attention. <span style={vAccent}>Create your own.</span></p>
         </Slide>
 
-        <Slide center>
-          <div className="text-[13px] font-mono uppercase tracking-[0.2em]" style={vAccent}>Our proposal for</div>
-          <h2 className="font-serif italic text-6xl mt-3">{brief.brandName || 'Your Brand'}</h2>
+        <Slide center dark>
+          <div className="text-[13px] font-mono uppercase tracking-[0.25em]" style={{ color: DARK_MUTED }}>Our proposal for</div>
+          <h2 className="font-serif italic text-6xl mt-3" style={vAccent}>{brief.brandName || 'Your Brand'}</h2>
         </Slide>
 
         <Slide icon={Compass} title="What we understand of you">
@@ -287,11 +298,11 @@ export function StrategyDeck({ result, colors }: { result: StrategyResult; color
         <Slide icon={Compass} title="Our content strategy">
           <div className="grid grid-cols-3 gap-4">
             {hhh.slice(0, 3).map((row) => (
-              <div key={row.name} className="rounded-lg border p-5" style={vSurface}>
-                <div className="text-2xl font-serif italic" style={vAccent}>{row.name}</div>
-                <div className="text-[11px] font-mono uppercase tracking-wide mt-1" style={vMuted}>{row.role}</div>
+              <div key={row.name} className="rounded-2xl p-5" style={vFill}>
+                <div className="text-2xl font-bold uppercase tracking-wide">{row.name}</div>
+                <div className="text-[11px] font-mono uppercase tracking-wide mt-1 opacity-70">{row.role}</div>
                 <p className="text-sm mt-3">{row.description}</p>
-                <ul className="mt-3 space-y-1.5 text-xs" style={vMuted}>
+                <ul className="mt-3 space-y-1.5 text-xs opacity-80">
                   {row.examples.slice(0, 3).map((e, i) => <li key={i}>- {e}</li>)}
                 </ul>
               </div>
@@ -326,14 +337,12 @@ export function StrategyDeck({ result, colors }: { result: StrategyResult; color
         </Slide>
 
         <Slide icon={ClipboardList} title="Execution & logistical roadmap">
-          <div className="space-y-3">
-            {roadmap.map((r, i) => (
-              <div key={i} className="grid grid-cols-[90px_1fr] gap-4 rounded-lg border p-4" style={vSurface}>
-                <div className="text-[11px] font-mono uppercase tracking-wide" style={vAccent}>{r.phase}</div>
-                <div>
-                  <div className="font-semibold">{r.title}</div>
-                  <div className="text-sm mt-1" style={vMuted}>{r.description}</div>
-                </div>
+          <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${Math.min(roadmap.length, 4)}, minmax(0, 1fr))` }}>
+            {roadmap.slice(0, 4).map((r, i) => (
+              <div key={i} className="rounded-2xl p-5 flex flex-col" style={vFill}>
+                <div className="text-[11px] font-mono uppercase tracking-wide opacity-70">{r.phase}</div>
+                <div className="font-bold text-base mt-1">{r.title}</div>
+                <div className="text-sm mt-2 opacity-90">{r.description}</div>
               </div>
             ))}
           </div>
@@ -378,9 +387,9 @@ export function StrategyDeck({ result, colors }: { result: StrategyResult; color
               ['Mid indicators', list(kpis.mid, ['Shares, saves, likes, comments', 'DM volume', 'Profile visits'])],
               ['Lag indicators', list(kpis.lag, ['Follower growth rate', 'Brand search increase', 'Assisted website/app traffic'])],
             ].map(([title, items]) => (
-              <div key={title as string} className="rounded-lg border p-5" style={vSurface}>
-                <div className="text-base font-semibold" style={vAccent}>{title as string}</div>
-                <ul className="text-sm mt-3 space-y-2" style={vMuted}>{(items as string[]).map((x, i) => <li key={i}>- {x}</li>)}</ul>
+              <div key={title as string} className="rounded-2xl p-5" style={vFill}>
+                <div className="text-base font-bold">{title as string}</div>
+                <ul className="text-sm mt-3 space-y-2 opacity-90">{(items as string[]).map((x, i) => <li key={i}>- {x}</li>)}</ul>
               </div>
             ))}
           </div>
@@ -399,6 +408,9 @@ export function StrategyDeck({ result, colors }: { result: StrategyResult; color
 
         <Slide icon={ClipboardList} title="Monthly deliverables">
           <div className="rounded-lg border overflow-hidden" style={vSurface}>
+            <div className="grid grid-cols-[1fr_1.5fr_1fr] gap-3 px-4 py-3 text-[11px] font-bold uppercase tracking-wide" style={vFill}>
+              <div>Platform</div><div>Format</div><div>Frequency</div>
+            </div>
             {deliverables.map((d, i) => (
               <div key={i} className="grid grid-cols-[1fr_1.5fr_1fr] gap-3 p-4 border-b last:border-b-0" style={{ borderColor: 'var(--dk-divider)' }}>
                 <div className="font-semibold">{d.platform}</div>
@@ -420,23 +432,26 @@ export function StrategyDeck({ result, colors }: { result: StrategyResult; color
           </div>
         </Slide>
 
-        <Slide icon={DollarSign} title="Commercials">
-          <div className="grid grid-cols-[0.9fr_1.3fr] gap-6 items-center">
-            <div className="rounded-xl border p-6 text-center" style={vSurface}>
-              <div className="text-[11px] font-mono uppercase tracking-wide" style={vMuted}>Monthly retainer</div>
-              <div className="font-serif italic text-4xl mt-2" style={vAccent}>{commercials.monthlyRetainer || 'To be discussed'}</div>
-            </div>
+        <Slide icon={DollarSign} title="Commercials" dark>
+          <div className="grid grid-cols-[0.9fr_1.3fr] gap-8 items-start">
             <div>
-              <div className="space-y-2">
+              <div className="text-[11px] font-mono uppercase tracking-wide" style={{ color: DARK_MUTED }}>Monthly retainer</div>
+              <div className="font-serif italic text-5xl mt-2" style={vAccent}>{commercials.monthlyRetainer || 'To be discussed'}</div>
+              <div className="mt-6 space-y-2">
                 {lineItems.map((item, i) => (
-                  <div key={i} className="flex justify-between gap-4 text-sm border-b pb-2" style={{ borderColor: 'var(--dk-divider)' }}>
+                  <div key={i} className="flex justify-between gap-4 text-sm border-b pb-2" style={{ borderColor: 'rgba(255,255,255,0.14)' }}>
                     <span>{item.label}</span>
-                    <span className="font-mono" style={vAccent}>{item.amount}</span>
+                    <span className="font-mono shrink-0" style={vAccent}>{item.amount}</span>
                   </div>
                 ))}
               </div>
-              <ul className="mt-4 space-y-1.5 text-xs" style={vMuted}>
-                {longTermValue.map((v, i) => <li key={i}>- {v}</li>)}
+            </div>
+            <div>
+              <div className="text-[11px] font-mono uppercase tracking-wide mb-3" style={vAccent}>Expected long-term brand value</div>
+              <ul className="space-y-2.5 text-sm" style={{ color: DARK_TEXT }}>
+                {longTermValue.map((v, i) => (
+                  <li key={i} className="flex gap-2"><span style={vAccent}>*</span><span>{v}</span></li>
+                ))}
               </ul>
             </div>
           </div>

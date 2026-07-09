@@ -16,6 +16,8 @@ export interface DeckColors {
   accent: string
   accentText: string
   divider: string
+  fill: string      // solid card-fill (the deck's signature yellow block)
+  fillText: string  // readable text on fill
 }
 
 export const PRESET_LABELS: Record<DeckPreset, string> = {
@@ -26,10 +28,11 @@ export const PRESET_LABELS: Record<DeckPreset, string> = {
 }
 
 const PRESETS: Record<DeckPreset, DeckColors> = {
-  'black-gold': { bg: '#0A0A0A', surface: '#1A1212', text: '#F5F5F5', muted: '#B8B0A8', accent: '#C9A227', accentText: '#0A0A0A', divider: 'rgba(255,255,255,0.12)' },
-  'cream-yellow': { bg: '#F0EFEA', surface: '#FFFFFF', text: '#1A1410', muted: '#6B6258', accent: '#F2C53D', accentText: '#1A1410', divider: 'rgba(0,0,0,0.12)' },
-  chai: { bg: '#1A1410', surface: '#2C2218', text: '#F5EDD6', muted: '#C4A882', accent: '#E07B3A', accentText: '#FFFFFF', divider: 'rgba(245,237,214,0.12)' },
-  light: { bg: '#FFFFFF', surface: '#F7F6F3', text: '#1C1C1C', muted: '#6B6B6B', accent: '#2563EB', accentText: '#FFFFFF', divider: 'rgba(0,0,0,0.10)' },
+  'black-gold': { bg: '#0A0A0A', surface: '#1A1212', text: '#F5F5F5', muted: '#B8B0A8', accent: '#C9A227', accentText: '#0A0A0A', divider: 'rgba(255,255,255,0.12)', fill: '#C9A227', fillText: '#0A0A0A' },
+  // The reference (Fobet/Lirunex) look: cream page, saffron-orange emphasis, solid yellow cards.
+  'cream-yellow': { bg: '#F0EFE6', surface: '#FFFFFF', text: '#1A1410', muted: '#6B6258', accent: '#E0872B', accentText: '#FFFFFF', divider: 'rgba(0,0,0,0.12)', fill: '#FBD24C', fillText: '#1A1410' },
+  chai: { bg: '#1A1410', surface: '#2C2218', text: '#F5EDD6', muted: '#C4A882', accent: '#E07B3A', accentText: '#FFFFFF', divider: 'rgba(245,237,214,0.12)', fill: '#E07B3A', fillText: '#FFFFFF' },
+  light: { bg: '#FFFFFF', surface: '#F7F6F3', text: '#1C1C1C', muted: '#6B6B6B', accent: '#2563EB', accentText: '#FFFFFF', divider: 'rgba(0,0,0,0.10)', fill: '#2563EB', fillText: '#FFFFFF' },
 }
 
 const isHex = (s: string): boolean => /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(s.trim())
@@ -89,5 +92,7 @@ export function themeVars(c: DeckColors): Record<string, string> {
     '--dk-accent': c.accent,
     '--dk-accent-text': c.accentText,
     '--dk-divider': c.divider,
+    '--dk-fill': c.fill,
+    '--dk-fill-text': c.fillText,
   }
 }

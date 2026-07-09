@@ -18,7 +18,7 @@ export interface DeckTheme {
   accent: string // hex override; '' = preset/brand-color accent
   bg: string     // hex override for the slide background; '' = preset background
 }
-export const DEFAULT_THEME: DeckTheme = { preset: 'black-gold', accent: '', bg: '' }
+export const DEFAULT_THEME: DeckTheme = { preset: 'cream-yellow', accent: '', bg: '' }
 
 /** The onboarding form — user-provided business context + seed handles. */
 export interface StrategyBrief {

@@ -19,7 +19,7 @@ export const SAMPLE_RESULT: StrategyResult = {
     brandColors: '',
     dislikes: 'no cringe videos',
     offLimits: 'anything negative about Dubai',
-    theme: { preset: 'black-gold', accent: '', bg: '' },
+    theme: { preset: 'cream-yellow', accent: '', bg: '' },
   },
   accounts: [
     { username: 'propertytalkswithad', fullName: 'Akash Deep', followers: 56328, engagementRate: 19.79, verified: true, source: 'competitor', profilePicUrl: '' },
