@@ -47,6 +47,11 @@ export interface ContentStrategyDoc {
   positioning: string
   audienceInsight: string
   competitiveSummary: string
+  clientUnderstanding: string
+  currentMarketingFlaw: string
+  categoryTension: { headline: string; bullets: string[] }
+  benchmarks: Array<{ name: string; metric: string; lesson: string }>
+  heroHubHygiene: Array<{ name: 'Hero' | 'Hub' | 'Hygiene' | string; role: string; description: string; examples: string[] }>
   /** Romanized (Latin-Hinglish) bullets synthesizing the winning hooks — never Devanagari. */
   whatsWorking: string[]
   contentPillars: Array<{ name: string; description: string }>
@@ -54,6 +59,14 @@ export interface ContentStrategyDoc {
   contentIdeas: Array<{ title: string; hook: string; format: string; pillar: string }>
   formatMix: Array<{ format: string; weight: string; rationale: string }>
   cadence: { postsPerWeek: string; notes: string }
+  executionRoadmap: Array<{ phase: string; title: string; description: string }>
+  creatorFirstFormats: string[]
+  operatingRhythm: string[]
+  kpiFramework: { leading: string[]; mid: string[]; lag: string[] }
+  successGoals: Array<{ metric: string; target: string }>
+  monthlyDeliverables: Array<{ platform: string; format: string; frequency: string }>
+  teamSystem: Array<{ role: string; responsibility: string }>
+  commercials: { monthlyRetainer: string; lineItems: Array<{ label: string; amount: string }>; longTermValue: string[] }
   voiceAndTone: string
   dos: string[]
   donts: string[]

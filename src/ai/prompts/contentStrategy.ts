@@ -23,6 +23,33 @@ export const CONTENT_STRATEGY_SCHEMA = {
     positioning: { type: 'string' },
     audienceInsight: { type: 'string' },
     competitiveSummary: { type: 'string' },
+    clientUnderstanding: { type: 'string' },
+    currentMarketingFlaw: { type: 'string' },
+    categoryTension: {
+      type: 'object',
+      properties: {
+        headline: { type: 'string' },
+        bullets: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['headline', 'bullets'],
+    },
+    benchmarks: {
+      type: 'array',
+      items: { type: 'object', properties: { name: { type: 'string' }, metric: { type: 'string' }, lesson: { type: 'string' } }, required: ['name', 'metric', 'lesson'] },
+    },
+    heroHubHygiene: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          role: { type: 'string' },
+          description: { type: 'string' },
+          examples: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['name', 'role', 'description', 'examples'],
+      },
+    },
     whatsWorking: { type: 'array', items: { type: 'string' } },
     contentPillars: {
       type: 'array',
@@ -41,11 +68,57 @@ export const CONTENT_STRATEGY_SCHEMA = {
       items: { type: 'object', properties: { format: { type: 'string' }, weight: { type: 'string' }, rationale: { type: 'string' } }, required: ['format', 'weight', 'rationale'] },
     },
     cadence: { type: 'object', properties: { postsPerWeek: { type: 'string' }, notes: { type: 'string' } }, required: ['postsPerWeek', 'notes'] },
+    executionRoadmap: {
+      type: 'array',
+      items: { type: 'object', properties: { phase: { type: 'string' }, title: { type: 'string' }, description: { type: 'string' } }, required: ['phase', 'title', 'description'] },
+    },
+    creatorFirstFormats: { type: 'array', items: { type: 'string' } },
+    operatingRhythm: { type: 'array', items: { type: 'string' } },
+    kpiFramework: {
+      type: 'object',
+      properties: {
+        leading: { type: 'array', items: { type: 'string' } },
+        mid: { type: 'array', items: { type: 'string' } },
+        lag: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['leading', 'mid', 'lag'],
+    },
+    successGoals: {
+      type: 'array',
+      items: { type: 'object', properties: { metric: { type: 'string' }, target: { type: 'string' } }, required: ['metric', 'target'] },
+    },
+    monthlyDeliverables: {
+      type: 'array',
+      items: { type: 'object', properties: { platform: { type: 'string' }, format: { type: 'string' }, frequency: { type: 'string' } }, required: ['platform', 'format', 'frequency'] },
+    },
+    teamSystem: {
+      type: 'array',
+      items: { type: 'object', properties: { role: { type: 'string' }, responsibility: { type: 'string' } }, required: ['role', 'responsibility'] },
+    },
+    commercials: {
+      type: 'object',
+      properties: {
+        monthlyRetainer: { type: 'string' },
+        lineItems: {
+          type: 'array',
+          items: { type: 'object', properties: { label: { type: 'string' }, amount: { type: 'string' } }, required: ['label', 'amount'] },
+        },
+        longTermValue: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['monthlyRetainer', 'lineItems', 'longTermValue'],
+    },
     voiceAndTone: { type: 'string' },
     dos: { type: 'array', items: { type: 'string' } },
     donts: { type: 'array', items: { type: 'string' } },
   },
-  required: ['positioning', 'audienceInsight', 'competitiveSummary', 'whatsWorking', 'contentPillars', 'hookFormulas', 'contentIdeas', 'formatMix', 'cadence', 'voiceAndTone', 'dos', 'donts'],
+  required: [
+    'positioning', 'audienceInsight', 'competitiveSummary', 'clientUnderstanding',
+    'currentMarketingFlaw', 'categoryTension', 'benchmarks', 'heroHubHygiene',
+    'whatsWorking', 'contentPillars', 'hookFormulas', 'contentIdeas', 'formatMix',
+    'cadence', 'executionRoadmap', 'creatorFirstFormats', 'operatingRhythm',
+    'kpiFramework', 'successGoals', 'monthlyDeliverables', 'teamSystem',
+    'commercials', 'voiceAndTone', 'dos', 'donts',
+  ],
 }
 
 function accountsBlock(accounts: AnalyzedAccount[]): string {
@@ -102,6 +175,25 @@ ${accountsBlock(accounts)}
 ${hookBlock(hookSummaries)}
 
 # YOUR TASK
+Produce a client-ready PROPOSAL-STYLE STRATEGY DECK inspired by agency decks like the Fobet/Lirunex
+proposal: first prove we understand the client, then diagnose the category, then present the content
+system, execution plan, measurement plan, deliverables, team system, and commercials.
+
+In addition to the original strategy fields, fill these proposal fields:
+- clientUnderstanding: a concise "what we understand of you" paragraph grounded in the brief.
+- currentMarketingFlaw: a punchy diagnosis of what is likely wrong with the brand's current social presence. Do not invent facts; frame as category/positioning risk when current data is unknown.
+- categoryTension: headline + 3-4 bullets naming the emotional or market tension that creates the content opportunity.
+- benchmarks: 2-4 benchmark accounts/brands from the analyzed accounts or well-known adjacent examples; each must include a metric/scale signal and the lesson.
+- heroHubHygiene: exactly 3 rows named Hero, Hub, Hygiene. Explain WHAT/WHY, WHEN, and HOW content for this client. Include 2-4 example content angles in each.
+- executionRoadmap: 3-4 phases such as Strategy & Governance, Creative & Production, Publishing & Optimisation, Review & Iteration.
+- creatorFirstFormats: 5-7 concrete formats the client can expect (talking head, stitch/reaction, POV, mixed-media VO, carousel, etc.).
+- operatingRhythm: 4-6 bullets describing weekly/monthly review, calendar, testing, pruning, and doubling down.
+- kpiFramework: leading/mid/lag indicators. Leading = discovery/reach; mid = engagement/private intent; lag = momentum/revenue proxy.
+- successGoals: 4-6 measurable six-month goals. Use sensible targets based on the niche and account scale; avoid impossible guarantees.
+- monthlyDeliverables: platform/format/frequency rows for the proposal. Keep frequencies realistic and editable.
+- teamSystem: 4-6 roles with responsibilities for executing this plan.
+- commercials: monthlyRetainer can be "To be discussed" unless pricing is explicit in the brief; lineItems should be editable proposal placeholders; longTermValue should sell the durable strategic value.
+
 Synthesise the brief + the analysis into a strategy that wins in THIS niche and drives toward THE OFFER.
 Return JSON matching the schema with:
 - positioning: one sharp sentence on how this brand should be positioned vs. the competitors.
@@ -127,16 +219,36 @@ export function parseContentStrategyDoc(raw: unknown): ContentStrategyDoc {
   const objArr = <T>(v: unknown, map: (o: Record<string, unknown>) => T): T[] =>
     Array.isArray(v) ? v.filter((x): x is Record<string, unknown> => !!x && typeof x === 'object').map(map) : []
   const cadence = (r.cadence ?? {}) as Record<string, unknown>
+  const categoryTension = (r.categoryTension ?? {}) as Record<string, unknown>
+  const kpiFramework = (r.kpiFramework ?? {}) as Record<string, unknown>
+  const commercials = (r.commercials ?? {}) as Record<string, unknown>
   return {
     positioning: str(r.positioning),
     audienceInsight: str(r.audienceInsight),
     competitiveSummary: str(r.competitiveSummary),
+    clientUnderstanding: str(r.clientUnderstanding),
+    currentMarketingFlaw: str(r.currentMarketingFlaw),
+    categoryTension: { headline: str(categoryTension.headline), bullets: strArr(categoryTension.bullets) },
+    benchmarks: objArr(r.benchmarks, (o) => ({ name: str(o.name), metric: str(o.metric), lesson: str(o.lesson) })),
+    heroHubHygiene: objArr(r.heroHubHygiene, (o) => ({ name: str(o.name), role: str(o.role), description: str(o.description), examples: strArr(o.examples) })),
     whatsWorking: strArr(r.whatsWorking),
     contentPillars: objArr(r.contentPillars, (o) => ({ name: str(o.name), description: str(o.description) })),
     hookFormulas: objArr(r.hookFormulas, (o) => ({ name: str(o.name), template: str(o.template), example: str(o.example) })),
     contentIdeas: objArr(r.contentIdeas, (o) => ({ title: str(o.title), hook: str(o.hook), format: str(o.format), pillar: str(o.pillar) })),
     formatMix: objArr(r.formatMix, (o) => ({ format: str(o.format), weight: str(o.weight), rationale: str(o.rationale) })),
     cadence: { postsPerWeek: str(cadence.postsPerWeek), notes: str(cadence.notes) },
+    executionRoadmap: objArr(r.executionRoadmap, (o) => ({ phase: str(o.phase), title: str(o.title), description: str(o.description) })),
+    creatorFirstFormats: strArr(r.creatorFirstFormats),
+    operatingRhythm: strArr(r.operatingRhythm),
+    kpiFramework: { leading: strArr(kpiFramework.leading), mid: strArr(kpiFramework.mid), lag: strArr(kpiFramework.lag) },
+    successGoals: objArr(r.successGoals, (o) => ({ metric: str(o.metric), target: str(o.target) })),
+    monthlyDeliverables: objArr(r.monthlyDeliverables, (o) => ({ platform: str(o.platform), format: str(o.format), frequency: str(o.frequency) })),
+    teamSystem: objArr(r.teamSystem, (o) => ({ role: str(o.role), responsibility: str(o.responsibility) })),
+    commercials: {
+      monthlyRetainer: str(commercials.monthlyRetainer),
+      lineItems: objArr(commercials.lineItems, (o) => ({ label: str(o.label), amount: str(o.amount) })),
+      longTermValue: strArr(commercials.longTermValue),
+    },
     voiceAndTone: str(r.voiceAndTone),
     dos: strArr(r.dos),
     donts: strArr(r.donts),
