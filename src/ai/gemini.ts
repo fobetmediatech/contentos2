@@ -74,6 +74,9 @@ interface GeminiPart {
   thought?: boolean
   /** Present when the model calls a tool (function-calling mode). */
   functionCall?: { name: string; args?: Record<string, unknown> }
+  /** An uploaded file sent inline as base64 (PDF / image / text). Gemini reads it
+   *  natively; the /api/gemini proxy forwards it verbatim. */
+  inlineData?: { mimeType: string; data: string }
 }
 
 interface GeminiCandidate {
