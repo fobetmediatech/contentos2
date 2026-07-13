@@ -23,8 +23,9 @@ export function RemixVoicePicker({ onChange }: { onChange: (v: VoiceChoice) => v
 
   return (
     <div className="flex-1 min-w-[180px]">
-      <label className="block text-xs font-medium text-secondary mb-1.5">Client voice (optional)</label>
+      <label htmlFor="remix-voice-select" className="block text-xs font-medium text-secondary mb-1.5">Client voice (optional)</label>
       <select
+        id="remix-voice-select"
         onChange={(e) => onSelect(e.target.value)}
         defaultValue=""
         className="w-full rounded-lg bg-surface-raised border border-[rgba(var(--border-rgb),0.12)] px-3 py-1.5 text-sm text-primary focus:outline-none focus:ring-2 focus:ring-accent"
