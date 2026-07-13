@@ -11,6 +11,7 @@ import type { CompetitorAnalysisResult, DiscoveryResult } from '../../ai/prompts
 import type { NormalizedProfile } from '../../lib/transformers'
 import { COMPETITOR_CATEGORIES, DISCOVERY_CATEGORIES } from './categories'
 import type { CreatorHookSummary } from '../../ai/prompts/creatorHookSummary'
+import type { ReelResultPayload, RepurposeResultPayload } from '../../domain/chat'
 
 /** Serialize a creator hook summary to portable Markdown (paste into Notion / Docs / email). */
 export function summaryToMarkdown(summary: CreatorHookSummary): string {
@@ -236,6 +237,191 @@ function csvCell(value: string | number | boolean): string {
     ? `'${s}`
     : s
   return `"${safe.replace(/"/g, '""')}"`
+}
+
+// ──────────────────────────────────────────────────────────
+// Google export payloads (Docs / Sheets)
+//
+// The client builds a NEUTRAL payload from a finished result and POSTs it to
+// /api/google-export, which does only the Google-API plumbing. Sheets → tabular
+// (competitor/discovery); Docs → the reel narrative report.
+// ──────────────────────────────────────────────────────────
+
+export type GoogleExportPayload =
+  | { kind: 'sheet'; title: string; headers: string[]; rows: (string | number)[][] }
+  | { kind: 'doc'; title: string; markdown: string }
+
+/**
+ * Formula-injection guard for Google Sheets cells. Sheets evaluates a cell that
+ * starts with = + - or @ as a formula, so prefix those with an apostrophe — the
+ * same protection csvCell gives CSV. Non-string values pass through untouched.
+ */
+function sheetCell(value: string | number): string | number {
+  if (typeof value !== 'string') return value
+  return /^[=+\-@]/.test(value) ? `'${value}` : value
+}
+
+/** Build a Google Sheet payload for competitor results (same columns as generateCSV). */
+export function buildCompetitorSheet(data: ExportData): GoogleExportPayload {
+  const { competitors, profiles, sourceHandles } = data
+  const profileMap = new Map(profiles.map((p) => [p.username, p]))
+  const headers = ['rank', 'category', 'username', 'full_name', 'followers', 'engagement_rate', 'verified', 'rationale', 'source_handles']
+
+  const rows = [...competitors]
+    .sort((a, b) => {
+      if (a.category !== b.category) return a.category === 'top' ? -1 : 1
+      return a.rank - b.rank
+    })
+    .map((c): (string | number)[] => {
+      const profile = profileMap.get(c.username)
+      return [
+        c.rank,
+        c.category,
+        c.username,
+        profile?.fullName ?? '',
+        profile?.followersCount ?? '',
+        profile?.engagementRate?.toFixed(2) ?? '',
+        profile?.verified ? 'yes' : 'no',
+        c.rationale,
+        sourceHandles.join(';'),
+      ].map(sheetCell)
+    })
+
+  const niche = data.clientName ? ` — ${data.clientName}` : ''
+  return { kind: 'sheet', title: `Competitor Analysis${niche}`, headers, rows }
+}
+
+/** Build a Google Sheet payload for discovery results (same columns as generateDiscoveryCSV). */
+export function buildDiscoverySheet(data: DiscoveryCSVData): GoogleExportPayload {
+  const { results, profiles, city, niche, sourceHashtags } = data
+  const profileMap = new Map(profiles.map((p) => [p.username, p]))
+  const headers = [
+    'rank', 'category', 'username', 'full_name', 'followers', 'engagement_rate',
+    'verified', 'specialties', 'content_focus', 'partnership_ready',
+    'location_confidence', 'rationale', 'city', 'niche', 'source_hashtags',
+  ]
+
+  const rows = [...results]
+    .sort((a, b) => {
+      if (a.category !== b.category) return a.category === 'top' ? -1 : 1
+      return a.rank - b.rank
+    })
+    .map((r): (string | number)[] => {
+      const profile = profileMap.get(r.username)
+      return [
+        r.rank,
+        r.category,
+        r.username,
+        profile?.fullName ?? '',
+        profile?.followersCount ?? '',
+        profile?.engagementRate?.toFixed(2) ?? '',
+        profile?.verified ? 'yes' : 'no',
+        r.specialties.join(' | '),
+        r.contentFocus,
+        r.partnershipReady ? 'yes' : 'no',
+        r.locationConfidence,
+        r.rationale,
+        city,
+        niche,
+        sourceHashtags.join(';'),
+      ].map(sheetCell)
+    })
+
+  const label = [city, niche].filter(Boolean).join(' ')
+  return { kind: 'sheet', title: `Location Discovery${label ? ` — ${label}` : ''}`, headers, rows }
+}
+
+/**
+ * Build a Google Doc payload for a finished reel/hook run. Concatenates each
+ * creator's HookMap summary (reusing summaryToMarkdown) plus a cross-creator
+ * synthesis section when present.
+ */
+export function buildReelDoc(payload: ReelResultPayload): GoogleExportPayload {
+  const { handles, creatorStates, synthesis } = payload
+  const n = (x: number) => Math.round(x).toLocaleString()
+  const out: string[] = [`# Reel Hook Report — ${handles.map((h) => `@${h}`).join(', ')}`, '']
+
+  if (synthesis) {
+    out.push('## Cross-creator synthesis', '')
+    if (synthesis.topPatterns.length) {
+      out.push('### Top patterns')
+      for (const p of synthesis.topPatterns) out.push(`- **${p.archetype}** (${p.count}×) — "${p.example}"`)
+      out.push('')
+    }
+    out.push(
+      '### Benchmarks',
+      `- Median views: ${n(synthesis.benchmarks.medianViews)}`,
+      `- Likes/views ratio: ${(synthesis.benchmarks.likesViewsRatio * 100).toFixed(1)}%`,
+      `- Comments/likes ratio: ${(synthesis.benchmarks.commentsLikesRatio * 100).toFixed(1)}%`,
+      '',
+    )
+    if (synthesis.replicateTips.length) {
+      out.push('### What to replicate')
+      for (const t of synthesis.replicateTips) out.push(`- ${t}`)
+      out.push('')
+    }
+    if (synthesis.avoidTips.length) {
+      out.push('### What to avoid')
+      for (const t of synthesis.avoidTips) out.push(`- ${t}`)
+      out.push('')
+    }
+  }
+
+  for (const handle of handles) {
+    const state = creatorStates[handle]
+    if (!state) continue
+    if (state.hookSummary) {
+      out.push('', summaryToMarkdown(state.hookSummary), '')
+      continue
+    }
+    // Fallback when no creator-level summary exists: list the per-reel hooks so the doc is
+    // never just a title.
+    const reels = state.reels ?? []
+    const analyzed = reels.filter((r) => state.analyses?.[r.shortCode])
+    if (analyzed.length) {
+      out.push('', `## @${handle}`, '')
+      for (const r of analyzed) {
+        const a = state.analyses[r.shortCode]
+        out.push(`- **${a.hookArchetype}**${a.openingLine ? ` — "${a.openingLine}"` : ''} (${n(r.videoViewCount)} views)`)
+      }
+      out.push('')
+    }
+  }
+
+  return { kind: 'doc', title: `Reel Hook Report — ${handles.map((h) => `@${h}`).join(', ')}`, markdown: out.join('\n') }
+}
+
+/** Build a Google Doc payload for a finished repurpose run (voice rewrite package). */
+export function buildRepurposeDoc(payload: RepurposeResultPayload): GoogleExportPayload {
+  const { voiceProfile: v, rewrite: r } = payload
+  const displayHandle = v.handle.replace('__scripts__', 'pasted ')
+  const out: string[] = [
+    `# Repurposed script — @${displayHandle}'s voice`,
+    '',
+    `_${v.displayName || `@${displayHandle}`} · consistency ${v.personaConsistencyScore}/10${v.toneDescriptors.length ? ` · ${v.toneDescriptors.join(', ')}` : ''}_`,
+    '',
+    '## Spoken hook', r.spokenHook,
+  ]
+  if (r.altHooks.length) {
+    out.push('', '## Alt hooks (A/B)')
+    r.altHooks.forEach((h, i) => out.push(`${i + 1}. ${h}`))
+  }
+  if (r.beatScript.length) {
+    out.push('', '## Beat-by-beat script')
+    r.beatScript.forEach((b, i) => {
+      out.push(`**${i + 1}. ${b.beatLabel || 'Beat'}** — ${b.script}`)
+      if (b.onScreenText) out.push(`   _on-screen:_ ${b.onScreenText}`)
+    })
+  }
+  out.push('', '## Caption', r.caption, '', '## CTA', r.cta)
+  if (r.onScreenText.length) {
+    out.push('', '## On-screen text')
+    for (const t of r.onScreenText) out.push(`- ${t}`)
+  }
+  if (payload.sourceTranscript?.trim()) {
+    out.push('', '## Source reel transcript', payload.sourceTranscript.trim())
+  }
+  return { kind: 'doc', title: `Repurposed script — @${displayHandle}`, markdown: out.join('\n') }
 }
 
 export function generateDiscoveryCSV(data: DiscoveryCSVData): string {

@@ -14,7 +14,8 @@ import type { CompetitorResultPayload } from '../store/analysisStore'
 import { CompetitorCard } from './CompetitorCard'
 import { COMPETITOR_CATEGORIES } from '../shared/utils/categories'
 import { deriveCompetitorView } from './competitorResultView'
-import { formatForClipboard, generateCSV, downloadCSV, copyToClipboard } from '../shared/utils/export'
+import { formatForClipboard, generateCSV, downloadCSV, copyToClipboard, buildCompetitorSheet } from '../shared/utils/export'
+import { GoogleExportButton } from './GoogleExportButton'
 
 interface Props {
   payload: CompetitorResultPayload
@@ -185,6 +186,14 @@ export function CompetitorResultMessage({
           </button>
         </div>
       )}
+
+      {/* Export — always at the bottom of the response */}
+      <div className="flex pt-1">
+        <GoogleExportButton
+          kind="sheet"
+          buildPayload={() => buildCompetitorSheet({ competitors, profiles: payload.profiles, sourceHandles: [] })}
+        />
+      </div>
     </>
   )
 }
