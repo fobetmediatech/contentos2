@@ -10,6 +10,8 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { RepurposeResultPayload } from '../domain/chat'
+import { GoogleExportButton } from './GoogleExportButton'
+import { buildRepurposeDoc } from '../shared/utils/export'
 
 function CopyButton({ text }: { text: string }) {
   const [done, setDone] = useState(false)
@@ -219,6 +221,9 @@ export default function RepurposeResultMessage({
           </p>
         </details>
       )}
+
+      {/* Export — always at the bottom of the response */}
+      <GoogleExportButton kind="doc" buildPayload={() => buildRepurposeDoc(payload)} />
     </div>
   )
 }

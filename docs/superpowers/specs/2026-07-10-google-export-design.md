@@ -1,7 +1,29 @@
 # Google Docs/Sheets export from chat results
 
 **Date:** 2026-07-10
-**Status:** Approved — implementing
+**Status:** Implemented
+
+## Revision (auth approach changed)
+
+The original plan reused the **Clerk Google login** to get a Drive token server-side. In
+practice that looped forever on "Connect Google": the Clerk Google connection only carries
+profile/email scope and can't attach Drive write permission (dev instances use shared Google
+credentials that disallow extra scopes), so the token never had `drive.file`.
+
+**Corrected approach:** a dedicated **Google Identity Services (GIS) OAuth popup**, independent
+of Clerk. On export the browser opens a popup requesting `drive.file`, receives an access token,
+and creates the file directly against Google's REST APIs (CORS-enabled). No server round-trip,
+no Clerk reauthorize, no loop. Requires a public `VITE_GOOGLE_CLIENT_ID`.
+
+- `src/lib/googleAuth.ts` — loads GIS, token client, popup token acquisition (in-gesture), caching.
+- `src/lib/googleExport.ts` — now client-side: get token → create Sheet/Doc via Google REST.
+- `api/google-export.ts` — **removed** (no longer needed).
+- Coverage: all **6** tools export (competitor, discovery, reel, single-reel, repurpose, transcript).
+
+Everything below is the original design; the server/Clerk-token sections are superseded by the above.
+
+---
+
 
 ## Goal
 

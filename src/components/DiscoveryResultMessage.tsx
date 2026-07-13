@@ -12,7 +12,8 @@ import { DiscoveryCard } from './DiscoveryCard'
 import { DISCOVERY_CATEGORIES } from '../shared/utils/categories'
 import { MIN_LOCATION_RESULTS } from '../hooks/useLocationDiscovery'
 import { deriveDiscoveryView } from './discoveryResultView'
-import { formatDiscoveryForClipboard, generateDiscoveryCSV, downloadCSV, copyToClipboard } from '../shared/utils/export'
+import { formatDiscoveryForClipboard, generateDiscoveryCSV, downloadCSV, copyToClipboard, buildDiscoverySheet } from '../shared/utils/export'
+import { GoogleExportButton } from './GoogleExportButton'
 
 interface Props {
   payload: DiscoveryResultPayload
@@ -161,6 +162,14 @@ export function DiscoveryResultMessage({
           </button>
         </div>
       )}
+
+      {/* Export — always at the bottom of the response */}
+      <div className="flex pt-1">
+        <GoogleExportButton
+          kind="sheet"
+          buildPayload={() => buildDiscoverySheet({ results, profiles: payload.profiles, city, niche: '', sourceHashtags: [] })}
+        />
+      </div>
     </>
   )
 }

@@ -11,6 +11,8 @@
 import { Bot, Video } from 'lucide-react'
 import type { ReelResultPayload } from '../store/analysisStore'
 import { InlineReelResults } from './InlineReelResults'
+import { GoogleExportButton } from './GoogleExportButton'
+import { buildReelDoc } from '../shared/utils/export'
 
 interface Props {
   payload: ReelResultPayload
@@ -59,6 +61,11 @@ export function ReelResultMessage({ payload, onSuggest, onStartOver }: Props) {
         synthesisError={null}
         onSuggest={onSuggest}
       />
+
+      {/* Export — always at the bottom of the response */}
+      <div className="flex pt-1">
+        <GoogleExportButton kind="doc" buildPayload={() => buildReelDoc(payload)} />
+      </div>
     </>
   )
 }

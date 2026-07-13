@@ -12,6 +12,7 @@ import { useState } from 'react'
 import { Copy, FileText, Video } from 'lucide-react'
 import { useTranscriptStore } from '../store/transcriptStore'
 import type { TranscriptResultPayload } from '../domain/chat'
+import { GoogleExportButton } from './GoogleExportButton'
 
 /** Seconds → m:ss (e.g. 75 → "1:15"). Negative / non-finite values clamp to 0:00. */
 function fmtTime(seconds: number): string {
@@ -116,6 +117,14 @@ export function TranscriptResultMessage({ payload }: Props = {}) {
               <p className="text-sm text-muted italic">No spoken content detected in this reel.</p>
             )}
           </div>
+
+          {/* Export — always at the bottom of the response */}
+          {hasTranscript && (
+            <GoogleExportButton
+              kind="doc"
+              buildPayload={() => ({ kind: 'doc', title: 'Reel transcript', markdown: fullText })}
+            />
+          )}
         </div>
       </div>
     )

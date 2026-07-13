@@ -18,12 +18,14 @@ import { Bot, ChevronDown, ChevronUp, Copy, Video } from 'lucide-react'
 import { useSingleReelStore } from '../store/singleReelStore'
 import { CaseStudyMarkdown } from './markdown/CaseStudyMarkdown'
 import { ReelTranscriptView } from './ReelTranscriptView'
+import { GoogleExportButton } from './GoogleExportButton'
 
 export function SingleReelResultMessage() {
   const status = useSingleReelStore((s) => s.status)
   const progress = useSingleReelStore((s) => s.progress)
   const result = useSingleReelStore((s) => s.result)
   const error = useSingleReelStore((s) => s.error)
+  const shortCode = useSingleReelStore((s) => s.shortCode)
 
   const [showTranscript, setShowTranscript] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -107,6 +109,16 @@ export function SingleReelResultMessage() {
               )}
             </div>
           )}
+
+          {/* Export — always at the bottom of the response */}
+          <GoogleExportButton
+            kind="doc"
+            buildPayload={() => ({
+              kind: 'doc',
+              title: `Reel case study${shortCode ? ` — ${shortCode}` : ''}`,
+              markdown: result.markdown,
+            })}
+          />
         </div>
       </div>
     )
