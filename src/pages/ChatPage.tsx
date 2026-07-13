@@ -359,9 +359,10 @@ export function ChatPage() {
 
   // Progress-mirror: keep the discovery run's cockpit pane label in sync with the live step.
   useEffect(() => {
-    const run = selectActiveRunOfKind(useRunsStore.getState(), 'discovery', activeConversationId)
+    const targetId = discoveryRunConversationId ?? activeConversationId
+    const run = selectActiveRunOfKind(useRunsStore.getState(), 'discovery', targetId)
     if (run) useRunsStore.getState().updateRun(run.id, { progress: discoveryRunLabel(discoveryCurrentStep, discoveryStepProgressDetail) })
-  }, [discoveryStatus, discoveryCurrentStep, discoveryStepProgressDetail, activeConversationId])
+  }, [discoveryStatus, discoveryCurrentStep, discoveryStepProgressDetail, discoveryRunConversationId, activeConversationId])
 
   // Snapshot a finished repurpose run into the conversation, then reset the store. Armed only
   // while a real run is live so it fires once. The persisted payload carries everything the
