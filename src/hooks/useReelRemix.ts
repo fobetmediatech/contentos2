@@ -18,7 +18,9 @@ import {
   REEL_REWRITE_SCHEMA, parseReelRewrite,
   type ReelRewriteResult, type TargetLanguage,
 } from '../ai/prompts/reelRewrite'
-import { buildReelRemixPrompt, type RemixSource } from '../ai/prompts/reelRemix'
+import { getCachedSingleReel } from '../lib/singleReelCache'
+import type { SingleReelResult } from '../store/singleReelStore'
+import { buildReelRemixPrompt, buildFieldRegenPrompt, VARIATION_ANGLES, FIELD_REGEN_SCHEMA, type RemixSource } from '../ai/prompts/reelRemix'
 import type { VoiceProfile } from '../ai/prompts/voiceProfile'
 
 export interface TranscribeResult {
@@ -34,6 +36,37 @@ export interface GenerateArgs {
   language: TargetLanguage
   clientHandle?: string
   pastedScripts?: string[]
+  /** Pre-resolved voice — set by generateVariations so all 3 share one build. */
+  voice?: VoiceProfile
+  /** One of VARIATION_ANGLES — biases the hook so variations diverge. */
+  variationAngle?: string
+}
+
+export interface VariationsOpts {
+  count?: number
+  onResult?: (i: number, r: ReelRewriteResult) => void
+  onError?: (i: number) => void
+}
+
+export interface RegenerateArgs {
+  current: ReelRewriteResult
+  source: RemixSource
+  fieldLabel: string
+  newTopic: string
+  language: TargetLanguage
+  voice?: VoiceProfile
+}
+
+/** Pure: seed a remix reference from a corpus reel + its (maybe-absent) cached deep analysis. */
+export function buildLibrarySource(
+  reel: { shortCode: string; transcript: string },
+  cached: SingleReelResult | undefined,
+): TranscribeResult {
+  return {
+    platform: 'instagram',
+    source: { transcript: reel.transcript, beats: cached?.videoAnalysis?.visual_beats },
+    transcript: reel.transcript,
+  }
 }
 
 export function useReelRemix() {
@@ -65,15 +98,15 @@ export function useReelRemix() {
       const handle = args.clientHandle?.trim()
       const scripts = (args.pastedScripts ?? []).filter((s) => s.trim().length > 0)
 
-      let voice: VoiceProfile | undefined
-      if (handle || scripts.length > 0) {
-        voice = await buildVoiceProfile({ sourceReelUrl: '', clientHandle: handle, pastedScripts: scripts }, signal)
-      }
+      const voice = args.voice
+        ?? ((handle || scripts.length > 0)
+          ? await buildVoiceProfile({ sourceReelUrl: '', clientHandle: handle, pastedScripts: scripts }, signal)
+          : undefined)
 
       const source: RemixSource = { transcript: args.editedTranscript, beats: args.source.beats }
       const raw = await callGeminiWithSchema<ReelRewriteResult>(
         geminiKeys,
-        buildReelRemixPrompt(source, args.newTopic, args.language, voice),
+        buildReelRemixPrompt(source, args.newTopic, args.language, voice, args.variationAngle),
         REEL_REWRITE_SCHEMA,
         { temperature: 0.7, thinkingBudget: 3000, model: PREMIUM_MODEL, signal },
       )
@@ -82,5 +115,58 @@ export function useReelRemix() {
     [buildVoiceProfile, geminiKeys],
   )
 
-  return { transcribe, generate }
+  const fromLibrary = useCallback(
+    async (reel: { shortCode: string; transcript: string }): Promise<TranscribeResult> => {
+      const cached = await getCachedSingleReel(reel.shortCode)
+      return buildLibrarySource(reel, cached)
+    },
+    [],
+  )
+
+  const generateVariations = useCallback(
+    async (
+      args: GenerateArgs,
+      opts?: VariationsOpts,
+      signal?: AbortSignal,
+    ): Promise<{ results: (ReelRewriteResult | null)[]; voice?: VoiceProfile }> => {
+      const count = opts?.count ?? 3
+      const handle = args.clientHandle?.trim()
+      const scripts = (args.pastedScripts ?? []).filter((s) => s.trim().length > 0)
+      // Resolve voice ONCE — otherwise a fresh @handle would scrape+synthesize `count` times.
+      const voice = args.voice
+        ?? ((handle || scripts.length > 0)
+          ? await buildVoiceProfile({ sourceReelUrl: '', clientHandle: handle, pastedScripts: scripts }, signal)
+          : undefined)
+
+      const results: (ReelRewriteResult | null)[] = new Array(count).fill(null)
+      for (let i = 0; i < count; i++) {
+        if (signal?.aborted) break
+        try {
+          const r = await generate({ ...args, voice, variationAngle: VARIATION_ANGLES[i % VARIATION_ANGLES.length] }, signal)
+          results[i] = r
+          opts?.onResult?.(i, r)
+        } catch (err) {
+          if (signal?.aborted || (err as Error)?.name === 'AbortError') break
+          opts?.onError?.(i)
+        }
+      }
+      return { results, voice }
+    },
+    [generate, buildVoiceProfile],
+  )
+
+  const regenerateField = useCallback(
+    async (args: RegenerateArgs, signal?: AbortSignal): Promise<string> => {
+      const raw = await callGeminiWithSchema<{ value: string }>(
+        geminiKeys,
+        buildFieldRegenPrompt(args.current, args.source, args.fieldLabel, args.newTopic, args.language, args.voice),
+        FIELD_REGEN_SCHEMA,
+        { temperature: 0.85, thinkingBudget: 1000, model: PREMIUM_MODEL, signal },
+      )
+      return typeof raw?.value === 'string' ? raw.value : ''
+    },
+    [geminiKeys],
+  )
+
+  return { transcribe, generate, fromLibrary, generateVariations, regenerateField }
 }

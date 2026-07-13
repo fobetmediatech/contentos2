@@ -1,8 +1,15 @@
 import { describe, it, expect } from 'vitest'
-import { buildReelRemixPrompt } from './reelRemix'
+import { buildReelRemixPrompt, VARIATION_ANGLES, buildFieldRegenPrompt, FIELD_REGEN_SCHEMA } from './reelRemix'
 import type { VoiceProfile } from './voiceProfile'
+import type { ReelRewriteResult } from './reelRewrite'
 
 const SOURCE = { transcript: 'yeh reel viral ho gaya kyunki hook strong tha' }
+
+const CURRENT: ReelRewriteResult = {
+  spokenHook: 'this is the current hook',
+  beatScript: [{ beatLabel: 'Hook', script: 'beat one', onScreenText: 'overlay' }],
+  caption: 'cap', cta: 'follow', onScreenText: ['a'], altHooks: ['x', 'y', 'z'],
+}
 
 describe('buildReelRemixPrompt', () => {
   it('injects the new topic and preserves-structure instruction', () => {
@@ -28,5 +35,32 @@ describe('buildReelRemixPrompt', () => {
     const p = buildReelRemixPrompt(SOURCE, 'topic', 'hinglish', voice)
     expect(p).toContain('@creator')
     expect(p).toContain('HINGLISH')
+  })
+})
+
+describe('variation angles', () => {
+  it('exposes 3 distinct angles', () => {
+    expect(VARIATION_ANGLES.length).toBe(3)
+    expect(new Set(VARIATION_ANGLES).size).toBe(3)
+  })
+  it('appends the angle to the prompt when given', () => {
+    const p = buildReelRemixPrompt(SOURCE, 'topic', 'english', undefined, VARIATION_ANGLES[1])
+    expect(p).toContain(VARIATION_ANGLES[1])
+  })
+  it('omits the angle line when not given', () => {
+    const p = buildReelRemixPrompt(SOURCE, 'topic', 'english')
+    expect(p).not.toContain('For THIS version')
+  })
+})
+
+describe('buildFieldRegenPrompt', () => {
+  it('names the field, includes the current script + language directive', () => {
+    const p = buildFieldRegenPrompt(CURRENT, SOURCE, 'the spoken hook', 'topic', 'hinglish')
+    expect(p).toContain('the spoken hook')
+    expect(p).toContain('this is the current hook')
+    expect(p).toContain('HINGLISH')
+  })
+  it('schema requires a single value string', () => {
+    expect(FIELD_REGEN_SCHEMA.required).toEqual(['value'])
   })
 })

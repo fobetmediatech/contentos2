@@ -9,13 +9,26 @@
  */
 import type { ReelVideoAnalysis } from '../../store/singleReelStore'
 import type { VoiceProfile } from './voiceProfile'
-import type { TargetLanguage } from './reelRewrite'
+import type { TargetLanguage, ReelRewriteResult } from './reelRewrite'
 
 export interface RemixSource {
   /** The reference video's spoken transcript (verbatim). May be user-edited. */
   transcript: string
   /** IG-only structural beats from the deep video analysis. Absent for YouTube. */
   beats?: ReelVideoAnalysis['visual_beats']
+}
+
+/** Three fixed hook angles that make the 3 variations reliably distinct (not random twins). */
+export const VARIATION_ANGLES = [
+  'open with a curiosity or question hook',
+  'open with a bold, contrarian claim',
+  'open with a personal-story or "POV" hook',
+]
+
+export const FIELD_REGEN_SCHEMA = {
+  type: 'object',
+  properties: { value: { type: 'string' } },
+  required: ['value'],
 }
 
 function beatsBlock(source: RemixSource): string {
@@ -58,6 +71,7 @@ export function buildReelRemixPrompt(
   newTopic: string,
   language: TargetLanguage,
   voice?: VoiceProfile,
+  variationAngle?: string,
 ): string {
   const voiceSection = voice
     ? `## TARGET voice — @${voice.handle}
@@ -102,7 +116,7 @@ ${voiceRule}
 ${languageDirective(language)}
 - SCRIPT: Latin/Roman letters only. Romanize any Hindi as Hinglish; NEVER Devanagari or any non-Latin script in any field.
 - Preserve the reference's structure EXACTLY: same number of beats, same beat functions, same hook→…→CTA shape and pacing. Replace the SUBJECT with the new topic — never carry over the reference's specific examples, names, or claims.
-- spokenHook: the opening line (verbatim, ready to say to camera), about the NEW topic.
+- spokenHook: the opening line (verbatim, ready to say to camera), about the NEW topic.${variationAngle ? `\n- For THIS version, ${variationAngle}.` : ''}
 - beatScript: one entry per beat — beatLabel (its function), script (what they say, flowing on from the previous beat), onScreenText (the overlay).
 - caption: an Instagram caption for the new topic.
 - cta: a single call-to-action.
@@ -110,4 +124,46 @@ ${languageDirective(language)}
 - altHooks: exactly 3 ALTERNATIVE opening hooks, for A/B testing.
 
 Return only valid JSON matching the schema. Do not add commentary outside the JSON.`
+}
+
+function currentScriptBlock(r: ReelRewriteResult): string {
+  const beats = r.beatScript
+    .map((b, i) => `  Beat ${i + 1} [${b.beatLabel}]: ${b.script}${b.onScreenText ? ` (overlay: ${b.onScreenText})` : ''}`)
+    .join('\n')
+  return [
+    `Hook: ${r.spokenHook}`,
+    `Beats:\n${beats}`,
+    `Caption: ${r.caption}`,
+    `CTA: ${r.cta}`,
+    `On-screen: ${r.onScreenText.join(' | ')}`,
+  ].join('\n')
+}
+
+/** Prompt to regenerate ONE field of an existing script, coherent with the rest. Returns { value }. */
+export function buildFieldRegenPrompt(
+  current: ReelRewriteResult,
+  source: RemixSource,
+  fieldLabel: string,
+  newTopic: string,
+  language: TargetLanguage,
+  voice?: VoiceProfile,
+): string {
+  const lang = language === 'hinglish'
+    ? '- Write in natural romanized HINGLISH (Latin letters, never Devanagari).'
+    : '- Write in ENGLISH.'
+  return `You are refining ONE part of an existing short-form video script. Rewrite ONLY "${fieldLabel}" so it is fresh and DIFFERENT from the current version, while staying coherent with the rest of the script, the topic, and the reference structure.
+
+## New topic
+${newTopic}
+
+## Current script (keep everything EXCEPT "${fieldLabel}")
+${currentScriptBlock(current)}
+
+## Reference transcript (for pacing/structure only — do not reuse its subject)
+${source.transcript}
+${voice ? `\n## Voice — @${voice.handle}\nMatch this creator's cadence and energy.\n` : ''}
+## Rules
+${lang}
+- Latin/Roman letters only; romanize any Hindi as Hinglish; never Devanagari.
+- Return ONLY the new "${fieldLabel}" as JSON: { "value": "..." }. No other fields, no commentary.`
 }
