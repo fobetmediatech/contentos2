@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Wand2, Loader2, Library, Link2 } from 'lucide-react'
+import { Wand2, Loader2, Library, Link2, Users } from 'lucide-react'
 import { useReelRemix, type TranscribeResult } from '../hooks/useReelRemix'
 import { friendlyError } from '../lib/errorMessages'
 import { RemixLibraryPicker } from '../components/RemixLibraryPicker'
+import { CreatorMode } from '../components/CreatorMode'
 import { RemixVoicePicker, type VoiceChoice } from '../components/RemixVoicePicker'
 import { RemixResultPanel, type VariationSlot } from '../components/RemixResultPanel'
 import { fieldKey, fieldLabel, applyFieldValue, type FieldRef } from '../lib/remixFields'
@@ -21,7 +22,7 @@ export function ScriptStudioPage() {
   const abortRef = useRef<AbortController | null>(null)
 
   const [phase, setPhase] = useState<Phase>('input')
-  const [sourceMode, setSourceMode] = useState<'url' | 'library'>('url')
+  const [sourceMode, setSourceMode] = useState<'url' | 'library' | 'creator'>('url')
   const [url, setUrl] = useState('')
   const [ref_, setRef] = useState<TranscribeResult | null>(null)
   const [transcript, setTranscript] = useState('')
@@ -172,6 +173,10 @@ export function ScriptStudioPage() {
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm ${sourceMode === 'library' ? 'bg-[rgba(var(--accent-rgb),0.16)] text-[var(--color-accent-light)]' : 'text-secondary hover:text-primary'}`}>
             <Library size={14} /> Choose from library
           </button>
+          <button type="button" onClick={() => setSourceMode('creator')} disabled={phase !== 'input'}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm ${sourceMode === 'creator' ? 'bg-[rgba(var(--accent-rgb),0.16)] text-[var(--color-accent-light)]' : 'text-secondary hover:text-primary'}`}>
+            <Users size={14} /> Choose a creator
+          </button>
         </div>
 
         {sourceMode === 'url' ? (
@@ -186,13 +191,15 @@ export function ScriptStudioPage() {
               {phase === 'transcribing' ? 'Transcribing…' : 'Fetch & Transcribe'}
             </button>
           </div>
-        ) : (
+        ) : sourceMode === 'library' ? (
           <RemixLibraryPicker onPick={(reel) => void seedFromLibrary(reel)} />
+        ) : (
+          <CreatorMode />
         )}
       </section>
 
       {/* Step 2 — Review + inputs */}
-      {(phase === 'review' || phase === 'generating' || phase === 'result') && ref_ && (
+      {(phase === 'review' || phase === 'generating' || phase === 'result') && ref_ && sourceMode !== 'creator' && (
         <section className="rounded-xl border border-[rgba(var(--border-rgb),0.08)] bg-surface p-4 mb-4 space-y-4">
           <div>
             <div className="flex items-center justify-between mb-1.5">
@@ -232,7 +239,7 @@ export function ScriptStudioPage() {
       )}
 
       {/* Step 3 — Variations */}
-      {(phase === 'generating' || phase === 'result') && slots.length > 0 && (
+      {(phase === 'generating' || phase === 'result') && slots.length > 0 && sourceMode !== 'creator' && (
         <RemixResultPanel slots={slots} activeIndex={activeIndex} onSelect={setActiveIndex}
           regeneratingKey={regeneratingKey} onRegenerate={(f) => void onRegenerate(f)} onRetry={(i) => void onRetry(i)} />
       )}
