@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Clapperboard,
   Play,
@@ -17,6 +18,7 @@ import {
   MessageCircle,
   ExternalLink,
   X,
+  Wand2,
 } from 'lucide-react'
 import { corpus } from '../lib/corpusIdb'
 import type { ContentRecord } from '../lib/corpus'
@@ -58,6 +60,7 @@ export function GalleryPage() {
   // MemoryPage's cards lazy-load content — the gallery is a read-only corpus view.
   const [reels, setReels] = useState<ContentRecord[] | null>(null)
   const [selected, setSelected] = useState<ContentRecord | null>(null)
+  const navigate = useNavigate()
 
   useEffect(() => {
     let alive = true
@@ -100,7 +103,12 @@ export function GalleryPage() {
       ) : (
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           {reels.map((reel) => (
-            <ReelGalleryCard key={reel.id} reel={reel} onExpand={() => setSelected(reel)} />
+            <ReelGalleryCard
+              key={reel.id}
+              reel={reel}
+              onExpand={() => setSelected(reel)}
+              onRemix={() => navigate('/script-studio', { state: { shortCode: reel.id, transcript: reel.transcript } })}
+            />
           ))}
         </div>
       )}
@@ -172,7 +180,7 @@ function ReelThumb({ reel }: { reel: ContentRecord }) {
   )
 }
 
-function ReelGalleryCard({ reel, onExpand }: { reel: ContentRecord; onExpand: () => void }) {
+function ReelGalleryCard({ reel, onExpand, onRemix }: { reel: ContentRecord; onExpand: () => void; onRemix: () => void }) {
   return (
     <div className="bg-[var(--color-surface)] border border-[rgba(var(--border-rgb),0.08)] rounded-xl overflow-hidden flex flex-col">
       {/* First click expands into the modal (NOT a direct link out — the modal has that). The
@@ -204,6 +212,15 @@ function ReelGalleryCard({ reel, onExpand }: { reel: ContentRecord; onExpand: ()
         {reel.caption && (
           <p className="text-xs text-[var(--color-text-secondary)] leading-snug line-clamp-2">{reel.caption}</p>
         )}
+        <button
+          type="button"
+          onClick={onRemix}
+          disabled={!reel.transcript || !reel.transcript.trim()}
+          title={reel.transcript ? 'Remix this reel in Script Studio' : 'No transcript captured — cannot remix'}
+          className="mt-1 inline-flex items-center justify-center gap-1.5 text-xs font-medium rounded-lg border border-[rgba(var(--ai-rgb),0.30)] text-[var(--color-ai-tint)] px-3 py-1.5 hover:bg-[rgba(var(--ai-rgb),0.10)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          <Wand2 size={13} /> Remix this
+        </button>
       </div>
     </div>
   )
