@@ -53,7 +53,7 @@ import type { CompetitorResultPayload } from '../domain/chat'
 import { useRunsStore, selectActiveRuns, selectActiveRunOfKind } from '../store/runsStore'
 import { RunCockpit } from '../components/runs/RunCockpit'
 import { runToMessage } from './chatRunSnapshot'
-import { discoveryRunLabel } from './heavyRunLabels'
+import { discoveryRunLabel, repurposeRunLabel } from './heavyRunLabels'
 import { disposeController } from '../lib/runControllers'
 import type { RunKind } from '../domain/runs'
 
@@ -129,8 +129,6 @@ export function ChatPage() {
   // Repurpose run state — drives the live progress marker; the finished result is snapshotted
   // into the conversation (kind 'repurpose') by the effect below, then the store is reset.
   const repurposeStatus = useRepurposeStore((s) => s.status)
-  const repurposeConversationId = useRepurposeStore((s) => s.conversationId)
-  const repurposeError = useRepurposeStore((s) => s.error)
   const resetRepurpose = useRepurposeStore((s) => s.reset)
   // RunCockpit focus — tracks which pipeline pane is "active" for steering (Plan 2 uses this).
   // For Phase 1 it's just wired to the cockpit so the UI highlights the focused pane.
@@ -364,6 +362,12 @@ export function ChatPage() {
     if (run) useRunsStore.getState().updateRun(run.id, { progress: discoveryRunLabel(discoveryCurrentStep, discoveryStepProgressDetail) })
   }, [discoveryStatus, discoveryCurrentStep, discoveryStepProgressDetail, discoveryRunConversationId, activeConversationId])
 
+  // Progress-mirror: keep the repurpose run's cockpit pane label in sync with the live step.
+  useEffect(() => {
+    const run = selectActiveRunOfKind(useRunsStore.getState(), 'repurpose', activeConversationId)
+    if (run) useRunsStore.getState().updateRun(run.id, { progress: repurposeRunLabel(repurposeStatus) })
+  }, [repurposeStatus, activeConversationId])
+
   // Snapshot a finished repurpose run into the conversation, then reset the store. Armed only
   // while a real run is live so it fires once. The persisted payload carries everything the
   // result card needs, so it survives reload independent of the (reset) transient store.
@@ -390,6 +394,8 @@ export function ChatPage() {
         })
       }
       resetRepurpose()
+      const run = selectActiveRunOfKind(useRunsStore.getState(), 'repurpose', activeConversationId)
+      if (run) { useRunsStore.getState().removeRun(run.id); disposeController(run.id) }
     } else if (repurposeStatus === 'error' && repurposeArmedRef.current) {
       repurposeArmedRef.current = false
       const s = useRepurposeStore.getState()
@@ -399,6 +405,8 @@ export function ChatPage() {
         content: s.error || 'Could not repurpose this reel.',
       })
       resetRepurpose()
+      const run = selectActiveRunOfKind(useRunsStore.getState(), 'repurpose', activeConversationId)
+      if (run) { useRunsStore.getState().removeRun(run.id); disposeController(run.id) }
     }
   }, [repurposeStatus, addMessageTo, activeConversationId, resetRepurpose])
 
@@ -661,9 +669,6 @@ export function ChatPage() {
   // Only the most recent reel marker renders the live block (the store holds one run); older
   // markers no-op. Empty when no reel run has started this session.
   const lastReelMarkerId = [...conversationMessages].reverse().find((m) => m.type === 'reel')?.id
-  // Same one-live-run rule for repurpose: only the latest marker in the owning conversation
-  // renders the live progress block — older / cross-conversation markers no-op.
-  const lastRepurposeMarkerId = [...conversationMessages].reverse().find((m) => m.type === 'repurpose')?.id
   const isAnalysisRunning = status === 'running'
   const isAnalysisClarifying = status === 'clarifying'
   const isAnalysisDone = status === 'done'
@@ -854,29 +859,6 @@ export function ChatPage() {
                         </div>
                       )}
                     </Fragment>
-                  ) : null
-                ) : message.type === 'repurpose' ? (
-                  // Repurpose progress renders in place at the LATEST repurpose marker in the
-                  // owning conversation while the run is live; older / cross-conversation markers
-                  // no-op (mirrors the single-reel branch's last-marker + same-conversation guard).
-                  message.id === lastRepurposeMarkerId
-                  && repurposeConversationId === activeConversationId
-                  && (repurposeStatus === 'building-profile' || repurposeStatus === 'analyzing-source' || repurposeStatus === 'rewriting' || repurposeStatus === 'error') ? (
-                    <div key={message.id} className="my-2 text-sm text-muted flex items-center gap-2">
-                      {repurposeStatus === 'error' ? (
-                        <span className="text-[var(--color-accent)]">{repurposeError || 'Could not repurpose this reel.'}</span>
-                      ) : (
-                        <>
-                          <span className="inline-block w-3 h-3 rounded-full border-2 border-[var(--color-accent)] border-t-transparent animate-spin" />
-                          <span>
-                            {repurposeStatus === 'building-profile' && PIPELINE_REGISTRY.repurpose.steps[0]}
-                            {repurposeStatus === 'analyzing-source' && PIPELINE_REGISTRY.repurpose.steps[1]}
-                            {repurposeStatus === 'rewriting' && PIPELINE_REGISTRY.repurpose.steps[2]}
-                            …
-                          </span>
-                        </>
-                      )}
-                    </div>
                   ) : null
                 ) : (
                   <ChatMessage

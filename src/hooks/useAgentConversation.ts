@@ -292,21 +292,16 @@ export function useAgentConversation() {
     }
 
     if (name === 'repurpose_reel') {
-      const clientHandle = args.clientHandle ? `@${String(args.clientHandle)}` : 'this client'
-      addMessage({
-        role: 'assistant',
-        type: 'repurpose',
-        content: `Repurposing this reel for ${clientHandle}…`,
-      })
-      startRepurpose(
-        {
+      const convId = useConversationsStore.getState().activeId
+      const label = args.clientHandle ? `@${String(args.clientHandle)}` : 'client'
+      launchHeavyRun('repurpose', label, convId, 'Building voice profile…', (runSignal) => {
+        startRepurpose({
           sourceReelUrl: String(args.sourceReelUrl ?? ''),
           shortCode: args.shortCode ? String(args.shortCode) : undefined,
           clientHandle: args.clientHandle ? String(args.clientHandle) : undefined,
           pastedScripts: Array.isArray(args.pastedScripts) ? (args.pastedScripts as string[]) : [],
-        },
-        signal,
-      )
+        }, runSignal)
+      })
       return
     }
 
