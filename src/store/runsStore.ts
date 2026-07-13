@@ -25,7 +25,7 @@ export const useRunsStore = create<RunsState>()(
         const id = makeRunId(seq)
         set((s) => ({
           seq,
-          runs: { ...s.runs, [id]: { id, status: 'running', startedAt: 0, ...input } },
+          runs: { ...s.runs, [id]: { id, status: 'running', startedAt: Date.now(), ...input } },
         }))
         return id
       },

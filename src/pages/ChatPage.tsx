@@ -154,7 +154,10 @@ export function ChatPage() {
   const reelActiveRef = useRef(activeHandles.length > 0)
   const discoveryResultArmedRef = useRef(false) // armed while a discovery run is live; fires once on done
   const reelContentArmedRef = useRef(false) // armed while a reel run is live; harvests content + snapshots once on synthesis done
-  const reelSnapshotFiredRef = useRef(false) // prevents double-snapshot when launchReelAnalysis runs snapshotCurrentReelRun after the effect already fired
+  // reelSnapshotFiredRef removed (C1 fix): per-run dedup is guaranteed by the terminal-cleanup
+  // effect's `if (!run) return` + `removeRun`. The boolean ref was reset only in launchReelAnalysis,
+  // so agent-loop reel runs never reset it → run #2 was silently dropped. Dedup lives in the run
+  // registry now (once the run is removed, the effect no-ops for that run).
   const repurposeArmedRef = useRef(false) // armed while a repurpose run is live; snapshots once on done
   // Registry snapshot: tracks run ids already snapshotted so we never double-add.
   const snapshottedRunIds = useRef<Set<string>>(new Set())
@@ -539,6 +542,15 @@ export function ChatPage() {
   // Reset the transient analysis state (results live in the conversation's messages, so this
   // just clears the live status/selection without touching history).
   const freshenAnalysis = () => {
+    // I1 fix: remove any live competitor run before calling startChat(). startChat() transitions
+    // the analysis status from 'clarifying' → 'chatting' — a non-terminal state — so the
+    // competitor done/error effect never fires, leaving a zombie "Waiting for your answer…" pane.
+    const competitorConvId = useAnalysisStore.getState().runConversationId ?? activeConversationId
+    const abandonedCompRun = selectActiveRunOfKind(useRunsStore.getState(), 'competitor', competitorConvId)
+    if (abandonedCompRun) {
+      useRunsStore.getState().removeRun(abandonedCompRun.id)
+      disposeController(abandonedCompRun.id)
+    }
     startChat()
     resetDiscovery()
     setSelectedHandles([])
@@ -548,16 +560,15 @@ export function ChatPage() {
   // Reads the live store (getState) so it's accurate at call time.
   // Guard: only a terminal run with a known home conversation snapshots — an in-flight or
   // never-started run is skipped (interrupted runs are intentionally dropped).
-  // Double-snapshot guard: reelSnapshotFiredRef tracks whether the effect (or a prior call)
-  // already snapshotted this run. Callers that run after the effect (launchReelAnalysis,
-  // handleStartOver) will be no-ops, preventing a duplicate result message.
+  // Per-run dedup is provided by the caller (terminal-cleanup effect): it guards with
+  // `if (!run) return` and immediately calls removeRun, so this function fires at most
+  // once per run. No boolean ref needed — that guard was reset only in launchReelAnalysis
+  // and silently dropped agent-path run #2 (C1 fix).
   const snapshotCurrentReelRun = () => {
-    if (reelSnapshotFiredRef.current) return
     const s = useReelAnalysisStore.getState()
     const terminal =
       s.synthesisStatus === 'done' || s.synthesisStatus === 'failed'
     if (!s.reelConversationId || s.activeHandles.length === 0 || !terminal) return
-    reelSnapshotFiredRef.current = true
     addMessageTo(s.reelConversationId, {
       role: 'assistant',
       type: 'result',
@@ -583,7 +594,7 @@ export function ChatPage() {
     const targetId = reelConversationId ?? activeConversationId
     const run = selectActiveRunOfKind(useRunsStore.getState(), 'reel', targetId)
     if (!run) return
-    snapshotCurrentReelRun() // idempotent via reelSnapshotFiredRef
+    snapshotCurrentReelRun() // once per run: guarded by `if (!run) return` + removeRun above
     useRunsStore.getState().removeRun(run.id)
     disposeController(run.id)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -663,9 +674,8 @@ export function ChatPage() {
     const convId = conversationId ?? activeConversationId
     setSelectedHandles([])
     // The dedicated terminal-cleanup effect snapshots the previous run automatically before it
-    // is removed; no manual snapshotCurrentReelRun() call needed here. Reset the guard so the
-    // NEW run can snapshot when it completes.
-    reelSnapshotFiredRef.current = false
+    // is removed; no manual snapshotCurrentReelRun() call needed here. Per-run dedup is
+    // provided by `if (!run) return` + removeRun in the effect — no boolean ref needed.
     reelActiveRef.current = true
     setReelConversationId(convId)
     launchHeavyRun('reel', handles.map((h) => `@${h}`).join(', '), convId, 'Scraping reels…', (runSignal) => {
