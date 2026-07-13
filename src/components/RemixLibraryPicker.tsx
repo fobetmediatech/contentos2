@@ -2,17 +2,7 @@ import { useEffect, useState } from 'react'
 import { Search } from 'lucide-react'
 import { corpus } from '../lib/corpusIdb'
 import type { ContentRecord } from '../lib/corpus'
-
-/** Pure: reels that have a transcript, matching the query in caption or handle. */
-// eslint-disable-next-line react-refresh/only-export-components -- pure helper, unit-tested directly (see .test.ts)
-export function filterReels(reels: ContentRecord[], query: string): ContentRecord[] {
-  const q = query.trim().toLowerCase()
-  return reels.filter((r) => {
-    if (!r.transcript || !r.transcript.trim()) return false
-    if (!q) return true
-    return (r.caption ?? '').toLowerCase().includes(q) || (r.creatorUsername ?? '').toLowerCase().includes(q)
-  })
-}
+import { filterReels } from './remixLibraryView'
 
 /** Searchable list of corpus reels; picking one seeds the remix reference (free — has transcript). */
 export function RemixLibraryPicker({ onPick }: { onPick: (reel: { shortCode: string; transcript: string }) => void }) {

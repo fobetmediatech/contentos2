@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { filterReels } from './RemixLibraryPicker'
+import { filterReels } from './remixLibraryView'
 import type { ContentRecord } from '../lib/corpus'
 
 const rec = (over: Partial<ContentRecord>): ContentRecord => ({
