@@ -9,6 +9,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useShallow } from 'zustand/react/shallow'
 import { Bot, ChevronDown, Send, Video, Paperclip, X } from 'lucide-react'
 import { useAnalysisStore } from '../store/analysisStore'
 import { useConversationsStore, sortConversations } from '../store/conversationsStore'
@@ -51,6 +52,11 @@ import { MAX_INPUT_CHARS } from '../lib/constants'
 import { readAttachment, ACCEPT_ATTR, type ChatAttachment } from '../lib/attachment'
 import { TARGET_PER_CATEGORY } from '../hooks/useCompetitorAnalysis'
 import type { CompetitorResultPayload } from '../domain/chat'
+import { useRunsStore, selectActiveRuns } from '../store/runsStore'
+import { RunCockpit } from '../components/runs/RunCockpit'
+import { runToMessage } from './chatRunSnapshot'
+import { disposeController } from '../lib/runControllers'
+import type { RunKind } from '../domain/runs'
 
 // Slim a profile before it's snapshotted into a persisted result message: drop the heavy
 // fields the result cards never render (bio, related handles, top hashtags) so the localStorage
@@ -133,6 +139,10 @@ export function ChatPage() {
   const transcriptStatus = useTranscriptStore((s) => s.status)
   const resetTranscript = useTranscriptStore((s) => s.reset)
 
+  // RunCockpit focus — tracks which pipeline pane is "active" for steering (Plan 2 uses this).
+  // For Phase 1 it's just wired to the cockpit so the UI highlights the focused pane.
+  const [focusedKind, setFocusedKind] = useState<RunKind | null>(null)
+
   const [inputText, setInputText] = useState('')
   // The tool armed via a "/" pick or a chip tap. While set, the input shows the
   // tool's placeholder and the user types only their own values; handleSend
@@ -154,6 +164,8 @@ export function ChatPage() {
   const reelContentArmedRef = useRef(false) // armed while a reel run is live; harvests content once on synthesis done
   const repurposeArmedRef = useRef(false) // armed while a repurpose run is live; snapshots once on done
   const transcriptArmedRef = useRef(false) // armed while a transcript run is live; snapshots once on done
+  // Registry snapshot: tracks run ids already snapshotted so we never double-add.
+  const snapshotedRunIds = useRef<Set<string>>(new Set())
 
   // Selection state — shared across competitor + discovery results
   const [selectedHandles, setSelectedHandles] = useState<string[]>([])
@@ -421,6 +433,24 @@ export function ChatPage() {
     }
   }, [transcriptStatus, addMessageTo, activeConversationId, resetTranscript])
 
+  // Registry snapshot effect: watches ALL runs in the store; when any run reaches a terminal
+  // state (done/failed) and hasn't been snapshotted yet, adds it to the correct conversation
+  // as a result/error message, then cleans up the run record + its AbortController.
+  // This is the NEW path for runs managed via runsStore (transcript, single-reel, etc.).
+  // The old per-store effects above still handle competitor/discovery/repurpose via their own
+  // stores; they run in parallel and will be cleaned up in Task 11.
+  const runs = useRunsStore((s) => s.runs)
+  useEffect(() => {
+    for (const run of Object.values(runs)) {
+      if (run.status !== 'done' && run.status !== 'failed') continue
+      if (snapshotedRunIds.current.has(run.id)) continue
+      snapshotedRunIds.current.add(run.id)
+      addMessageTo(run.conversationId, runToMessage(run))
+      useRunsStore.getState().removeRun(run.id)
+      disposeController(run.id)
+    }
+  }, [runs, addMessageTo])
+
   // Reel → corpus content: when a reel run's synthesis finishes, harvest each analyzed reel
   // into the corpus as content tied to its creator (the "content" half of the corpus). Armed
   // while the run is live so it fires exactly once — and NOT on reload, where the reel store
@@ -649,6 +679,13 @@ export function ChatPage() {
     setReelConversationId(activeConversationId) // re-bind in case the store reset cleared it
     startReelAnalysis(handles)
   }
+
+  // Active runs for the current conversation — used for the inline single-run progress block
+  // and passed to RunCockpit. useShallow prevents new-array identity from triggering rerenders.
+  const activeRunsForConversation = useRunsStore(
+    useShallow((s) => selectActiveRuns(s, activeConversationId ?? '')),
+  )
+  const singleActiveRun = activeRunsForConversation.length === 1 ? activeRunsForConversation[0] : null
 
   // Derived booleans
   const hasMessages = conversationMessages.length > 0
@@ -961,6 +998,31 @@ export function ChatPage() {
           </div>
         )}
       </div>
+
+      {/* ── RunCockpit + inline single-run progress ─────────────────────── */}
+      {/* RunCockpit renders a grid/counter when 2+ runs are active; returns null for 0 or 1. */}
+      {activeConversationId && (
+        <div className="flex-shrink-0 px-4 max-w-4xl mx-auto w-full">
+          <RunCockpit
+            conversationId={activeConversationId}
+            focusedKind={focusedKind}
+            onFocusKind={setFocusedKind}
+          />
+          {/* When exactly one run is active (cockpit returns null), show a minimal inline
+              progress row so the user can see the run's current step. */}
+          {singleActiveRun && (
+            <div className="flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-surface border border-[rgba(var(--border-rgb),0.08)] text-sm mb-2">
+              <span className="relative flex h-2.5 w-2.5 flex-shrink-0">
+                <span className="absolute inline-flex h-full w-full rounded-full bg-[var(--color-accent)] opacity-60 animate-ping" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[var(--color-accent)]" />
+              </span>
+              <span className="text-secondary truncate">
+                {singleActiveRun.progress || singleActiveRun.targetLabel || 'Running…'}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Input area — blends into the chat canvas; the field is a soft pill ── */}
       <div className="flex-shrink-0 bg-chai px-4 pt-2 pb-[max(12px,env(safe-area-inset-bottom))]">
