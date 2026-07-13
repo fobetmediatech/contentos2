@@ -33,6 +33,9 @@ export const ACTORS = {
   // input: `search` + `searchType` does account search; `directUrls` does profile/posts. The two
   // input shapes are mutually exclusive (never pass both). Output rows carry `username`.
   SEARCH_SCRAPER: 'apify~instagram-scraper',
+  // YOUTUBE_TRANSCRIPT pulls a YouTube video/Short's caption transcript (single `text` field).
+  // Confirmed via spike: input { startUrls: [url], timestamps: false }; output item has `text`.
+  YOUTUBE_TRANSCRIPT: 'topaz_sharingan~Youtube-Transcript-Scraper-1',
 } as const
 
 /**
@@ -122,4 +125,14 @@ export function buildSearchScraperInput(keyword: string, searchLimit: number): R
     searchLimit,
     resultsType: 'details',
   }
+}
+
+/**
+ * Build the input for the YouTube Transcript actor (topaz_sharingan~Youtube-Transcript-Scraper-1).
+ * `startUrls` takes bare URL strings (spike-confirmed); timestamps:false → one joined transcript.
+ *
+ * @param url  A YouTube Short/video URL (youtube.com/shorts/…, youtu.be/…, or watch?v=…)
+ */
+export function buildYoutubeTranscriptInput(url: string): Record<string, unknown> {
+  return { startUrls: [url], timestamps: false }
 }
