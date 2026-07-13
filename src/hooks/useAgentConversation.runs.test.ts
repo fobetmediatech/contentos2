@@ -1,5 +1,5 @@
 // Verifies a fan-out transcript dispatch creates N runs and does not abort siblings.
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { useRunsStore, selectActiveRuns } from '../store/runsStore'
 // Import the dispatch helper. If dispatchTool is not individually exported, extract the
 // transcript/single-reel run-launch into a pure helper `launchReelUrlRuns(kind, urls, conversationId, start)` in
