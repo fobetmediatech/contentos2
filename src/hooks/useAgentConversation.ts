@@ -20,13 +20,13 @@ import { useConversationsStore } from '../store/conversationsStore'
 import { useDiscoveryStore } from '../store/discoveryStore'
 import { useReelAnalysisStore } from '../store/reelAnalysisStore'
 import { useKeysStore } from '../store/keysStore'
-import { useRunsStore } from '../store/runsStore'
 import { useCompetitorAnalysis } from './useCompetitorAnalysis'
 import { useLocationDiscovery } from './useLocationDiscovery'
 import { useReelAnalysis } from './useReelAnalysis'
 import { useSingleReelAnalysis } from './useSingleReelAnalysis'
 import { useRepurposeReel } from './useRepurposeReel'
 import { useTranscriptAnalysis } from './useTranscriptAnalysis'
+import { launchReelUrlRuns } from './agentRunLaunch'
 import { callGeminiWithTools, callGeminiContent, GeminiError } from '../ai/gemini'
 import type { GeminiTurn } from '../ai/gemini'
 import type { ContentContext } from '../ai/prompts'
@@ -285,15 +285,9 @@ export function useAgentConversation() {
     }
 
     if (name === 'analyze_single_reel') {
-      const reelUrl = String(args.reelUrl ?? '')
-      addMessage({ role: 'assistant', type: 'single-reel', content: `Analyzing this reel: ${reelUrl}` })
-      const singleReelRunId = useRunsStore.getState().createRun({
-        conversationId: useConversationsStore.getState().activeId,
-        kind: 'single-reel',
-        targetLabel: reelUrl,
-        progress: '',
-      })
-      startSingleReel(singleReelRunId, reelUrl, signal)
+      const urls = (args.reelUrls as string[] | undefined) ?? [String(args.reelUrl ?? '')].filter(Boolean)
+      const convId = useConversationsStore.getState().activeId ?? ''
+      launchReelUrlRuns('single-reel', urls, convId, (rid, url, sig) => void startSingleReel(rid, url, sig))
       return
     }
 
@@ -317,15 +311,9 @@ export function useAgentConversation() {
     }
 
     if (name === 'get_reel_transcript') {
-      const reelUrl = String(args.reelUrl ?? '')
-      addMessage({ role: 'assistant', type: 'transcript', content: `Transcribing this reel: ${reelUrl}` })
-      const transcriptRunId = useRunsStore.getState().createRun({
-        conversationId: useConversationsStore.getState().activeId,
-        kind: 'transcript',
-        targetLabel: reelUrl,
-        progress: '',
-      })
-      startTranscript(transcriptRunId, reelUrl, signal)
+      const urls = (args.reelUrls as string[] | undefined) ?? [String(args.reelUrl ?? '')].filter(Boolean)
+      const convId = useConversationsStore.getState().activeId ?? ''
+      launchReelUrlRuns('transcript', urls, convId, (rid, url, sig) => void startTranscript(rid, url, sig))
       return
     }
 
