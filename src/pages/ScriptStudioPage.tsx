@@ -227,7 +227,7 @@ export function ScriptStudioPage() {
 
       {/* Step 3 — Result (violet AI tint) */}
       {phase === 'result' && rewrite && (
-        <section className="rounded-xl border border-[rgba(167,139,250,0.3)] bg-[rgba(167,139,250,0.06)] p-4 space-y-4">
+        <section className="rounded-xl border border-[rgba(var(--ai-rgb),0.30)] bg-[rgba(var(--ai-rgb),0.06)] p-4 space-y-4">
           <ResultField label="Hook" text={rewrite.spokenHook} />
           {rewrite.altHooks.some((h) => h.trim()) && (
             <div>
@@ -242,7 +242,7 @@ export function ScriptStudioPage() {
             <ol className="mt-1 space-y-2">
               {rewrite.beatScript.map((b, i) => (
                 <li key={i} className="text-sm">
-                  <span className="text-[#A78BFA] font-medium">{b.beatLabel}</span>
+                  <span className="text-[var(--color-ai-tint)] font-medium">{b.beatLabel}</span>
                   <p className="text-primary">{b.script}</p>
                   {b.onScreenText && <p className="text-muted text-xs mt-0.5">On-screen: {b.onScreenText}</p>}
                 </li>
@@ -263,7 +263,7 @@ export function ScriptStudioPage() {
 function FieldHeader({ label, text }: { label: string; text: string }) {
   return (
     <div className="flex items-center justify-between">
-      <span className="text-xs font-semibold uppercase tracking-wide text-[#A78BFA]">{label}</span>
+      <span className="text-xs font-semibold uppercase tracking-wide text-[var(--color-ai-tint)]">{label}</span>
       <CopyButton text={text} />
     </div>
   )
