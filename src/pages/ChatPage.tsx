@@ -20,8 +20,8 @@ import { useCompetitorAnalysis } from '../hooks/useCompetitorAnalysis'
 import { useActivePipeline } from '../hooks/useActivePipeline'
 import { useReelAnalysis } from '../hooks/useReelAnalysis'
 import { useReelAnalysisStore } from '../store/reelAnalysisStore'
-import { ChatMessage, ProgressBubble, TypingIndicator } from '../components/ChatMessage'
-import { useElapsedTime, formatElapsed } from '../hooks/useElapsedTime'
+import { ChatMessage, TypingIndicator } from '../components/ChatMessage'
+
 import { ClarificationCard } from '../components/ClarificationCard'
 import { CompetitorResultMessage } from '../components/CompetitorResultMessage'
 import { DiscoveryResultMessage } from '../components/DiscoveryResultMessage'
@@ -31,7 +31,7 @@ import { SingleReelResultMessage } from '../components/SingleReelResultMessage'
 import RepurposeResultMessage from '../components/RepurposeResultMessage'
 import { TranscriptResultMessage } from '../components/TranscriptResultMessage'
 import { useRepurposeStore } from '../store/repurposeStore'
-import { PIPELINE_REGISTRY } from '../tools/registry'
+
 import { SlashCommandMenu } from '../components/SlashCommandMenu'
 import { CHAT_TOOL_COMMANDS } from '../shared/utils/toolCommands'
 import type { ChatToolCommand } from '../shared/utils/toolCommands'
@@ -121,7 +121,7 @@ export function ChatPage() {
   // useConversation wizard is retired). Input stays live; a new message steers (latest-wins).
   const agentConv = useAgentConversation()
   const { analyze, answerClarification, isPending: clarificationPending } = useCompetitorAnalysis()
-  const { startAnalysis: startReelAnalysis, activeHandles, creatorStates, synthesisStatus, synthesis, synthesisError, reset: resetReel } = useReelAnalysis()
+  const { startAnalysis: startReelAnalysis, activeHandles, creatorStates, synthesisStatus, reset: resetReel } = useReelAnalysis()
   // Which conversation the current reel run belongs to — gates the live block to that chat and
   // routes its snapshot there on supersede (results-as-messages parity with competitor/discovery).
   const reelConversationId = useReelAnalysisStore((s) => s.reelConversationId)
@@ -469,26 +469,7 @@ export function ChatPage() {
       reelContentArmedRef.current = false
       void useCorpusStore.getState().rememberContent(harvestReelContent(creatorStates, Date.now())).catch(() => {})
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [synthesisStatus, creatorStates])
-
-  // Reel-run cockpit cleanup: fires on every terminal synthesisStatus ('done' OR 'failed'),
-  // decoupled from the arming sequence above. This covers the direct-to-failed path in
-  // useReelAnalysis (env/single-reel-fn unavailable) that sets synthesisStatus straight to
-  // 'failed' WITHOUT ever passing through 'running' — which meant reelContentArmedRef was
-  // never armed and the cockpit pane was never removed (ghost pane stuck open forever).
-  // By acting only when an active reel run still exists in the registry and removeRun
-  // deletes it, this fires exactly once per run and covers both normal and direct-fail paths.
-  useEffect(() => {
-    if (synthesisStatus !== 'done' && synthesisStatus !== 'failed') return
-    const targetId = reelConversationId ?? activeConversationId
-    const run = selectActiveRunOfKind(useRunsStore.getState(), 'reel', targetId)
-    if (!run) return
-    snapshotCurrentReelRun() // idempotent via reelSnapshotFiredRef
-    useRunsStore.getState().removeRun(run.id)
-    disposeController(run.id)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [synthesisStatus, reelConversationId, activeConversationId])
 
   // Scroll to bottom when content changes, but only when the user is near the bottom.
   // When they've scrolled up to read history, auto-scroll would yank them away.
@@ -589,6 +570,25 @@ export function ChatPage() {
     })
   }
 
+  // Reel-run cockpit cleanup: fires on every terminal synthesisStatus ('done' OR 'failed'),
+  // decoupled from the arming sequence above. This covers the direct-to-failed path in
+  // useReelAnalysis (env/single-reel-fn unavailable) that sets synthesisStatus straight to
+  // 'failed' WITHOUT ever passing through 'running' — which meant reelContentArmedRef was
+  // never armed and the cockpit pane was never removed (ghost pane stuck open forever).
+  // By acting only when an active reel run still exists in the registry and removeRun
+  // deletes it, this fires exactly once per run and covers both normal and direct-fail paths.
+  // NOTE: Must be declared after snapshotCurrentReelRun (a const — not hoisted).
+  useEffect(() => {
+    if (synthesisStatus !== 'done' && synthesisStatus !== 'failed') return
+    const targetId = reelConversationId ?? activeConversationId
+    const run = selectActiveRunOfKind(useRunsStore.getState(), 'reel', targetId)
+    if (!run) return
+    snapshotCurrentReelRun() // idempotent via reelSnapshotFiredRef
+    useRunsStore.getState().removeRun(run.id)
+    disposeController(run.id)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [synthesisStatus, reelConversationId, activeConversationId])
+
   const handleStartOver = () => {
     // The dedicated terminal-cleanup effect snapshots any finished reel run automatically
     // before it is removed from the cockpit; no manual snapshotCurrentReelRun() call needed here.
@@ -629,7 +629,9 @@ export function ChatPage() {
   }
 
   const handleSwitchConversation = (id: string) => {
-    // 2.2: abort any in-flight run so it doesn't complete and write results into the new conversation.
+    // 2.2: abort the planning-turn Gemini call on conversation switch. Heavy cockpit runs
+    // (competitor/discovery/reel/repurpose) are conversation-scoped — they continue and
+    // snapshot their results into the conversation they started in.
     agentConv.abort()
     switchConversation(id)
     freshenAnalysis()
@@ -700,19 +702,6 @@ export function ChatPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state])
 
-  // Pipeline-targeted retry: re-fire the reel pipeline for the SAME handles directly (no agent
-  // loop / re-routing). Used by the cockpit pane Retry button if exposed.
-  const handleRetryReels = () => {
-    const handles = [...activeHandles]
-    if (handles.length === 0) return
-    const convId = reelConversationId ?? activeConversationId
-    setReelConversationId(convId) // re-bind in case the store reset cleared it
-    reelSnapshotFiredRef.current = false // reset guard for the retry run
-    launchHeavyRun('reel', handles.map((h) => `@${h}`).join(', '), convId, 'Scraping reels…', (runSignal) => {
-      startReelAnalysis(handles, runSignal)
-    })
-  }
-
   // Active runs for the current conversation — used for the inline single-run progress block
   // and passed to RunCockpit. useShallow prevents new-array identity from triggering rerenders.
   const activeRunsForConversation = useRunsStore(
@@ -730,9 +719,6 @@ export function ChatPage() {
   const showInlineContent = isAnalysisRunning || isAnalysisClarifying || isAnalysisDone ||
     isDiscoveryRunning || isDiscoveryDone
   const isReelRunning = activeHandles.length > 0 && synthesisStatus !== 'done' && synthesisStatus !== 'failed'
-  // Live elapsed timers — the honest "how long has this been running" signal for each pipeline.
-  const analysisElapsed = useElapsedTime(isAnalysisRunning)
-  const discoveryElapsed = useElapsedTime(isDiscoveryRunning)
 
   // When the pipeline pauses for a clarification, pull the card into view even if the user
   // scrolled up — otherwise the run silently stalls awaiting an answer they can't see.

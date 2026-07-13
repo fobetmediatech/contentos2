@@ -58,10 +58,10 @@ export function useAgentConversation() {
   const [isThinking, setIsThinking] = useState(false)
   const thinkingRef = useRef(false) // ref mirror of isThinking, readable synchronously in sendMessage
   const clarifyTurnsRef = useRef(0)
-  // ONE controller per active run. It deliberately OUTLIVES the turn: a pipeline dispatch is
-  // fire-and-forget (analyze/discover return before the scrape finishes), so the controller
-  // must stay live for the next message to abort the still-running scrape. That persistence
-  // is what makes latest-wins a genuine steer and not just a cancel of the planning call.
+  // Planning-turn abort controller only. Heavy pipeline runs (competitor/discovery/reel/repurpose)
+  // are conversation-scoped and own their signals via registerController — they survive new
+  // messages and self-manage through the cockpit panes. currentRun only gates the Gemini
+  // planning call (runAgentTurn) and the 'answer' content-copy path.
   const currentRun = useRef<AbortController | null>(null)
 
   useEffect(() => () => currentRun.current?.abort(), [])
@@ -193,9 +193,8 @@ export function useAgentConversation() {
       if (controller.signal.aborted) return
       bot(agentError(err), 'error')
     } finally {
-      // Keep currentRun pointing at this controller so a fire-and-forget scrape stays
-      // cancellable by the next message. Only the LATEST turn owns the thinking state — a
-      // superseded turn's finally must not clear the indicator the new turn just turned on.
+      // Only the LATEST planning turn owns the thinking state — a superseded turn's finally
+      // must not clear the indicator the new turn just turned on.
       if (currentRun.current === controller) {
         thinkingRef.current = false
         setIsThinking(false)
@@ -236,14 +235,13 @@ export function useAgentConversation() {
 
       case 'dispatch':
         clarifyTurnsRef.current = 0
-        await dispatchTool(action, signal)
+        await dispatchTool(action)
         return
     }
   }
 
   const dispatchTool = async (
     action: Extract<AgentAction, { type: 'dispatch' }>,
-    signal: AbortSignal,
   ) => {
     const { name, args } = action
 
