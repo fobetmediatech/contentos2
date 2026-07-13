@@ -10,38 +10,12 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { supabaseStorage } from './supabaseStorage'
 
-// Keep in sync with api/_lib/singleReelPrompt.ts
-// (app tsconfig.app.json includes only "src" — cannot import across the api/ boundary at build time)
-export interface ReelSegment {
-  start: number // seconds
-  text: string
-}
-
-export interface ReelVideoAnalysis {
-  duration_s: number | null
-  aspect_ratio: string
-  dominant_framing: string
-  cuts_count: number | null
-  text_overlay_density: string
-  captions_present: boolean | null
-  trending_audio_hint: string
-  t0_frame: string
-  visual_beats: Array<{ t_start: number | null; t_end: number | null; on_screen: string; function: string }>
-  notable_moments: string[]
-}
-
-export interface ReelExtraction {
-  transcript: string
-  segments: ReelSegment[]
-  videoAnalysis: ReelVideoAnalysis
-}
+// Types moved to src/domain/reel.ts (Task 6). Re-exported here for backward compat
+// until Task 11 removes this store. DO NOT import directly from here in new code.
+export type { ReelSegment, ReelVideoAnalysis, ReelExtraction, SingleReelResult } from '../domain/reel'
+import type { SingleReelResult } from '../domain/reel'
 
 export type SingleReelStatus = 'idle' | 'running' | 'done' | 'failed'
-
-/** The serverless result: extraction (transcript/segments/videoAnalysis) + markdown case study. */
-export interface SingleReelResult extends ReelExtraction {
-  markdown: string
-}
 
 interface SingleReelState {
   status: SingleReelStatus

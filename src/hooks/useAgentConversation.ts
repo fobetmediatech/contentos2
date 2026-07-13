@@ -286,10 +286,14 @@ export function useAgentConversation() {
 
     if (name === 'analyze_single_reel') {
       const reelUrl = String(args.reelUrl ?? '')
-      // The hook (useSingleReelAnalysis) calls startRun internally (sets status + tags the
-      // conversation), so we only add the chat marker and fire it — never call startRun here.
       addMessage({ role: 'assistant', type: 'single-reel', content: `Analyzing this reel: ${reelUrl}` })
-      startSingleReel(reelUrl, signal)
+      const singleReelRunId = useRunsStore.getState().createRun({
+        conversationId: useConversationsStore.getState().activeId,
+        kind: 'single-reel',
+        targetLabel: reelUrl,
+        progress: '',
+      })
+      startSingleReel(singleReelRunId, reelUrl, signal)
       return
     }
 

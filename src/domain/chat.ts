@@ -14,6 +14,7 @@ import type { CreatorAnalysisState, SynthesisOutput } from '../store/reelAnalysi
 import type { VoiceProfile } from '../ai/prompts/voiceProfile'
 import type { ReelRewriteResult } from '../ai/prompts/reelRewrite'
 import type { TranscriptSegment } from '../store/transcriptStore'
+import type { SingleReelResult } from './reel'
 
 export type CompetitorResultPayload = {
   kind: 'competitor'
@@ -74,12 +75,20 @@ export type TranscriptResultPayload = {
   segments: TranscriptSegment[]
 }
 
+export interface SingleReelResultPayload {
+  kind: 'single-reel'
+  reelUrl: string
+  shortCode: string | null
+  result: SingleReelResult
+}
+
 export type ResultPayload =
   | CompetitorResultPayload
   | DiscoveryResultPayload
   | ReelResultPayload
   | RepurposeResultPayload
   | TranscriptResultPayload
+  | SingleReelResultPayload
 
 export interface ChatMessage {
   /** Stable unique id for React keys — monotonic, assigned by addMessage. */
