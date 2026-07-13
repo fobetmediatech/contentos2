@@ -79,3 +79,13 @@ export function selectRunsByKind(runs: RunRecord[]): Map<RunKind, RunRecord[]> {
   }
   return map
 }
+
+export function selectActiveRunOfKind(
+  state: { runs: Record<RunId, RunRecord> },
+  kind: RunKind,
+  conversationId: string,
+): RunRecord | undefined {
+  return Object.values(state.runs)
+    .filter((r) => r.kind === kind && r.conversationId === conversationId && (r.status === 'running' || r.status === 'queued'))
+    .sort((a, b) => a.startedAt - b.startedAt)[0]
+}
