@@ -53,7 +53,7 @@ import type { CompetitorResultPayload } from '../domain/chat'
 import { useRunsStore, selectActiveRuns, selectActiveRunOfKind } from '../store/runsStore'
 import { RunCockpit } from '../components/runs/RunCockpit'
 import { runToMessage } from './chatRunSnapshot'
-import { discoveryRunLabel, repurposeRunLabel } from './heavyRunLabels'
+import { competitorRunLabel, discoveryRunLabel, repurposeRunLabel } from './heavyRunLabels'
 import { disposeController } from '../lib/runControllers'
 import type { RunKind } from '../domain/runs'
 
@@ -309,6 +309,12 @@ export function ChatPage() {
           .catch(() => {})
       }
       setStatus('chatting')
+      const runDone = selectActiveRunOfKind(useRunsStore.getState(), 'competitor', competitorRunConversationId ?? activeConversationId)
+      if (runDone) { useRunsStore.getState().removeRun(runDone.id); disposeController(runDone.id) }
+    } else if (status === 'error' && competitorResultArmedRef.current) {
+      competitorResultArmedRef.current = false
+      const runErr = selectActiveRunOfKind(useRunsStore.getState(), 'competitor', competitorRunConversationId ?? activeConversationId)
+      if (runErr) { useRunsStore.getState().removeRun(runErr.id); disposeController(runErr.id) }
     }
   }, [status, competitors, summary, niche, candidateProfiles, analysisDidExpand, analysisUnverified, addMessageTo, competitorRunConversationId, activeConversationId, setStatus])
 
@@ -371,6 +377,13 @@ export function ChatPage() {
     const run = selectActiveRunOfKind(useRunsStore.getState(), 'repurpose', targetId)
     if (run) useRunsStore.getState().updateRun(run.id, { progress: repurposeRunLabel(repurposeStatus) })
   }, [repurposeStatus, repurposeConversationId, activeConversationId])
+
+  // Progress-mirror: keep the competitor run's cockpit pane label in sync with the live step.
+  useEffect(() => {
+    const targetId = competitorRunConversationId ?? activeConversationId
+    const run = selectActiveRunOfKind(useRunsStore.getState(), 'competitor', targetId)
+    if (run) useRunsStore.getState().updateRun(run.id, { progress: competitorRunLabel(status, currentStep, stepProgressDetail) })
+  }, [status, currentStep, stepProgressDetail, competitorRunConversationId, activeConversationId])
 
   // Snapshot a finished repurpose run into the conversation, then reset the store. Armed only
   // while a real run is live so it fires once. The persisted payload carries everything the
@@ -882,37 +895,21 @@ export function ChatPage() {
               {/* Typing indicators */}
               {agentConv.isThinking && <TypingIndicator />}
 
-              {/* ── Competitor analysis progress ──────────────────────── */}
-              {(isAnalysisRunning || isAnalysisClarifying) && (
-                <>
-                  <ProgressBubble
-                    currentStep={isAnalysisClarifying ? 5 : currentStep}
-                    label={
-                      isAnalysisClarifying
-                        ? 'Waiting for your answer below.'
-                        : stepProgressDetail
-                        ? `${stepProgressDetail}…`
-                        : 'Analyzing competitors — this takes up to 2 minutes…'
-                    }
-                    onStop={isAnalysisRunning ? agentConv.abort : undefined}
-                    elapsedSec={isAnalysisRunning ? analysisElapsed : undefined}
-                  />
-                  {isAnalysisClarifying && pendingDiscovery && (
-                    <div className="flex items-start gap-2">
-                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(var(--accent-rgb),0.12)] flex items-center justify-center mt-0.5">
-                        <Bot size={14} className="text-[var(--color-accent)]" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <ClarificationCard
-                          question={pendingDiscovery.clarificationQuestion}
-                          candidateCount={pendingDiscovery.candidateProfiles.length}
-                          onAnswer={answerClarification}
-                          disabled={clarificationPending}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </>
+              {/* ── Competitor clarification card (cockpit pane replaces the progress bubble) ── */}
+              {isAnalysisClarifying && pendingDiscovery && (
+                <div className="flex items-start gap-2">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(var(--accent-rgb),0.12)] flex items-center justify-center mt-0.5">
+                    <Bot size={14} className="text-[var(--color-accent)]" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <ClarificationCard
+                      question={pendingDiscovery.clarificationQuestion}
+                      candidateCount={pendingDiscovery.candidateProfiles.length}
+                      onAnswer={answerClarification}
+                      disabled={clarificationPending}
+                    />
+                  </div>
+                </div>
               )}
 
               {/* ── Location discovery progress now handled by RunCockpit ── */}

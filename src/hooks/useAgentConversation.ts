@@ -27,6 +27,8 @@ import { useSingleReelAnalysis } from './useSingleReelAnalysis'
 import { useRepurposeReel } from './useRepurposeReel'
 import { useTranscriptAnalysis } from './useTranscriptAnalysis'
 import { launchReelUrlRuns, launchHeavyRun } from './agentRunLaunch'
+import { useRunsStore, selectActiveRunOfKind } from '../store/runsStore'
+import { abortRun } from '../lib/runControllers'
 import { callGeminiWithTools, callGeminiContent, GeminiError } from '../ai/gemini'
 import type { GeminiTurn } from '../ai/gemini'
 import type { ContentContext } from '../ai/prompts'
@@ -71,7 +73,15 @@ export function useAgentConversation() {
   // state live outside the chat, so a full reset there is safe.
   const stopLingeringProgress = () => {
     const a = useAnalysisStore.getState()
-    if (a.status === 'running' || a.status === 'clarifying' || a.status === 'discovering') a.setStatus('chatting')
+    if (a.status === 'running' || a.status === 'clarifying' || a.status === 'discovering') {
+      a.setStatus('chatting')
+      // Also abort the cockpit run so the run-level signal (threaded into analyze) is cancelled,
+      // not just the outer agent-loop controller. The run is looked up by the conversation it
+      // started in (runConversationId tracks this), falling back to the active conversation.
+      const convId = a.runConversationId ?? useConversationsStore.getState().activeId
+      const run = selectActiveRunOfKind(useRunsStore.getState(), 'competitor', convId)
+      if (run) abortRun(run.id)
+    }
     const d = useDiscoveryStore.getState()
     if (d.status === 'running') d.reset()
     const r = useReelAnalysisStore.getState()
@@ -328,24 +338,27 @@ export function useAgentConversation() {
     const segment = String(args.segment ?? 'all')
     const mode = (args.mode as 'precise' | 'broad') ?? 'precise'
     const nicheContext = segment !== 'all' && niche ? `${niche} — ${segment}` : niche
-
-    if (handles.length > 0) {
-      analyze({ handles, depth: 'standard', clientName: '', nicheContext, mode }, signal)
-      return
-    }
-
-    // Niche-only bootstrap: hashtag-author seeds feed the graph walk, while the knowledge + IG
-    // search sources (run inside discoverCompetitors from nicheContext) carry recall. If even the
-    // hashtag seeds are empty we STILL proceed when a niche is present — the speculative sources
-    // can build the whole pool from the niche alone; only bail when there is genuinely nothing.
-    const { hashtags } = await generateHashtags(geminiKeys, '', niche, 'standard', signal)
-    const seeds = await scrapeHashtagUsernames(hashtags, apifyKeys, signal)
-    if (signal.aborted) return
-    if (seeds.length === 0 && !niche) {
-      bot(`Couldn't find accounts for "${niche}" automatically. Know any @handles I can start from?`)
-      return
-    }
-    analyze({ handles: seeds.slice(0, SEED_LIMIT), depth: 'standard', clientName: '', nicheContext, mode }, signal)
+    const convId = useConversationsStore.getState().activeId
+    const label = handles.length ? handles.map((h) => `@${h}`).join(', ') : niche || 'competitors'
+    launchHeavyRun('competitor', label, convId, 'Discovering competitors…', async (runSignal) => {
+      if (handles.length > 0) {
+        analyze({ handles, depth: 'standard', clientName: '', nicheContext, mode }, runSignal)
+        return
+      }
+      // Niche-only bootstrap: hashtag-author seeds feed the graph walk, while the knowledge + IG
+      // search sources (run inside discoverCompetitors from nicheContext) carry recall. If even the
+      // hashtag seeds are empty we STILL proceed when a niche is present — the speculative sources
+      // can build the whole pool from the niche alone; only bail when there is genuinely nothing.
+      const { hashtags } = await generateHashtags(geminiKeys, '', niche, 'standard', runSignal)
+      const seeds = await scrapeHashtagUsernames(hashtags, apifyKeys, runSignal)
+      if (runSignal.aborted) return
+      if (seeds.length === 0 && !niche) {
+        bot(`Couldn't find accounts for "${niche}" automatically. Know any @handles I can start from?`)
+        return
+      }
+      analyze({ handles: seeds.slice(0, SEED_LIMIT), depth: 'standard', clientName: '', nicheContext, mode }, runSignal)
+    })
+    return
   }
 
   // 2.2: exposed so ChatPage can abort in-flight runs on conversation switch/delete,
