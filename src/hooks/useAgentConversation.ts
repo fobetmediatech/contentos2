@@ -20,6 +20,7 @@ import { useConversationsStore } from '../store/conversationsStore'
 import { useDiscoveryStore } from '../store/discoveryStore'
 import { useReelAnalysisStore } from '../store/reelAnalysisStore'
 import { useKeysStore } from '../store/keysStore'
+import { useRunsStore } from '../store/runsStore'
 import { useCompetitorAnalysis } from './useCompetitorAnalysis'
 import { useLocationDiscovery } from './useLocationDiscovery'
 import { useReelAnalysis } from './useReelAnalysis'
@@ -314,7 +315,13 @@ export function useAgentConversation() {
     if (name === 'get_reel_transcript') {
       const reelUrl = String(args.reelUrl ?? '')
       addMessage({ role: 'assistant', type: 'transcript', content: `Transcribing this reel: ${reelUrl}` })
-      startTranscript(reelUrl, signal)
+      const transcriptRunId = useRunsStore.getState().createRun({
+        conversationId: useConversationsStore.getState().activeId,
+        kind: 'transcript',
+        targetLabel: reelUrl,
+        progress: '',
+      })
+      startTranscript(transcriptRunId, reelUrl, signal)
       return
     }
 
