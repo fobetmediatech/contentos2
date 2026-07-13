@@ -6,11 +6,11 @@
  * analysis all happen here.
  */
 
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useShallow } from 'zustand/react/shallow'
-import { Bot, ChevronDown, Send, Video, Paperclip, X } from 'lucide-react'
+import { Bot, ChevronDown, Send, Paperclip, X } from 'lucide-react'
 import { useAnalysisStore } from '../store/analysisStore'
 import { useConversationsStore, sortConversations } from '../store/conversationsStore'
 import { useDiscoveryStore } from '../store/discoveryStore'
@@ -26,7 +26,6 @@ import { ClarificationCard } from '../components/ClarificationCard'
 import { CompetitorResultMessage } from '../components/CompetitorResultMessage'
 import { DiscoveryResultMessage } from '../components/DiscoveryResultMessage'
 import { ChatSidebar } from '../components/ChatSidebar'
-import { InlineReelResults } from '../components/InlineReelResults'
 import { ReelResultMessage } from '../components/ReelResultMessage'
 import { SingleReelResultMessage } from '../components/SingleReelResultMessage'
 import RepurposeResultMessage from '../components/RepurposeResultMessage'
@@ -53,8 +52,9 @@ import type { CompetitorResultPayload } from '../domain/chat'
 import { useRunsStore, selectActiveRuns, selectActiveRunOfKind } from '../store/runsStore'
 import { RunCockpit } from '../components/runs/RunCockpit'
 import { runToMessage } from './chatRunSnapshot'
-import { competitorRunLabel, discoveryRunLabel, repurposeRunLabel } from './heavyRunLabels'
+import { competitorRunLabel, discoveryRunLabel, repurposeRunLabel, reelRunLabel } from './heavyRunLabels'
 import { disposeController } from '../lib/runControllers'
+import { launchHeavyRun } from '../hooks/agentRunLaunch'
 import type { RunKind } from '../domain/runs'
 
 // Slim a profile before it's snapshotted into a persisted result message: drop the heavy
@@ -153,7 +153,8 @@ export function ChatPage() {
   // effect would see a 0→active edge and append a SECOND reel marker below the restored one.
   const reelActiveRef = useRef(activeHandles.length > 0)
   const discoveryResultArmedRef = useRef(false) // armed while a discovery run is live; fires once on done
-  const reelContentArmedRef = useRef(false) // armed while a reel run is live; harvests content once on synthesis done
+  const reelContentArmedRef = useRef(false) // armed while a reel run is live; harvests content + snapshots once on synthesis done
+  const reelSnapshotFiredRef = useRef(false) // prevents double-snapshot when launchReelAnalysis runs snapshotCurrentReelRun after the effect already fired
   const repurposeArmedRef = useRef(false) // armed while a repurpose run is live; snapshots once on done
   // Registry snapshot: tracks run ids already snapshotted so we never double-add.
   const snapshottedRunIds = useRef<Set<string>>(new Set())
@@ -172,7 +173,6 @@ export function ChatPage() {
   const ready = _isReady()
   // Reel run state (derived from the reel store). A run is "running" until synthesis
   // reaches a terminal state; "done" once synthesis succeeds or fails.
-  const isReelDone = activeHandles.length > 0 && (synthesisStatus === 'done' || synthesisStatus === 'failed')
   const canSend = ready && (inputText.trim().length > 0 || attachment !== null)
 
   // Slash-command menu. Available any time the input is ready (not just the
@@ -385,6 +385,15 @@ export function ChatPage() {
     if (run) useRunsStore.getState().updateRun(run.id, { progress: competitorRunLabel(status, currentStep, stepProgressDetail) })
   }, [status, currentStep, stepProgressDetail, competitorRunConversationId, activeConversationId])
 
+  // Progress-mirror: keep the reel run's cockpit pane label in sync with the live step.
+  // Uses reelConversationId ?? activeConversationId so the label stays correct even if the
+  // user switches conversations mid-run.
+  useEffect(() => {
+    const targetId = reelConversationId ?? activeConversationId
+    const run = selectActiveRunOfKind(useRunsStore.getState(), 'reel', targetId)
+    if (run) useRunsStore.getState().updateRun(run.id, { progress: reelRunLabel(creatorStates, synthesisStatus) })
+  }, [creatorStates, synthesisStatus, reelConversationId, activeConversationId])
+
   // Snapshot a finished repurpose run into the conversation, then reset the store. Armed only
   // while a real run is live so it fires once. The persisted payload carries everything the
   // result card needs, so it survives reload independent of the (reset) transient store.
@@ -456,10 +465,20 @@ export function ChatPage() {
   useEffect(() => {
     if (synthesisStatus === 'running') {
       reelContentArmedRef.current = true
-    } else if (synthesisStatus === 'done' && reelContentArmedRef.current) {
+    } else if ((synthesisStatus === 'done' || synthesisStatus === 'failed') && reelContentArmedRef.current) {
       reelContentArmedRef.current = false
-      void useCorpusStore.getState().rememberContent(harvestReelContent(creatorStates, Date.now())).catch(() => {})
+      if (synthesisStatus === 'done') {
+        void useCorpusStore.getState().rememberContent(harvestReelContent(creatorStates, Date.now())).catch(() => {})
+      }
+      // Snapshot the finished run into its conversation (done or failed), then remove it from
+      // the cockpit. snapshotCurrentReelRun is guarded by reelSnapshotFiredRef so that a
+      // subsequent launchReelAnalysis / handleStartOver call doesn't double-snapshot.
+      snapshotCurrentReelRun()
+      const targetId = reelConversationId ?? activeConversationId
+      const run = selectActiveRunOfKind(useRunsStore.getState(), 'reel', targetId)
+      if (run) { useRunsStore.getState().removeRun(run.id); disposeController(run.id) }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [synthesisStatus, creatorStates])
 
   // Scroll to bottom when content changes, but only when the user is near the bottom.
@@ -535,15 +554,20 @@ export function ChatPage() {
     setSelectedHandles([])
   }
 
-  // Snapshot the CURRENT (finished) reel run into the conversation it ran in, BEFORE a new run
-  // resets the global store. Reads the live store (getState) so it's accurate at call time.
+  // Snapshot the CURRENT (finished) reel run into the conversation it ran in.
+  // Reads the live store (getState) so it's accurate at call time.
   // Guard: only a terminal run with a known home conversation snapshots — an in-flight or
   // never-started run is skipped (interrupted runs are intentionally dropped).
+  // Double-snapshot guard: reelSnapshotFiredRef tracks whether the effect (or a prior call)
+  // already snapshotted this run. Callers that run after the effect (launchReelAnalysis,
+  // handleStartOver) will be no-ops, preventing a duplicate result message.
   const snapshotCurrentReelRun = () => {
+    if (reelSnapshotFiredRef.current) return
     const s = useReelAnalysisStore.getState()
     const terminal =
       s.synthesisStatus === 'done' || s.synthesisStatus === 'failed'
     if (!s.reelConversationId || s.activeHandles.length === 0 || !terminal) return
+    reelSnapshotFiredRef.current = true
     addMessageTo(s.reelConversationId, {
       role: 'assistant',
       type: 'result',
@@ -627,16 +651,12 @@ export function ChatPage() {
     const convId = conversationId ?? activeConversationId
     setSelectedHandles([])
     snapshotCurrentReelRun() // if a finished reel run is on screen, preserve it before this supersedes it
-    // 2.4: set conversation binding + add marker BEFORE startReelAnalysis resets the store,
-    // so back-to-back runs each get their own marker regardless of React batching.
+    reelSnapshotFiredRef.current = false // reset guard for the new run
     reelActiveRef.current = true
     setReelConversationId(convId)
-    addMessageTo(convId, {
-      role: 'assistant',
-      type: 'reel',
-      content: `Analyzing reels for ${handles.map((h) => `@${h}`).join(', ')}.`,
+    launchHeavyRun('reel', handles.map((h) => `@${h}`).join(', '), convId, 'Scraping reels…', (runSignal) => {
+      startReelAnalysis(handles, runSignal)
     })
-    startReelAnalysis(handles)  // sets activeHandles in the reel store
   }
 
   // Wrapper bound to the current selection — used as the onAnalyzeReels callback
@@ -669,12 +689,16 @@ export function ChatPage() {
   }, [location.state])
 
   // Pipeline-targeted retry: re-fire the reel pipeline for the SAME handles directly (no agent
-  // loop / re-routing), reusing the existing reel marker. Used by the failed-state Retry button.
+  // loop / re-routing). Used by the cockpit pane Retry button if exposed.
   const handleRetryReels = () => {
     const handles = [...activeHandles]
     if (handles.length === 0) return
-    setReelConversationId(activeConversationId) // re-bind in case the store reset cleared it
-    startReelAnalysis(handles)
+    const convId = reelConversationId ?? activeConversationId
+    setReelConversationId(convId) // re-bind in case the store reset cleared it
+    reelSnapshotFiredRef.current = false // reset guard for the retry run
+    launchHeavyRun('reel', handles.map((h) => `@${h}`).join(', '), convId, 'Scraping reels…', (runSignal) => {
+      startReelAnalysis(handles, runSignal)
+    })
   }
 
   // Active runs for the current conversation — used for the inline single-run progress block
@@ -686,9 +710,6 @@ export function ChatPage() {
 
   // Derived booleans
   const hasMessages = conversationMessages.length > 0
-  // Only the most recent reel marker renders the live block (the store holds one run); older
-  // markers no-op. Empty when no reel run has started this session.
-  const lastReelMarkerId = [...conversationMessages].reverse().find((m) => m.type === 'reel')?.id
   const isAnalysisRunning = status === 'running'
   const isAnalysisClarifying = status === 'clarifying'
   const isAnalysisDone = status === 'done'
@@ -700,7 +721,6 @@ export function ChatPage() {
   // Live elapsed timers — the honest "how long has this been running" signal for each pipeline.
   const analysisElapsed = useElapsedTime(isAnalysisRunning)
   const discoveryElapsed = useElapsedTime(isDiscoveryRunning)
-  const reelElapsed = useElapsedTime(isReelRunning)
 
   // When the pipeline pauses for a clarification, pull the card into view even if the user
   // scrolled up — otherwise the run silently stalls awaiting an answer they can't see.
@@ -828,58 +848,9 @@ export function ChatPage() {
                   // Renders statically from the persisted payload — survives reload.
                   <SingleReelResultMessage key={message.id} payload={message.result} />
                 ) : message.type === 'reel' ? (
-                  // Reel block renders in place at the LATEST reel marker (the store holds one
-                  // live run). Older markers + a restored marker with no live run no-op.
-                  message.id === lastReelMarkerId && activeHandles.length > 0 && reelConversationId === activeConversationId ? (
-                    <Fragment key={message.id}>
-                      <div className="flex items-start gap-2">
-                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(var(--ai-rgb),0.12)] flex items-center justify-center mt-0.5">
-                          <Video size={14} className="text-[var(--color-ai-tint)]" />
-                        </div>
-                        <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(var(--border-rgb),0.08)] text-sm leading-relaxed max-w-[80%]">
-                          <span className="font-semibold text-primary">Analyzing reels</span>
-                          <p className="text-secondary mt-0.5">
-                            Scraping and analyzing reels for {activeHandles.map((h) => `@${h}`).join(', ')}.
-                          </p>
-                          <p className="text-xs font-mono text-muted mt-1 tabular-nums">
-                            {formatElapsed(reelElapsed)} elapsed · usually {activeHandles.length * 2}–{activeHandles.length * 4} min
-                            {reelElapsed > activeHandles.length * 240 ? ' (taking longer than usual — hang tight)' : ''}
-                          </p>
-                        </div>
-                      </div>
-
-                      <InlineReelResults
-                        handles={activeHandles}
-                        creatorStates={creatorStates}
-                        synthesisStatus={synthesisStatus}
-                        synthesis={synthesis}
-                        synthesisError={synthesisError}
-                        onSuggest={(text) => {
-                          setInputText(text)
-                          textareaRef.current?.focus()
-                        }}
-                      />
-
-                      {isReelDone && (
-                        <div className="self-start flex items-center gap-2">
-                          {synthesisStatus === 'failed' && (
-                            <button
-                              onClick={handleRetryReels}
-                              className="px-4 py-2 text-sm font-semibold text-white bg-[var(--color-accent)] rounded-xl hover:bg-[var(--color-accent-hover)] transition-colors"
-                            >
-                              Retry analysis
-                            </button>
-                          )}
-                          <button
-                            onClick={handleStartOver}
-                            className="px-4 py-2 text-sm text-secondary border border-[rgba(var(--border-rgb),0.10)] rounded-xl hover:bg-surface-raised transition-colors"
-                          >
-                            Start over
-                          </button>
-                        </div>
-                      )}
-                    </Fragment>
-                  ) : null
+                  // Legacy type:'reel' markers (pre-cockpit) no-op silently — the cockpit
+                  // pane now shows reel progress; the finished grid appears in the result message.
+                  null
                 ) : (
                   <ChatMessage
                     key={message.id}

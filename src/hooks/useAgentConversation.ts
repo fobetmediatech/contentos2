@@ -249,16 +249,11 @@ export function useAgentConversation() {
 
     if (name === 'analyze_reels') {
       const handles = (args.handles as string[]) ?? []
-      // 2.4: add marker imperatively before startReelAnalysis resets the store, so
-      // React batching can't mask the 0→non-empty activeHandles edge in ChatPage's effect.
       const convId = useConversationsStore.getState().activeId
       useReelAnalysisStore.getState().setReelConversationId(convId)
-      addMessage({
-        role: 'assistant',
-        type: 'reel',
-        content: `Analyzing reels for ${handles.map((h: string) => `@${h}`).join(', ')}.`,
+      launchHeavyRun('reel', handles.map((h: string) => `@${h}`).join(', '), convId, 'Scraping reels…', (runSignal) => {
+        startReelAnalysis(handles, runSignal)
       })
-      startReelAnalysis(handles, signal)
       return
     }
 
