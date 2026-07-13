@@ -44,6 +44,7 @@ export function createSupabaseCreatorDirectory(): CreatorDirectoryRepository {
         .from('creator_directory')
         .select('id, category, handle, display_name')
         .order('category')
+        .order('display_name')
       if (error) throw error
       return ((data ?? []) as Row[]).map(toEntry)
     },

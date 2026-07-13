@@ -25,6 +25,8 @@ export function CreatorMode() {
 
   useEffect(() => { void useCreatorDirectoryStore.getState().hydrate() }, [])
 
+  useEffect(() => () => abortRef.current?.abort(), [])
+
   const onGenerate = async () => {
     if (!picked || !idea.trim()) return
     setError(null); setResult(null)

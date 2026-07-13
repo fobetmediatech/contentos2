@@ -16,7 +16,7 @@ alter table creator_directory enable row level security;
 create policy creator_directory_select on creator_directory for select
   using (auth.role() = 'authenticated');
 create policy creator_directory_insert on creator_directory for insert
-  with check (auth.role() = 'authenticated');
+  with check (auth.role() = 'authenticated' and created_by = auth.jwt()->>'sub');
 create policy creator_directory_update on creator_directory for update
   using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 create policy creator_directory_delete on creator_directory for delete
