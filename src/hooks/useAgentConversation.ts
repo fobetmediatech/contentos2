@@ -9,15 +9,16 @@
  * in agentTools.test.ts. This hook is the thin wiring: history assembly, dispatch to the
  * pipeline hooks, latest-wins steering, and the cross-turn clarification cap.
  *
- * Latest-wins: a new sendMessage aborts the prior turn's controller. Because T7 threaded
- * that signal into analyze/discover/startAnalysis, the abort also cancels a running scrape
- * (a genuine steer), and the superseded run returns silently (no error bubble).
+ * Parallel heavy runs: heavy-tool pipelines (competitor/discovery/reel/repurpose) run in the
+ * cockpit and are NOT aborted by a new user message — they keep running in parallel. Only a
+ * new SAME-KIND run supersedes a prior one (handled by launchHeavyRun). Steering (the
+ * "Switched" note + planning-controller abort) fires only when the agent is still in the
+ * PLANNING turn (thinkingRef), not merely because a heavy run is ongoing.
  */
 
 import { useEffect, useRef, useState } from 'react'
 import { useAnalysisStore } from '../store/analysisStore'
 import { useConversationsStore } from '../store/conversationsStore'
-import { useDiscoveryStore } from '../store/discoveryStore'
 import { useReelAnalysisStore } from '../store/reelAnalysisStore'
 import { useKeysStore } from '../store/keysStore'
 import { useCompetitorAnalysis } from './useCompetitorAnalysis'
@@ -27,8 +28,6 @@ import { useSingleReelAnalysis } from './useSingleReelAnalysis'
 import { useRepurposeReel } from './useRepurposeReel'
 import { useTranscriptAnalysis } from './useTranscriptAnalysis'
 import { launchReelUrlRuns, launchHeavyRun } from './agentRunLaunch'
-import { useRunsStore, selectActiveRunOfKind } from '../store/runsStore'
-import { abortRun } from '../lib/runControllers'
 import { callGeminiWithTools, callGeminiContent, GeminiError } from '../ai/gemini'
 import type { GeminiTurn } from '../ai/gemini'
 import type { ContentContext } from '../ai/prompts'
@@ -67,27 +66,6 @@ export function useAgentConversation() {
 
   useEffect(() => () => currentRun.current?.abort(), [])
 
-  // Steer cleanup: when a new message supersedes a run with work on screen, clear the
-  // lingering ProgressBubble WITHOUT wiping the chat. analysisStore.reset() would also clear
-  // conversationMessages, so for it we only flip status back to 'chatting'; discovery + reel
-  // state live outside the chat, so a full reset there is safe.
-  const stopLingeringProgress = () => {
-    const a = useAnalysisStore.getState()
-    if (a.status === 'running' || a.status === 'clarifying' || a.status === 'discovering') {
-      a.setStatus('chatting')
-      // Also abort the cockpit run so the run-level signal (threaded into analyze) is cancelled,
-      // not just the outer agent-loop controller. The run is looked up by the conversation it
-      // started in (runConversationId tracks this), falling back to the active conversation.
-      const convId = a.runConversationId ?? useConversationsStore.getState().activeId
-      const run = selectActiveRunOfKind(useRunsStore.getState(), 'competitor', convId)
-      if (run) abortRun(run.id)
-    }
-    const d = useDiscoveryStore.getState()
-    if (d.status === 'running') d.reset()
-    const r = useReelAnalysisStore.getState()
-    if (r.activeHandles.length > 0 && r.synthesisStatus !== 'done' && r.synthesisStatus !== 'failed') r.reset()
-  }
-
   const bot = (content: string, type: 'text' | 'error' = 'text') =>
     addMessage({ role: 'assistant', content, type })
 
@@ -104,15 +82,6 @@ export function useAgentConversation() {
   const buildHistory = (): GeminiTurn[] => {
     const c = useConversationsStore.getState()
     return buildGeminiHistory(c.conversations[c.activeId]?.messages ?? [], HISTORY_WINDOW)
-  }
-
-  /** True when there is genuinely live work to interrupt — a turn thinking or a scrape running. */
-  const isAnyPipelineRunning = (): boolean => {
-    const a = useAnalysisStore.getState()
-    if (a.status === 'running' || a.status === 'clarifying' || a.status === 'discovering') return true
-    if (useDiscoveryStore.getState().status === 'running') return true
-    const r = useReelAnalysisStore.getState()
-    return r.activeHandles.length > 0 && r.synthesisStatus !== 'done' && r.synthesisStatus !== 'failed'
   }
 
   const agentError = (err: unknown): string =>
@@ -180,15 +149,14 @@ export function useAgentConversation() {
       return
     }
 
-    // Latest-wins: always abort the previous run's controller (cancels an in-flight planning
-    // call AND any scrape it dispatched via T7's shared signal). But only treat it as a STEER
-    // — the cleanup + "Switched" note — when there was genuinely live work to interrupt. A
-    // completed turn leaves a non-aborted controller in currentRun, so its mere presence is
-    // NOT a steer; that false-positive showed "Switched" after almost every message.
-    const steering = thinkingRef.current || isAnyPipelineRunning()
+    // Latest-wins: abort the previous planning-turn controller when the agent is still
+    // thinking. Heavy runs (competitor/discovery/reel/repurpose) live in the cockpit and
+    // run in parallel — a new message must NOT abort or reset them. Only a new SAME-KIND
+    // launch supersedes a prior cockpit run (handled by launchHeavyRun). The "Switched"
+    // note fires only when an active PLANNING turn is genuinely superseded (thinkingRef).
+    const steering = thinkingRef.current
     currentRun.current?.abort()
     if (steering) {
-      stopLingeringProgress()
       bot('Switched — picking up your new request.') // TD4 steer feedback
     }
 
@@ -363,9 +331,10 @@ export function useAgentConversation() {
 
   // 2.2: exposed so ChatPage can abort in-flight runs on conversation switch/delete,
   // preventing results from landing in the wrong conversation.
+  // Heavy cockpit runs (competitor/discovery/reel/repurpose) are NOT aborted here —
+  // they are conversation-scoped and self-manage via the cockpit panes.
   const abort = () => {
     currentRun.current?.abort()
-    stopLingeringProgress()
   }
 
   return { sendMessage, isThinking, abort }
