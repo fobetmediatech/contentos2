@@ -21,7 +21,7 @@ import { synthesizeCreatorHooks } from '../lib/reelAnalyzer'
 import { analyzeContentStrategy } from '../ai/gemini'
 import { devWarn } from '../lib/devLog'
 import type { NormalizedProfile } from '../lib/transformers'
-import type { SingleReelResult } from '../store/singleReelStore'
+import type { SingleReelResult } from '../domain/reel'
 import type { CreatorHookSummary } from '../ai/prompts/creatorHookSummary'
 import type { StrategyBrief, AnalyzedAccount } from '../domain/strategy'
 

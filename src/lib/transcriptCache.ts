@@ -10,7 +10,7 @@
  */
 
 import { openDB, type IDBPDatabase } from 'idb'
-import type { TranscriptResult } from '../store/transcriptStore'
+import type { TranscriptResult } from '../domain/reel'
 import { getCachedSingleReel } from './singleReelCache'
 
 // Keep in sync with TRANSCRIPT_PROMPT_VERSION in api/_lib/transcriptPrompt.ts

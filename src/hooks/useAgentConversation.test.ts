@@ -19,7 +19,7 @@ const addMessage = vi.fn((m: { role: string; content: string; type: string }) =>
   mockState.conversationMessages.push(m)
 })
 
-// Imperative store state read via getState() inside stopLingeringProgress (steer cleanup).
+// Imperative store state read via getState() inside the hook (clarifying check, parallel-run assertions).
 // Prefixed "mock" so vitest allows the reference inside the hoisted vi.mock factories.
 const mockStores = {
   analysisStatus: 'chatting' as string,
@@ -236,27 +236,28 @@ describe('useAgentConversation', () => {
     expect(analyzeMock.mock.calls[0][0].handles).toContain('seed_handle')
   })
 
-  it('steering supersedes a running dispatch: aborts its signal, stops the lingering progress, notes the switch', async () => {
-    // Turn 1: dispatch a competitor scrape. The dispatch is fire-and-forget, so its
-    // abort signal stays live AFTER sendMessage resolves — the run outlives the turn.
+  it('parallel heavy runs: a new message does NOT abort a running cockpit run (keeps going in parallel)', async () => {
+    // Turn 1: dispatch a competitor scrape. The dispatch is fire-and-forget; the cockpit
+    // run keeps going in the background after sendMessage resolves.
     result({ kind: 'call', name: 'discover_competitors', args: { knownHandles: ['nike.training'] } })
     const { result: hook } = renderHook(() => useAgentConversation())
     await act(async () => { await hook.current.sendMessage('similar to @nike.training') })
     const firstSignal = analyzeMock.mock.calls[0][1] as AbortSignal
     expect(firstSignal.aborted).toBe(false)
 
-    // The scrape is now "running" — a ProgressBubble would be on screen.
+    // The cockpit run is now "running" in the background (parallel mode).
     mockStores.analysisStatus = 'running'
 
-    // Turn 2: a NEW message steers. Latest-wins must cancel the running scrape (abort the
-    // live signal), stop the lingering progress (status → chatting, NOT a full reset that
-    // would wipe the chat), and drop a muted "Switched…" note before the new turn runs.
+    // Turn 2: a NEW DIFFERENT request arrives while the cockpit run is still in flight.
+    // The cockpit run must NOT be aborted — it runs in parallel. The new request dispatches
+    // normally. No "Switched" note appears (only thinkingRef triggers that, and the prior
+    // planning turn already finished). setStatus('chatting') must NOT be called.
     result({ kind: 'call', name: 'discover_by_location', args: { niche: 'food', city: 'Pune' } })
-    await act(async () => { await hook.current.sendMessage('actually, food creators in Pune') })
+    await act(async () => { await hook.current.sendMessage('also, food creators in Pune') })
 
-    expect(firstSignal.aborted).toBe(true) // the prior scrape was genuinely cancelled
-    expect(mockStores.setStatus).toHaveBeenCalledWith('chatting') // progress stopped, chat kept
-    expect(mockState.conversationMessages.some((m) => m.content.startsWith('Switched'))).toBe(true)
-    expect(discoverMock).toHaveBeenCalledTimes(1) // the steered-to request dispatched
+    expect(firstSignal.aborted).toBe(false) // parallel run kept alive — NOT cancelled
+    expect(mockStores.setStatus).not.toHaveBeenCalledWith('chatting') // no lingering-progress reset
+    expect(mockState.conversationMessages.some((m) => m.content.startsWith('Switched'))).toBe(false) // no Switched note
+    expect(discoverMock).toHaveBeenCalledTimes(1) // the new request dispatched in parallel
   })
 })

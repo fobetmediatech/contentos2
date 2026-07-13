@@ -6,12 +6,11 @@ describe('analyze_single_reel tool', () => {
     expect(AGENT_TOOLS.some((t) => t.name === 'analyze_single_reel')).toBe(true)
     expect(AGENT_SYSTEM_PROMPT).toMatch(/analyze_single_reel/)
   })
-  it('validates a reel URL and normalizes to a canonical URL + shortCode', () => {
+  it('validates a single reel URL via reelUrl and normalizes to a canonical reelUrls array', () => {
     const v = validateToolCall('analyze_single_reel', { reelUrl: 'https://instagram.com/reel/ABC123?x=1' })
     expect(v.ok).toBe(true)
     if (v.ok) {
-      expect(v.args.reelUrl).toBe('https://www.instagram.com/reel/ABC123/')
-      expect(v.args.shortCode).toBe('ABC123')
+      expect(v.args.reelUrls).toEqual(['https://www.instagram.com/reel/ABC123/'])
     }
   })
   it('rejects a non-reel URL', () => {

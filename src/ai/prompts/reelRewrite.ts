@@ -7,7 +7,7 @@
  * client's voice. Pure text-in/text-out — runs through callGeminiWithSchema / /api/gemini.
  */
 
-import type { SingleReelResult } from '../../store/singleReelStore'
+import type { SingleReelResult } from '../../domain/reel'
 import type { VoiceProfile } from './voiceProfile'
 
 export const REEL_REWRITE_PROMPT_VERSION = 3

@@ -9,15 +9,16 @@
  * in agentTools.test.ts. This hook is the thin wiring: history assembly, dispatch to the
  * pipeline hooks, latest-wins steering, and the cross-turn clarification cap.
  *
- * Latest-wins: a new sendMessage aborts the prior turn's controller. Because T7 threaded
- * that signal into analyze/discover/startAnalysis, the abort also cancels a running scrape
- * (a genuine steer), and the superseded run returns silently (no error bubble).
+ * Parallel heavy runs: heavy-tool pipelines (competitor/discovery/reel/repurpose) run in the
+ * cockpit and are NOT aborted by a new user message — they keep running in parallel. Only a
+ * new SAME-KIND run supersedes a prior one (handled by launchHeavyRun). Steering (the
+ * "Switched" note + planning-controller abort) fires only when the agent is still in the
+ * PLANNING turn (thinkingRef), not merely because a heavy run is ongoing.
  */
 
 import { useEffect, useRef, useState } from 'react'
 import { useAnalysisStore } from '../store/analysisStore'
 import { useConversationsStore } from '../store/conversationsStore'
-import { useDiscoveryStore } from '../store/discoveryStore'
 import { useReelAnalysisStore } from '../store/reelAnalysisStore'
 import { useKeysStore } from '../store/keysStore'
 import { useCompetitorAnalysis } from './useCompetitorAnalysis'
@@ -26,6 +27,7 @@ import { useReelAnalysis } from './useReelAnalysis'
 import { useSingleReelAnalysis } from './useSingleReelAnalysis'
 import { useRepurposeReel } from './useRepurposeReel'
 import { useTranscriptAnalysis } from './useTranscriptAnalysis'
+import { launchReelUrlRuns, launchHeavyRun } from './agentRunLaunch'
 import { callGeminiWithTools, callGeminiContent, GeminiError } from '../ai/gemini'
 import type { GeminiTurn } from '../ai/gemini'
 import type { ContentContext } from '../ai/prompts'
@@ -56,26 +58,13 @@ export function useAgentConversation() {
   const [isThinking, setIsThinking] = useState(false)
   const thinkingRef = useRef(false) // ref mirror of isThinking, readable synchronously in sendMessage
   const clarifyTurnsRef = useRef(0)
-  // ONE controller per active run. It deliberately OUTLIVES the turn: a pipeline dispatch is
-  // fire-and-forget (analyze/discover return before the scrape finishes), so the controller
-  // must stay live for the next message to abort the still-running scrape. That persistence
-  // is what makes latest-wins a genuine steer and not just a cancel of the planning call.
+  // Planning-turn abort controller only. Heavy pipeline runs (competitor/discovery/reel/repurpose)
+  // are conversation-scoped and own their signals via registerController — they survive new
+  // messages and self-manage through the cockpit panes. currentRun only gates the Gemini
+  // planning call (runAgentTurn) and the 'answer' content-copy path.
   const currentRun = useRef<AbortController | null>(null)
 
   useEffect(() => () => currentRun.current?.abort(), [])
-
-  // Steer cleanup: when a new message supersedes a run with work on screen, clear the
-  // lingering ProgressBubble WITHOUT wiping the chat. analysisStore.reset() would also clear
-  // conversationMessages, so for it we only flip status back to 'chatting'; discovery + reel
-  // state live outside the chat, so a full reset there is safe.
-  const stopLingeringProgress = () => {
-    const a = useAnalysisStore.getState()
-    if (a.status === 'running' || a.status === 'clarifying' || a.status === 'discovering') a.setStatus('chatting')
-    const d = useDiscoveryStore.getState()
-    if (d.status === 'running') d.reset()
-    const r = useReelAnalysisStore.getState()
-    if (r.activeHandles.length > 0 && r.synthesisStatus !== 'done' && r.synthesisStatus !== 'failed') r.reset()
-  }
 
   const bot = (content: string, type: 'text' | 'error' = 'text') =>
     addMessage({ role: 'assistant', content, type })
@@ -93,15 +82,6 @@ export function useAgentConversation() {
   const buildHistory = (): GeminiTurn[] => {
     const c = useConversationsStore.getState()
     return buildGeminiHistory(c.conversations[c.activeId]?.messages ?? [], HISTORY_WINDOW)
-  }
-
-  /** True when there is genuinely live work to interrupt — a turn thinking or a scrape running. */
-  const isAnyPipelineRunning = (): boolean => {
-    const a = useAnalysisStore.getState()
-    if (a.status === 'running' || a.status === 'clarifying' || a.status === 'discovering') return true
-    if (useDiscoveryStore.getState().status === 'running') return true
-    const r = useReelAnalysisStore.getState()
-    return r.activeHandles.length > 0 && r.synthesisStatus !== 'done' && r.synthesisStatus !== 'failed'
   }
 
   const agentError = (err: unknown): string =>
@@ -169,15 +149,14 @@ export function useAgentConversation() {
       return
     }
 
-    // Latest-wins: always abort the previous run's controller (cancels an in-flight planning
-    // call AND any scrape it dispatched via T7's shared signal). But only treat it as a STEER
-    // — the cleanup + "Switched" note — when there was genuinely live work to interrupt. A
-    // completed turn leaves a non-aborted controller in currentRun, so its mere presence is
-    // NOT a steer; that false-positive showed "Switched" after almost every message.
-    const steering = thinkingRef.current || isAnyPipelineRunning()
+    // Latest-wins: abort the previous planning-turn controller when the agent is still
+    // thinking. Heavy runs (competitor/discovery/reel/repurpose) live in the cockpit and
+    // run in parallel — a new message must NOT abort or reset them. Only a new SAME-KIND
+    // launch supersedes a prior cockpit run (handled by launchHeavyRun). The "Switched"
+    // note fires only when an active PLANNING turn is genuinely superseded (thinkingRef).
+    const steering = thinkingRef.current
     currentRun.current?.abort()
     if (steering) {
-      stopLingeringProgress()
       bot('Switched — picking up your new request.') // TD4 steer feedback
     }
 
@@ -214,9 +193,8 @@ export function useAgentConversation() {
       if (controller.signal.aborted) return
       bot(agentError(err), 'error')
     } finally {
-      // Keep currentRun pointing at this controller so a fire-and-forget scrape stays
-      // cancellable by the next message. Only the LATEST turn owns the thinking state — a
-      // superseded turn's finally must not clear the indicator the new turn just turned on.
+      // Only the LATEST planning turn owns the thinking state — a superseded turn's finally
+      // must not clear the indicator the new turn just turned on.
       if (currentRun.current === controller) {
         thinkingRef.current = false
         setIsThinking(false)
@@ -257,77 +235,61 @@ export function useAgentConversation() {
 
       case 'dispatch':
         clarifyTurnsRef.current = 0
-        await dispatchTool(action, signal)
+        await dispatchTool(action)
         return
     }
   }
 
   const dispatchTool = async (
     action: Extract<AgentAction, { type: 'dispatch' }>,
-    signal: AbortSignal,
   ) => {
     const { name, args } = action
 
     if (name === 'analyze_reels') {
       const handles = (args.handles as string[]) ?? []
-      // 2.4: add marker imperatively before startReelAnalysis resets the store, so
-      // React batching can't mask the 0→non-empty activeHandles edge in ChatPage's effect.
       const convId = useConversationsStore.getState().activeId
       useReelAnalysisStore.getState().setReelConversationId(convId)
-      addMessage({
-        role: 'assistant',
-        type: 'reel',
-        content: `Analyzing reels for ${handles.map((h: string) => `@${h}`).join(', ')}.`,
+      launchHeavyRun('reel', handles.map((h: string) => `@${h}`).join(', '), convId, 'Scraping reels…', (runSignal) => {
+        startReelAnalysis(handles, runSignal)
       })
-      startReelAnalysis(handles, signal)
       return
     }
 
     if (name === 'analyze_single_reel') {
-      const reelUrl = String(args.reelUrl ?? '')
-      // The hook (useSingleReelAnalysis) calls startRun internally (sets status + tags the
-      // conversation), so we only add the chat marker and fire it — never call startRun here.
-      addMessage({ role: 'assistant', type: 'single-reel', content: `Analyzing this reel: ${reelUrl}` })
-      startSingleReel(reelUrl, signal)
+      const urls = (args.reelUrls as string[]) ?? []
+      const convId = useConversationsStore.getState().activeId ?? ''
+      launchReelUrlRuns('single-reel', urls, convId, (rid, url, sig) => void startSingleReel(rid, url, sig))
       return
     }
 
     if (name === 'repurpose_reel') {
-      const clientHandle = args.clientHandle ? `@${String(args.clientHandle)}` : 'this client'
-      addMessage({
-        role: 'assistant',
-        type: 'repurpose',
-        content: `Repurposing this reel for ${clientHandle}…`,
-      })
-      startRepurpose(
-        {
+      const convId = useConversationsStore.getState().activeId
+      const label = args.clientHandle ? `@${String(args.clientHandle)}` : 'client'
+      launchHeavyRun('repurpose', label, convId, 'Building voice profile…', (runSignal) => {
+        startRepurpose({
           sourceReelUrl: String(args.sourceReelUrl ?? ''),
           shortCode: args.shortCode ? String(args.shortCode) : undefined,
           clientHandle: args.clientHandle ? String(args.clientHandle) : undefined,
           pastedScripts: Array.isArray(args.pastedScripts) ? (args.pastedScripts as string[]) : [],
-        },
-        signal,
-      )
+        }, runSignal)
+      })
       return
     }
 
     if (name === 'get_reel_transcript') {
-      const reelUrl = String(args.reelUrl ?? '')
-      addMessage({ role: 'assistant', type: 'transcript', content: `Transcribing this reel: ${reelUrl}` })
-      startTranscript(reelUrl, signal)
+      const urls = (args.reelUrls as string[]) ?? []
+      const convId = useConversationsStore.getState().activeId ?? ''
+      launchReelUrlRuns('transcript', urls, convId, (rid, url, sig) => void startTranscript(rid, url, sig))
       return
     }
 
     if (name === 'discover_by_location') {
-      discover(
-        {
-          city: String(args.city ?? ''),
-          niche: String(args.niche ?? ''),
-          depth: (args.depth as 'standard' | 'deep') ?? 'standard',
-          clientName: '',
-        },
-        signal,
-      )
+      const city = String(args.city ?? '')
+      const niche = String(args.niche ?? '')
+      const convId = useConversationsStore.getState().activeId
+      launchHeavyRun('discovery', [city, niche].filter(Boolean).join(' ') || 'discovery', convId, 'Finding creators…', (runSignal) => {
+        discover({ city, niche, depth: (args.depth as 'standard' | 'deep') ?? 'standard', clientName: '' }, runSignal)
+      })
       return
     }
 
@@ -337,31 +299,35 @@ export function useAgentConversation() {
     const segment = String(args.segment ?? 'all')
     const mode = (args.mode as 'precise' | 'broad') ?? 'precise'
     const nicheContext = segment !== 'all' && niche ? `${niche} — ${segment}` : niche
-
-    if (handles.length > 0) {
-      analyze({ handles, depth: 'standard', clientName: '', nicheContext, mode }, signal)
-      return
-    }
-
-    // Niche-only bootstrap: hashtag-author seeds feed the graph walk, while the knowledge + IG
-    // search sources (run inside discoverCompetitors from nicheContext) carry recall. If even the
-    // hashtag seeds are empty we STILL proceed when a niche is present — the speculative sources
-    // can build the whole pool from the niche alone; only bail when there is genuinely nothing.
-    const { hashtags } = await generateHashtags(geminiKeys, '', niche, 'standard', signal)
-    const seeds = await scrapeHashtagUsernames(hashtags, apifyKeys, signal)
-    if (signal.aborted) return
-    if (seeds.length === 0 && !niche) {
-      bot(`Couldn't find accounts for "${niche}" automatically. Know any @handles I can start from?`)
-      return
-    }
-    analyze({ handles: seeds.slice(0, SEED_LIMIT), depth: 'standard', clientName: '', nicheContext, mode }, signal)
+    const convId = useConversationsStore.getState().activeId
+    const label = handles.length ? handles.map((h) => `@${h}`).join(', ') : niche || 'competitors'
+    launchHeavyRun('competitor', label, convId, 'Discovering competitors…', async (runSignal) => {
+      if (handles.length > 0) {
+        analyze({ handles, depth: 'standard', clientName: '', nicheContext, mode }, runSignal)
+        return
+      }
+      // Niche-only bootstrap: hashtag-author seeds feed the graph walk, while the knowledge + IG
+      // search sources (run inside discoverCompetitors from nicheContext) carry recall. If even the
+      // hashtag seeds are empty we STILL proceed when a niche is present — the speculative sources
+      // can build the whole pool from the niche alone; only bail when there is genuinely nothing.
+      const { hashtags } = await generateHashtags(geminiKeys, '', niche, 'standard', runSignal)
+      const seeds = await scrapeHashtagUsernames(hashtags, apifyKeys, runSignal)
+      if (runSignal.aborted) return
+      if (seeds.length === 0 && !niche) {
+        bot(`Couldn't find accounts for "${niche}" automatically. Know any @handles I can start from?`)
+        return
+      }
+      analyze({ handles: seeds.slice(0, SEED_LIMIT), depth: 'standard', clientName: '', nicheContext, mode }, runSignal)
+    })
+    return
   }
 
   // 2.2: exposed so ChatPage can abort in-flight runs on conversation switch/delete,
   // preventing results from landing in the wrong conversation.
+  // Heavy cockpit runs (competitor/discovery/reel/repurpose) are NOT aborted here —
+  // they are conversation-scoped and self-manage via the cockpit panes.
   const abort = () => {
     currentRun.current?.abort()
-    stopLingeringProgress()
   }
 
   return { sendMessage, isThinking, abort }

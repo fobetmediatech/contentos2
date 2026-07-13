@@ -7,7 +7,7 @@
  * SingleReelResultMessage so the per-reel case-study cards can reuse the exact rendering.
  */
 
-import type { SingleReelResult } from '../store/singleReelStore'
+import type { SingleReelResult } from '../domain/reel'
 
 /** Seconds → m:ss (e.g. 75 → "1:15"). Negative / non-finite values clamp to 0:00. */
 function fmtTime(seconds: number): string {

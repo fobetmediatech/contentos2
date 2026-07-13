@@ -7,7 +7,7 @@
  * reelRewrite.ts so the output shape, coercion, and result rendering are shared. reelRewrite.ts
  * is intentionally NOT modified — this is the topic-swap mirror of the voice-swap rewrite.
  */
-import type { ReelVideoAnalysis } from '../../store/singleReelStore'
+import type { ReelVideoAnalysis } from '../../domain/reel'
 import type { VoiceProfile } from './voiceProfile'
 import type { TargetLanguage } from './reelRewrite'
 

@@ -33,7 +33,7 @@ import {
   type ReelRewriteResult,
 } from '../ai/prompts/reelRewrite'
 import { prepareScriptCorpus, scriptsProfileKey, pickExemplars } from '../lib/repurposeHelpers'
-import type { SingleReelResult } from '../store/singleReelStore'
+import type { SingleReelResult } from '../domain/reel'
 
 const PROFILE_REEL_COUNT = 8
 

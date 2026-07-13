@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildReelRewritePrompt, parseReelRewrite, resolveTargetLanguage, REEL_REWRITE_SCHEMA } from './reelRewrite'
 import type { VoiceProfile } from './voiceProfile'
-import type { SingleReelResult } from '../../store/singleReelStore'
+import type { SingleReelResult } from '../../domain/reel'
 
 const VOICE: VoiceProfile = {
   handle: 'aanya', displayName: 'Aanya', fromScripts: false,

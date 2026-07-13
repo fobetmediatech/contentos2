@@ -6,10 +6,11 @@
  * analysis all happen here.
  */
 
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Bot, ChevronDown, Send, Video, Paperclip, X } from 'lucide-react'
+import { useShallow } from 'zustand/react/shallow'
+import { Bot, ChevronDown, Send, Paperclip, X } from 'lucide-react'
 import { useAnalysisStore } from '../store/analysisStore'
 import { useConversationsStore, sortConversations } from '../store/conversationsStore'
 import { useDiscoveryStore } from '../store/discoveryStore'
@@ -19,21 +20,18 @@ import { useCompetitorAnalysis } from '../hooks/useCompetitorAnalysis'
 import { useActivePipeline } from '../hooks/useActivePipeline'
 import { useReelAnalysis } from '../hooks/useReelAnalysis'
 import { useReelAnalysisStore } from '../store/reelAnalysisStore'
-import { ChatMessage, ProgressBubble, TypingIndicator } from '../components/ChatMessage'
-import { useElapsedTime, formatElapsed } from '../hooks/useElapsedTime'
+import { ChatMessage, TypingIndicator } from '../components/ChatMessage'
+
 import { ClarificationCard } from '../components/ClarificationCard'
 import { CompetitorResultMessage } from '../components/CompetitorResultMessage'
 import { DiscoveryResultMessage } from '../components/DiscoveryResultMessage'
 import { ChatSidebar } from '../components/ChatSidebar'
-import { InlineReelResults } from '../components/InlineReelResults'
 import { ReelResultMessage } from '../components/ReelResultMessage'
 import { SingleReelResultMessage } from '../components/SingleReelResultMessage'
 import RepurposeResultMessage from '../components/RepurposeResultMessage'
 import { TranscriptResultMessage } from '../components/TranscriptResultMessage'
-import { useSingleReelStore } from '../store/singleReelStore'
 import { useRepurposeStore } from '../store/repurposeStore'
-import { useTranscriptStore } from '../store/transcriptStore'
-import { PIPELINE_REGISTRY } from '../tools/registry'
+
 import { SlashCommandMenu } from '../components/SlashCommandMenu'
 import { CHAT_TOOL_COMMANDS } from '../shared/utils/toolCommands'
 import type { ChatToolCommand } from '../shared/utils/toolCommands'
@@ -51,6 +49,13 @@ import { MAX_INPUT_CHARS } from '../lib/constants'
 import { readAttachment, ACCEPT_ATTR, type ChatAttachment } from '../lib/attachment'
 import { TARGET_PER_CATEGORY } from '../hooks/useCompetitorAnalysis'
 import type { CompetitorResultPayload } from '../domain/chat'
+import { useRunsStore, selectActiveRuns, selectActiveRunOfKind } from '../store/runsStore'
+import { RunCockpit } from '../components/runs/RunCockpit'
+import { runToMessage } from './chatRunSnapshot'
+import { competitorRunLabel, discoveryRunLabel, repurposeRunLabel, reelRunLabel } from './heavyRunLabels'
+import { disposeController } from '../lib/runControllers'
+import { launchHeavyRun } from '../hooks/agentRunLaunch'
+import type { RunKind } from '../domain/runs'
 
 // Slim a profile before it's snapshotted into a persisted result message: drop the heavy
 // fields the result cards never render (bio, related handles, top hashtags) so the localStorage
@@ -106,6 +111,8 @@ export function ChatPage() {
   const discoveryProfiles = useDiscoveryStore((s) => s.candidateProfiles)
   const discoveryLocationRelaxed = useDiscoveryStore((s) => s.locationFilterRelaxed)
   const discoveryNiche = useDiscoveryStore((s) => s.niche)
+  const discoveryCurrentStep = useDiscoveryStore((s) => s.currentStep)
+  const discoveryStepProgressDetail = useDiscoveryStore((s) => s.stepProgressDetail)
   const resetDiscovery = useDiscoveryStore((s) => s.reset)
   const activePipeline = useActivePipeline()
 
@@ -114,24 +121,19 @@ export function ChatPage() {
   // useConversation wizard is retired). Input stays live; a new message steers (latest-wins).
   const agentConv = useAgentConversation()
   const { analyze, answerClarification, isPending: clarificationPending } = useCompetitorAnalysis()
-  const { startAnalysis: startReelAnalysis, activeHandles, creatorStates, synthesisStatus, synthesis, synthesisError, reset: resetReel } = useReelAnalysis()
+  const { startAnalysis: startReelAnalysis, activeHandles, creatorStates, synthesisStatus, reset: resetReel } = useReelAnalysis()
   // Which conversation the current reel run belongs to — gates the live block to that chat and
   // routes its snapshot there on supersede (results-as-messages parity with competitor/discovery).
   const reelConversationId = useReelAnalysisStore((s) => s.reelConversationId)
   const setReelConversationId = useReelAnalysisStore((s) => s.setReelConversationId)
-  // Which conversation the current single-reel run belongs to — gates its live block to that
-  // chat (mirrors reelConversationId; the single-reel store calls this field `conversationId`).
-  const singleReelConversationId = useSingleReelStore((s) => s.conversationId)
   // Repurpose run state — drives the live progress marker; the finished result is snapshotted
   // into the conversation (kind 'repurpose') by the effect below, then the store is reset.
   const repurposeStatus = useRepurposeStore((s) => s.status)
   const repurposeConversationId = useRepurposeStore((s) => s.conversationId)
-  const repurposeError = useRepurposeStore((s) => s.error)
   const resetRepurpose = useRepurposeStore((s) => s.reset)
-  // Which conversation the current transcript run belongs to — independent from single-reel.
-  const transcriptConversationId = useTranscriptStore((s) => s.conversationId)
-  const transcriptStatus = useTranscriptStore((s) => s.status)
-  const resetTranscript = useTranscriptStore((s) => s.reset)
+  // RunCockpit focus — tracks which pipeline pane is "active" for steering (Plan 2 uses this).
+  // For Phase 1 it's just wired to the cockpit so the UI highlights the focused pane.
+  const [focusedKind, setFocusedKind] = useState<RunKind | null>(null)
 
   const [inputText, setInputText] = useState('')
   // The tool armed via a "/" pick or a chip tap. While set, the input shows the
@@ -151,9 +153,14 @@ export function ChatPage() {
   // effect would see a 0→active edge and append a SECOND reel marker below the restored one.
   const reelActiveRef = useRef(activeHandles.length > 0)
   const discoveryResultArmedRef = useRef(false) // armed while a discovery run is live; fires once on done
-  const reelContentArmedRef = useRef(false) // armed while a reel run is live; harvests content once on synthesis done
+  const reelContentArmedRef = useRef(false) // armed while a reel run is live; harvests content + snapshots once on synthesis done
+  // reelSnapshotFiredRef removed (C1 fix): per-run dedup is guaranteed by the terminal-cleanup
+  // effect's `if (!run) return` + `removeRun`. The boolean ref was reset only in launchReelAnalysis,
+  // so agent-loop reel runs never reset it → run #2 was silently dropped. Dedup lives in the run
+  // registry now (once the run is removed, the effect no-ops for that run).
   const repurposeArmedRef = useRef(false) // armed while a repurpose run is live; snapshots once on done
-  const transcriptArmedRef = useRef(false) // armed while a transcript run is live; snapshots once on done
+  // Registry snapshot: tracks run ids already snapshotted so we never double-add.
+  const snapshottedRunIds = useRef<Set<string>>(new Set())
 
   // Selection state — shared across competitor + discovery results
   const [selectedHandles, setSelectedHandles] = useState<string[]>([])
@@ -169,7 +176,6 @@ export function ChatPage() {
   const ready = _isReady()
   // Reel run state (derived from the reel store). A run is "running" until synthesis
   // reaches a terminal state; "done" once synthesis succeeds or fails.
-  const isReelDone = activeHandles.length > 0 && (synthesisStatus === 'done' || synthesisStatus === 'failed')
   const canSend = ready && (inputText.trim().length > 0 || attachment !== null)
 
   // Slash-command menu. Available any time the input is ready (not just the
@@ -225,6 +231,8 @@ export function ChatPage() {
       addMessageTo(discoveryRunConversationId ?? activeConversationId, { role: 'assistant', content: errMsg, type: 'error' })
       setStatus('chatting')
       resetDiscovery()
+      const run = selectActiveRunOfKind(useRunsStore.getState(), 'discovery', discoveryRunConversationId ?? activeConversationId)
+      if (run) { useRunsStore.getState().removeRun(run.id); disposeController(run.id) }
     }
   }, [discoveryStatus, discoveryError, addMessageTo, discoveryRunConversationId, activeConversationId, setStatus, resetDiscovery])
 
@@ -304,6 +312,12 @@ export function ChatPage() {
           .catch(() => {})
       }
       setStatus('chatting')
+      const runDone = selectActiveRunOfKind(useRunsStore.getState(), 'competitor', competitorRunConversationId ?? activeConversationId)
+      if (runDone) { useRunsStore.getState().removeRun(runDone.id); disposeController(runDone.id) }
+    } else if (status === 'error' && competitorResultArmedRef.current) {
+      competitorResultArmedRef.current = false
+      const runErr = selectActiveRunOfKind(useRunsStore.getState(), 'competitor', competitorRunConversationId ?? activeConversationId)
+      if (runErr) { useRunsStore.getState().removeRun(runErr.id); disposeController(runErr.id) }
     }
   }, [status, competitors, summary, niche, candidateProfiles, analysisDidExpand, analysisUnverified, addMessageTo, competitorRunConversationId, activeConversationId, setStatus])
 
@@ -346,8 +360,42 @@ export function ChatPage() {
         .remember(harvestDiscovery(discoveryResults, matched, discoveryCity, discoveryNiche, Date.now()))
         .catch(() => {})
       resetDiscovery()
+      const run = selectActiveRunOfKind(useRunsStore.getState(), 'discovery', discoveryRunConversationId ?? activeConversationId)
+      if (run) { useRunsStore.getState().removeRun(run.id); disposeController(run.id) }
     }
   }, [discoveryStatus, discoveryResults, discoveryCity, discoveryNiche, discoveryProfiles, discoveryDidExpand, discoveryLocationRelaxed, addMessageTo, discoveryRunConversationId, activeConversationId, resetDiscovery])
+
+  // Progress-mirror: keep the discovery run's cockpit pane label in sync with the live step.
+  useEffect(() => {
+    const targetId = discoveryRunConversationId ?? activeConversationId
+    const run = selectActiveRunOfKind(useRunsStore.getState(), 'discovery', targetId)
+    if (run) useRunsStore.getState().updateRun(run.id, { progress: discoveryRunLabel(discoveryCurrentStep, discoveryStepProgressDetail) })
+  }, [discoveryStatus, discoveryCurrentStep, discoveryStepProgressDetail, discoveryRunConversationId, activeConversationId])
+
+  // Progress-mirror: keep the repurpose run's cockpit pane label in sync with the live step.
+  // Use repurposeConversationId (the run's own conversation) so the label stays correct
+  // even if the user switches conversations mid-run.
+  useEffect(() => {
+    const targetId = repurposeConversationId ?? activeConversationId
+    const run = selectActiveRunOfKind(useRunsStore.getState(), 'repurpose', targetId)
+    if (run) useRunsStore.getState().updateRun(run.id, { progress: repurposeRunLabel(repurposeStatus) })
+  }, [repurposeStatus, repurposeConversationId, activeConversationId])
+
+  // Progress-mirror: keep the competitor run's cockpit pane label in sync with the live step.
+  useEffect(() => {
+    const targetId = competitorRunConversationId ?? activeConversationId
+    const run = selectActiveRunOfKind(useRunsStore.getState(), 'competitor', targetId)
+    if (run) useRunsStore.getState().updateRun(run.id, { progress: competitorRunLabel(status, currentStep, stepProgressDetail) })
+  }, [status, currentStep, stepProgressDetail, competitorRunConversationId, activeConversationId])
+
+  // Progress-mirror: keep the reel run's cockpit pane label in sync with the live step.
+  // Uses reelConversationId ?? activeConversationId so the label stays correct even if the
+  // user switches conversations mid-run.
+  useEffect(() => {
+    const targetId = reelConversationId ?? activeConversationId
+    const run = selectActiveRunOfKind(useRunsStore.getState(), 'reel', targetId)
+    if (run) useRunsStore.getState().updateRun(run.id, { progress: reelRunLabel(creatorStates, synthesisStatus) })
+  }, [creatorStates, synthesisStatus, reelConversationId, activeConversationId])
 
   // Snapshot a finished repurpose run into the conversation, then reset the store. Armed only
   // while a real run is live so it fires once. The persisted payload carries everything the
@@ -375,6 +423,10 @@ export function ChatPage() {
         })
       }
       resetRepurpose()
+      // Use the run's own conversation id (captured before reset) so cleanup works
+      // correctly even if the user switched conversations mid-run.
+      const runDone = selectActiveRunOfKind(useRunsStore.getState(), 'repurpose', repurposeConversationId ?? activeConversationId)
+      if (runDone) { useRunsStore.getState().removeRun(runDone.id); disposeController(runDone.id) }
     } else if (repurposeStatus === 'error' && repurposeArmedRef.current) {
       repurposeArmedRef.current = false
       const s = useRepurposeStore.getState()
@@ -384,42 +436,29 @@ export function ChatPage() {
         content: s.error || 'Could not repurpose this reel.',
       })
       resetRepurpose()
+      // Same: use the run's own conversation id, not the currently-active one.
+      const runErr = selectActiveRunOfKind(useRunsStore.getState(), 'repurpose', repurposeConversationId ?? activeConversationId)
+      if (runErr) { useRunsStore.getState().removeRun(runErr.id); disposeController(runErr.id) }
     }
-  }, [repurposeStatus, addMessageTo, activeConversationId, resetRepurpose])
+  }, [repurposeStatus, addMessageTo, activeConversationId, repurposeConversationId, resetRepurpose])
 
-  // Snapshot a finished transcript run into the conversation, then reset the store.
-  // Armed only while a real run is live so it fires once per run.
+  // Registry snapshot effect: watches ALL runs in the store; when any run reaches a terminal
+  // state (done/failed) and hasn't been snapshotted yet, adds it to the correct conversation
+  // as a result/error message, then cleans up the run record + its AbortController.
+  // This is the NEW path for runs managed via runsStore (transcript, single-reel, etc.).
+  // The old per-store effects above still handle competitor/discovery/repurpose via their own
+  // stores; they run in parallel and will be cleaned up in Task 11.
+  const runs = useRunsStore((s) => s.runs)
   useEffect(() => {
-    if (transcriptStatus === 'running') {
-      transcriptArmedRef.current = true
-    } else if (transcriptStatus === 'done' && transcriptArmedRef.current) {
-      transcriptArmedRef.current = false
-      const s = useTranscriptStore.getState()
-      if (s.conversationId && s.result) {
-        addMessageTo(s.conversationId, {
-          role: 'assistant',
-          type: 'result',
-          content: 'Transcript ready.',
-          result: {
-            kind: 'transcript',
-            reelUrl: s.reelUrl ?? '',
-            transcript: s.result.transcript,
-            segments: s.result.segments,
-          },
-        })
-      }
-      resetTranscript()
-    } else if (transcriptStatus === 'failed' && transcriptArmedRef.current) {
-      transcriptArmedRef.current = false
-      const s = useTranscriptStore.getState()
-      addMessageTo(s.conversationId ?? activeConversationId, {
-        role: 'assistant',
-        type: 'error',
-        content: s.error || 'Could not transcribe that reel.',
-      })
-      resetTranscript()
+    for (const run of Object.values(runs)) {
+      if (run.status !== 'done' && run.status !== 'failed') continue
+      if (snapshottedRunIds.current.has(run.id)) continue
+      snapshottedRunIds.current.add(run.id)
+      addMessageTo(run.conversationId, runToMessage(run))
+      useRunsStore.getState().removeRun(run.id)
+      disposeController(run.id)
     }
-  }, [transcriptStatus, addMessageTo, activeConversationId, resetTranscript])
+  }, [runs, addMessageTo])
 
   // Reel → corpus content: when a reel run's synthesis finishes, harvest each analyzed reel
   // into the corpus as content tied to its creator (the "content" half of the corpus). Armed
@@ -503,15 +542,28 @@ export function ChatPage() {
   // Reset the transient analysis state (results live in the conversation's messages, so this
   // just clears the live status/selection without touching history).
   const freshenAnalysis = () => {
+    // I1 fix: remove any live competitor run before calling startChat(). startChat() transitions
+    // the analysis status from 'clarifying' → 'chatting' — a non-terminal state — so the
+    // competitor done/error effect never fires, leaving a zombie "Waiting for your answer…" pane.
+    const competitorConvId = useAnalysisStore.getState().runConversationId ?? activeConversationId
+    const abandonedCompRun = selectActiveRunOfKind(useRunsStore.getState(), 'competitor', competitorConvId)
+    if (abandonedCompRun) {
+      useRunsStore.getState().removeRun(abandonedCompRun.id)
+      disposeController(abandonedCompRun.id)
+    }
     startChat()
     resetDiscovery()
     setSelectedHandles([])
   }
 
-  // Snapshot the CURRENT (finished) reel run into the conversation it ran in, BEFORE a new run
-  // resets the global store. Reads the live store (getState) so it's accurate at call time.
+  // Snapshot the CURRENT (finished) reel run into the conversation it ran in.
+  // Reads the live store (getState) so it's accurate at call time.
   // Guard: only a terminal run with a known home conversation snapshots — an in-flight or
   // never-started run is skipped (interrupted runs are intentionally dropped).
+  // Per-run dedup is provided by the caller (terminal-cleanup effect): it guards with
+  // `if (!run) return` and immediately calls removeRun, so this function fires at most
+  // once per run. No boolean ref needed — that guard was reset only in launchReelAnalysis
+  // and silently dropped agent-path run #2 (C1 fix).
   const snapshotCurrentReelRun = () => {
     const s = useReelAnalysisStore.getState()
     const terminal =
@@ -529,8 +581,28 @@ export function ChatPage() {
     })
   }
 
+  // Reel-run cockpit cleanup: fires on every terminal synthesisStatus ('done' OR 'failed'),
+  // decoupled from the arming sequence above. This covers the direct-to-failed path in
+  // useReelAnalysis (env/single-reel-fn unavailable) that sets synthesisStatus straight to
+  // 'failed' WITHOUT ever passing through 'running' — which meant reelContentArmedRef was
+  // never armed and the cockpit pane was never removed (ghost pane stuck open forever).
+  // By acting only when an active reel run still exists in the registry and removeRun
+  // deletes it, this fires exactly once per run and covers both normal and direct-fail paths.
+  // NOTE: Must be declared after snapshotCurrentReelRun (a const — not hoisted).
+  useEffect(() => {
+    if (synthesisStatus !== 'done' && synthesisStatus !== 'failed') return
+    const targetId = reelConversationId ?? activeConversationId
+    const run = selectActiveRunOfKind(useRunsStore.getState(), 'reel', targetId)
+    if (!run) return
+    snapshotCurrentReelRun() // once per run: guarded by `if (!run) return` + removeRun above
+    useRunsStore.getState().removeRun(run.id)
+    disposeController(run.id)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [synthesisStatus, reelConversationId, activeConversationId])
+
   const handleStartOver = () => {
-    snapshotCurrentReelRun() // preserve the finished run in its conversation before reset wipes it
+    // The dedicated terminal-cleanup effect snapshots any finished reel run automatically
+    // before it is removed from the cockpit; no manual snapshotCurrentReelRun() call needed here.
     resetReel()
     startNew() // a fresh conversation — the finished one stays in history (switchable)
     freshenAnalysis()
@@ -568,7 +640,9 @@ export function ChatPage() {
   }
 
   const handleSwitchConversation = (id: string) => {
-    // 2.2: abort any in-flight run so it doesn't complete and write results into the new conversation.
+    // 2.2: abort the planning-turn Gemini call on conversation switch. Heavy cockpit runs
+    // (competitor/discovery/reel/repurpose) are conversation-scoped — they continue and
+    // snapshot their results into the conversation they started in.
     agentConv.abort()
     switchConversation(id)
     freshenAnalysis()
@@ -599,17 +673,14 @@ export function ChatPage() {
     if (handles.length === 0) return
     const convId = conversationId ?? activeConversationId
     setSelectedHandles([])
-    snapshotCurrentReelRun() // if a finished reel run is on screen, preserve it before this supersedes it
-    // 2.4: set conversation binding + add marker BEFORE startReelAnalysis resets the store,
-    // so back-to-back runs each get their own marker regardless of React batching.
+    // The dedicated terminal-cleanup effect snapshots the previous run automatically before it
+    // is removed; no manual snapshotCurrentReelRun() call needed here. Per-run dedup is
+    // provided by `if (!run) return` + removeRun in the effect — no boolean ref needed.
     reelActiveRef.current = true
     setReelConversationId(convId)
-    addMessageTo(convId, {
-      role: 'assistant',
-      type: 'reel',
-      content: `Analyzing reels for ${handles.map((h) => `@${h}`).join(', ')}.`,
+    launchHeavyRun('reel', handles.map((h) => `@${h}`).join(', '), convId, 'Scraping reels…', (runSignal) => {
+      startReelAnalysis(handles, runSignal)
     })
-    startReelAnalysis(handles)  // sets activeHandles in the reel store
   }
 
   // Wrapper bound to the current selection — used as the onAnalyzeReels callback
@@ -641,28 +712,15 @@ export function ChatPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state])
 
-  // Pipeline-targeted retry: re-fire the reel pipeline for the SAME handles directly (no agent
-  // loop / re-routing), reusing the existing reel marker. Used by the failed-state Retry button.
-  const handleRetryReels = () => {
-    const handles = [...activeHandles]
-    if (handles.length === 0) return
-    setReelConversationId(activeConversationId) // re-bind in case the store reset cleared it
-    startReelAnalysis(handles)
-  }
+  // Active runs for the current conversation — used for the inline single-run progress block
+  // and passed to RunCockpit. useShallow prevents new-array identity from triggering rerenders.
+  const activeRunsForConversation = useRunsStore(
+    useShallow((s) => selectActiveRuns(s, activeConversationId ?? '')),
+  )
+  const singleActiveRun = activeRunsForConversation.length === 1 ? activeRunsForConversation[0] : null
 
   // Derived booleans
   const hasMessages = conversationMessages.length > 0
-  // Only the most recent reel marker renders the live block (the store holds one run); older
-  // markers no-op. Empty when no reel run has started this session.
-  const lastReelMarkerId = [...conversationMessages].reverse().find((m) => m.type === 'reel')?.id
-  // Same one-live-run rule for single-reel: only the latest marker in the owning conversation
-  // renders the live block — older/cross-conversation markers no-op (prevents ghost renders).
-  const lastSingleReelMarkerId = [...conversationMessages].reverse().find((m) => m.type === 'single-reel')?.id
-  // Same one-live-run rule for repurpose: only the latest marker in the owning conversation
-  // renders the live progress block — older / cross-conversation markers no-op.
-  const lastRepurposeMarkerId = [...conversationMessages].reverse().find((m) => m.type === 'repurpose')?.id
-  // Same one-live-run rule for transcript: only the latest marker in the owning conversation renders.
-  const lastTranscriptMarkerId = [...conversationMessages].reverse().find((m) => m.type === 'transcript')?.id
   const isAnalysisRunning = status === 'running'
   const isAnalysisClarifying = status === 'clarifying'
   const isAnalysisDone = status === 'done'
@@ -671,10 +729,6 @@ export function ChatPage() {
   const showInlineContent = isAnalysisRunning || isAnalysisClarifying || isAnalysisDone ||
     isDiscoveryRunning || isDiscoveryDone
   const isReelRunning = activeHandles.length > 0 && synthesisStatus !== 'done' && synthesisStatus !== 'failed'
-  // Live elapsed timers — the honest "how long has this been running" signal for each pipeline.
-  const analysisElapsed = useElapsedTime(isAnalysisRunning)
-  const discoveryElapsed = useElapsedTime(isDiscoveryRunning)
-  const reelElapsed = useElapsedTime(isReelRunning)
 
   // When the pipeline pauses for a clarification, pull the card into view even if the user
   // scrolled up — otherwise the run silently stalls awaiting an answer they can't see.
@@ -797,100 +851,14 @@ export function ChatPage() {
                   // A finished transcript run, snapshotted into this conversation. Renders
                   // statically from the persisted payload — survives new runs and reload.
                   <TranscriptResultMessage key={message.id} payload={message.result} />
+                ) : message.type === 'result' && message.result?.kind === 'single-reel' ? (
+                  // A finished single-reel case study, snapshotted into this conversation.
+                  // Renders statically from the persisted payload — survives reload.
+                  <SingleReelResultMessage key={message.id} payload={message.result} />
                 ) : message.type === 'reel' ? (
-                  // Reel block renders in place at the LATEST reel marker (the store holds one
-                  // live run). Older markers + a restored marker with no live run no-op.
-                  message.id === lastReelMarkerId && activeHandles.length > 0 && reelConversationId === activeConversationId ? (
-                    <Fragment key={message.id}>
-                      <div className="flex items-start gap-2">
-                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(var(--ai-rgb),0.12)] flex items-center justify-center mt-0.5">
-                          <Video size={14} className="text-[var(--color-ai-tint)]" />
-                        </div>
-                        <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(var(--border-rgb),0.08)] text-sm leading-relaxed max-w-[80%]">
-                          <span className="font-semibold text-primary">Analyzing reels</span>
-                          <p className="text-secondary mt-0.5">
-                            Scraping and analyzing reels for {activeHandles.map((h) => `@${h}`).join(', ')}.
-                          </p>
-                          <p className="text-xs font-mono text-muted mt-1 tabular-nums">
-                            {formatElapsed(reelElapsed)} elapsed · usually {activeHandles.length * 2}–{activeHandles.length * 4} min
-                            {reelElapsed > activeHandles.length * 240 ? ' (taking longer than usual — hang tight)' : ''}
-                          </p>
-                        </div>
-                      </div>
-
-                      <InlineReelResults
-                        handles={activeHandles}
-                        creatorStates={creatorStates}
-                        synthesisStatus={synthesisStatus}
-                        synthesis={synthesis}
-                        synthesisError={synthesisError}
-                        onSuggest={(text) => {
-                          setInputText(text)
-                          textareaRef.current?.focus()
-                        }}
-                      />
-
-                      {isReelDone && (
-                        <div className="self-start flex items-center gap-2">
-                          {synthesisStatus === 'failed' && (
-                            <button
-                              onClick={handleRetryReels}
-                              className="px-4 py-2 text-sm font-semibold text-white bg-[var(--color-accent)] rounded-xl hover:bg-[var(--color-accent-hover)] transition-colors"
-                            >
-                              Retry analysis
-                            </button>
-                          )}
-                          <button
-                            onClick={handleStartOver}
-                            className="px-4 py-2 text-sm text-secondary border border-[rgba(var(--border-rgb),0.10)] rounded-xl hover:bg-surface-raised transition-colors"
-                          >
-                            Start over
-                          </button>
-                        </div>
-                      )}
-                    </Fragment>
-                  ) : null
-                ) : message.type === 'single-reel' ? (
-                  // Single-reel case study renders inline from the live single-reel store
-                  // (one active run at a time — the component reads the store directly). Only the
-                  // LATEST marker in the owning conversation renders; older / cross-conversation
-                  // markers no-op (mirrors the reel branch's last-marker + same-conversation guard).
-                  message.id === lastSingleReelMarkerId && singleReelConversationId === activeConversationId ? (
-                    <div key={message.id} className="my-2">
-                      <SingleReelResultMessage />
-                    </div>
-                  ) : null
-                ) : message.type === 'repurpose' ? (
-                  // Repurpose progress renders in place at the LATEST repurpose marker in the
-                  // owning conversation while the run is live; older / cross-conversation markers
-                  // no-op (mirrors the single-reel branch's last-marker + same-conversation guard).
-                  message.id === lastRepurposeMarkerId
-                  && repurposeConversationId === activeConversationId
-                  && (repurposeStatus === 'building-profile' || repurposeStatus === 'analyzing-source' || repurposeStatus === 'rewriting' || repurposeStatus === 'error') ? (
-                    <div key={message.id} className="my-2 text-sm text-muted flex items-center gap-2">
-                      {repurposeStatus === 'error' ? (
-                        <span className="text-[var(--color-accent)]">{repurposeError || 'Could not repurpose this reel.'}</span>
-                      ) : (
-                        <>
-                          <span className="inline-block w-3 h-3 rounded-full border-2 border-[var(--color-accent)] border-t-transparent animate-spin" />
-                          <span>
-                            {repurposeStatus === 'building-profile' && PIPELINE_REGISTRY.repurpose.steps[0]}
-                            {repurposeStatus === 'analyzing-source' && PIPELINE_REGISTRY.repurpose.steps[1]}
-                            {repurposeStatus === 'rewriting' && PIPELINE_REGISTRY.repurpose.steps[2]}
-                            …
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  ) : null
-                ) : message.type === 'transcript' ? (
-                  // Transcript-only view — independent store + API (/api/get-transcript).
-                  // Only the latest marker in the owning conversation renders.
-                  message.id === lastTranscriptMarkerId && transcriptConversationId === activeConversationId ? (
-                    <div key={message.id} className="my-2">
-                      <TranscriptResultMessage />
-                    </div>
-                  ) : null
+                  // Legacy type:'reel' markers (pre-cockpit) no-op silently — the cockpit
+                  // pane now shows reel progress; the finished grid appears in the result message.
+                  null
                 ) : (
                   <ChatMessage
                     key={message.id}
@@ -906,61 +874,61 @@ export function ChatPage() {
               {/* Typing indicators */}
               {agentConv.isThinking && <TypingIndicator />}
 
-              {/* ── Competitor analysis progress ──────────────────────── */}
-              {(isAnalysisRunning || isAnalysisClarifying) && (
-                <>
-                  <ProgressBubble
-                    currentStep={isAnalysisClarifying ? 5 : currentStep}
-                    label={
-                      isAnalysisClarifying
-                        ? 'Waiting for your answer below.'
-                        : stepProgressDetail
-                        ? `${stepProgressDetail}…`
-                        : 'Analyzing competitors — this takes up to 2 minutes…'
-                    }
-                    onStop={isAnalysisRunning ? agentConv.abort : undefined}
-                    elapsedSec={isAnalysisRunning ? analysisElapsed : undefined}
-                  />
-                  {isAnalysisClarifying && pendingDiscovery && (
-                    <div className="flex items-start gap-2">
-                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(var(--accent-rgb),0.12)] flex items-center justify-center mt-0.5">
-                        <Bot size={14} className="text-[var(--color-accent)]" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <ClarificationCard
-                          question={pendingDiscovery.clarificationQuestion}
-                          candidateCount={pendingDiscovery.candidateProfiles.length}
-                          onAnswer={answerClarification}
-                          disabled={clarificationPending}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </>
+              {/* ── Competitor clarification card (cockpit pane replaces the progress bubble) ── */}
+              {isAnalysisClarifying && pendingDiscovery && (
+                <div className="flex items-start gap-2">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(var(--accent-rgb),0.12)] flex items-center justify-center mt-0.5">
+                    <Bot size={14} className="text-[var(--color-accent)]" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <ClarificationCard
+                      question={pendingDiscovery.clarificationQuestion}
+                      candidateCount={pendingDiscovery.candidateProfiles.length}
+                      onAnswer={answerClarification}
+                      disabled={clarificationPending}
+                    />
+                  </div>
+                </div>
               )}
 
-              {/* ── Location discovery progress ───────────────────────── */}
-              {isDiscoveryRunning && (
-                <ProgressBubble
-                  currentStep={activePipeline.step}
-                  steps={activePipeline.stepLabels}
-                  label={activePipeline.progressLabel ?? undefined}
-                  onStop={agentConv.abort}
-                  elapsedSec={discoveryElapsed}
-                />
-              )}
+              {/* ── Location discovery progress now handled by RunCockpit ── */}
 
               {/* Competitor results now render inline as a type:'result' message (Phase 2). */}
 
               {/* Discovery results now render inline as a type:'result' message (Phase 2 stage 2). */}
 
-              {/* Reel analysis now renders in place at its `type:'reel'` marker (above). */}
+              {/* Reel analysis: progress renders in the cockpit pane (RunCockpit below); finished runs appear as type:'result' / kind:'reel' result messages above. */}
 
             </div>
             <div ref={messagesEndRef} />
           </div>
         )}
       </div>
+
+      {/* ── RunCockpit + inline single-run progress ─────────────────────── */}
+      {/* RunCockpit renders a grid/counter when 2+ runs are active; returns null for 0 or 1. */}
+      {activeConversationId && (
+        <div className="flex-shrink-0 px-4 max-w-4xl mx-auto w-full">
+          <RunCockpit
+            conversationId={activeConversationId}
+            focusedKind={focusedKind}
+            onFocusKind={setFocusedKind}
+          />
+          {/* When exactly one run is active (cockpit returns null), show a minimal inline
+              progress row so the user can see the run's current step. */}
+          {singleActiveRun && (
+            <div className="flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-surface border border-[rgba(var(--border-rgb),0.08)] text-sm mb-2">
+              <span className="relative flex h-2.5 w-2.5 flex-shrink-0">
+                <span className="absolute inline-flex h-full w-full rounded-full bg-[var(--color-accent)] opacity-60 animate-ping" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[var(--color-accent)]" />
+              </span>
+              <span className="text-secondary truncate">
+                {singleActiveRun.progress || singleActiveRun.targetLabel || 'Running…'}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Input area — blends into the chat canvas; the field is a soft pill ── */}
       <div className="flex-shrink-0 bg-chai px-4 pt-2 pb-[max(12px,env(safe-area-inset-bottom))]">
