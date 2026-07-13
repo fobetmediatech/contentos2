@@ -154,7 +154,7 @@ export function ChatPage() {
   const reelContentArmedRef = useRef(false) // armed while a reel run is live; harvests content once on synthesis done
   const repurposeArmedRef = useRef(false) // armed while a repurpose run is live; snapshots once on done
   // Registry snapshot: tracks run ids already snapshotted so we never double-add.
-  const snapshotedRunIds = useRef<Set<string>>(new Set())
+  const snapshottedRunIds = useRef<Set<string>>(new Set())
 
   // Selection state — shared across competitor + discovery results
   const [selectedHandles, setSelectedHandles] = useState<string[]>([])
@@ -398,8 +398,8 @@ export function ChatPage() {
   useEffect(() => {
     for (const run of Object.values(runs)) {
       if (run.status !== 'done' && run.status !== 'failed') continue
-      if (snapshotedRunIds.current.has(run.id)) continue
-      snapshotedRunIds.current.add(run.id)
+      if (snapshottedRunIds.current.has(run.id)) continue
+      snapshottedRunIds.current.add(run.id)
       addMessageTo(run.conversationId, runToMessage(run))
       useRunsStore.getState().removeRun(run.id)
       disposeController(run.id)

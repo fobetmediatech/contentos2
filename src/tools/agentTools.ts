@@ -159,19 +159,25 @@ const TOOL_REGISTRY: Record<AgentToolName, ToolRecord> = {
 
   analyze_single_reel: {
     description:
-      'Deep case-study analysis of ONE specific Instagram reel, given its URL (a /reel/, /reels/ or /p/ link). Returns the transcript plus a full hook/psychology breakdown. Use when the user pastes or names a single reel URL — NOT for analyzing a creator by @handle (use analyze_reels for that).',
+      'Deep case-study analysis of one or more specific Instagram reels, given their URLs (a /reel/, /reels/ or /p/ link). Returns the transcript plus a full hook/psychology breakdown. Use when the user pastes or names a reel URL — NOT for analyzing a creator by @handle (use analyze_reels for that). To process multiple reels in one go, pass reelUrls as an array.',
     parameters: {
       type: 'object',
-      properties: { reelUrl: { type: 'string', description: 'The full Instagram reel URL to analyze.' } },
-      required: ['reelUrl'],
+      properties: {
+        reelUrl: { type: 'string', description: 'A single Instagram reel URL to analyze.' },
+        reelUrls: { type: 'array', items: { type: 'string' }, description: 'Multiple Instagram reel URLs to analyze at once — pass this (instead of reelUrl) when the user names or pastes several reels.' },
+      },
     },
     schema: z
-      .object({ reelUrl: z.string().min(1) })
+      .object({ reelUrl: z.string().optional(), reelUrls: z.array(z.string()).optional() })
       .transform((d) => {
-        const parsed = parseReelUrl(d.reelUrl)
-        return parsed ? { reelUrl: parsed.canonicalUrl, shortCode: parsed.shortCode } : { reelUrl: '', shortCode: '' }
+        const inputs = d.reelUrls && d.reelUrls.length > 0 ? d.reelUrls : d.reelUrl ? [d.reelUrl] : []
+        const reelUrls = inputs
+          .map((u) => parseReelUrl(u))
+          .filter((p): p is NonNullable<typeof p> => p !== null)
+          .map((p) => p.canonicalUrl)
+        return { reelUrls }
       })
-      .refine((d) => d.shortCode.length > 0, { message: 'a valid Instagram reel URL is required', path: ['reelUrl'] }),
+      .refine((d) => d.reelUrls.length > 0, { message: 'a valid Instagram reel URL is required', path: ['reelUrl'] }),
     toAction: (args) => ({ type: 'dispatch', name: 'analyze_single_reel', args }),
   },
 
@@ -212,19 +218,25 @@ const TOOL_REGISTRY: Record<AgentToolName, ToolRecord> = {
 
   get_reel_transcript: {
     description:
-      'Extract and display the full spoken transcript of a single Instagram reel. Use when the user asks to transcribe a reel, get what someone said, see the words/dialogue spoken in a video, or requests "transcript". The user must provide the reel URL. Do NOT use for hook/case-study analysis (use analyze_single_reel for that).',
+      'Extract and display the full spoken transcript of one or more Instagram reels. Use when the user asks to transcribe a reel, get what someone said, see the words/dialogue spoken in a video, or requests "transcript". The user must provide the reel URL. Do NOT use for hook/case-study analysis (use analyze_single_reel for that). To process multiple reels in one go, pass reelUrls as an array.',
     parameters: {
       type: 'object',
-      properties: { reelUrl: { type: 'string', description: 'The full Instagram reel URL to transcribe.' } },
-      required: ['reelUrl'],
+      properties: {
+        reelUrl: { type: 'string', description: 'A single Instagram reel URL to transcribe.' },
+        reelUrls: { type: 'array', items: { type: 'string' }, description: 'Multiple Instagram reel URLs to transcribe at once — pass this (instead of reelUrl) when the user names or pastes several reels.' },
+      },
     },
     schema: z
-      .object({ reelUrl: z.string().min(1) })
+      .object({ reelUrl: z.string().optional(), reelUrls: z.array(z.string()).optional() })
       .transform((d) => {
-        const parsed = parseReelUrl(d.reelUrl)
-        return parsed ? { reelUrl: parsed.canonicalUrl, shortCode: parsed.shortCode } : { reelUrl: '', shortCode: '' }
+        const inputs = d.reelUrls && d.reelUrls.length > 0 ? d.reelUrls : d.reelUrl ? [d.reelUrl] : []
+        const reelUrls = inputs
+          .map((u) => parseReelUrl(u))
+          .filter((p): p is NonNullable<typeof p> => p !== null)
+          .map((p) => p.canonicalUrl)
+        return { reelUrls }
       })
-      .refine((d) => d.shortCode.length > 0, { message: 'a valid Instagram reel URL is required', path: ['reelUrl'] }),
+      .refine((d) => d.reelUrls.length > 0, { message: 'a valid Instagram reel URL is required', path: ['reelUrl'] }),
     toAction: (args) => ({ type: 'dispatch', name: 'get_reel_transcript', args }),
   },
 

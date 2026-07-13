@@ -285,7 +285,7 @@ export function useAgentConversation() {
     }
 
     if (name === 'analyze_single_reel') {
-      const urls = (args.reelUrls as string[] | undefined) ?? [String(args.reelUrl ?? '')].filter(Boolean)
+      const urls = (args.reelUrls as string[]) ?? []
       const convId = useConversationsStore.getState().activeId ?? ''
       launchReelUrlRuns('single-reel', urls, convId, (rid, url, sig) => void startSingleReel(rid, url, sig))
       return
@@ -311,7 +311,7 @@ export function useAgentConversation() {
     }
 
     if (name === 'get_reel_transcript') {
-      const urls = (args.reelUrls as string[] | undefined) ?? [String(args.reelUrl ?? '')].filter(Boolean)
+      const urls = (args.reelUrls as string[]) ?? []
       const convId = useConversationsStore.getState().activeId ?? ''
       launchReelUrlRuns('transcript', urls, convId, (rid, url, sig) => void startTranscript(rid, url, sig))
       return
