@@ -229,5 +229,6 @@ export function useRepurposeReel() {
     [buildVoiceProfile],
   )
 
-  return { startRepurpose, rebuildVoiceProfile }
+  // analyzeSource + buildVoiceProfile are also consumed by Script Studio (useReelRemix).
+  return { startRepurpose, rebuildVoiceProfile, analyzeSource, buildVoiceProfile }
 }

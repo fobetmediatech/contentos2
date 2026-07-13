@@ -10,7 +10,7 @@
  * Key: APIFY_KEY_1..10 (numbered) and/or APIFY_KEYS (comma-separated) from server env.
  *
  * Security properties:
- *   - Actor allowlist: only the 4 Instagram actors used by this product.
+ *   - Actor allowlist: the 4 Instagram actors + the YouTube transcript actor used by this product.
  *   - Fails closed: missing keys → 500; missing/invalid token → 401.
  *
  * Key affinity: the pool is N SEPARATE Apify accounts (not one workspace), so a run is
@@ -36,6 +36,7 @@ const ALLOWED_ACTORS = new Set([
   'apify~instagram-hashtag-scraper',
   'apify~instagram-scraper',
   'apify~instagram-reel-scraper',
+  'topaz_sharingan~Youtube-Transcript-Scraper-1',
 ])
 
 function getApifyKeys(): string[] {

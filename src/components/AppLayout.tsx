@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Brain, MessageSquare, CalendarDays, Wallet, BarChart2, Clapperboard, ShieldCheck, Target, Menu, X, Sun, Moon } from 'lucide-react'
+import { Brain, MessageSquare, CalendarDays, Wallet, BarChart2, Clapperboard, ShieldCheck, Target, Menu, X, Sun, Moon, Wand2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { UserButton } from '@clerk/react'
 import { useCorpusStore } from '../store/corpusStore'
@@ -29,6 +29,7 @@ interface NavSection {
 const NAV_SECTIONS: NavSection[] = [
   { path: '/', label: 'Chat', icon: MessageSquare, fullBleed: true },
   { path: '/strategy', label: 'Strategy', icon: Target },
+  { path: '/script-studio', label: 'Script Studio', icon: Wand2 },
   { path: '/calendar', label: 'Calendar', icon: CalendarDays },
   { path: '/payments', label: 'Payments', icon: Wallet, financeOnly: true },
   { path: '/memory', label: 'Memory', icon: Brain },
