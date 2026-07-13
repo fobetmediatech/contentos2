@@ -465,21 +465,30 @@ export function ChatPage() {
   useEffect(() => {
     if (synthesisStatus === 'running') {
       reelContentArmedRef.current = true
-    } else if ((synthesisStatus === 'done' || synthesisStatus === 'failed') && reelContentArmedRef.current) {
+    } else if (synthesisStatus === 'done' && reelContentArmedRef.current) {
       reelContentArmedRef.current = false
-      if (synthesisStatus === 'done') {
-        void useCorpusStore.getState().rememberContent(harvestReelContent(creatorStates, Date.now())).catch(() => {})
-      }
-      // Snapshot the finished run into its conversation (done or failed), then remove it from
-      // the cockpit. snapshotCurrentReelRun is guarded by reelSnapshotFiredRef so that a
-      // subsequent launchReelAnalysis / handleStartOver call doesn't double-snapshot.
-      snapshotCurrentReelRun()
-      const targetId = reelConversationId ?? activeConversationId
-      const run = selectActiveRunOfKind(useRunsStore.getState(), 'reel', targetId)
-      if (run) { useRunsStore.getState().removeRun(run.id); disposeController(run.id) }
+      void useCorpusStore.getState().rememberContent(harvestReelContent(creatorStates, Date.now())).catch(() => {})
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [synthesisStatus, creatorStates])
+
+  // Reel-run cockpit cleanup: fires on every terminal synthesisStatus ('done' OR 'failed'),
+  // decoupled from the arming sequence above. This covers the direct-to-failed path in
+  // useReelAnalysis (env/single-reel-fn unavailable) that sets synthesisStatus straight to
+  // 'failed' WITHOUT ever passing through 'running' — which meant reelContentArmedRef was
+  // never armed and the cockpit pane was never removed (ghost pane stuck open forever).
+  // By acting only when an active reel run still exists in the registry and removeRun
+  // deletes it, this fires exactly once per run and covers both normal and direct-fail paths.
+  useEffect(() => {
+    if (synthesisStatus !== 'done' && synthesisStatus !== 'failed') return
+    const targetId = reelConversationId ?? activeConversationId
+    const run = selectActiveRunOfKind(useRunsStore.getState(), 'reel', targetId)
+    if (!run) return
+    snapshotCurrentReelRun() // idempotent via reelSnapshotFiredRef
+    useRunsStore.getState().removeRun(run.id)
+    disposeController(run.id)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [synthesisStatus, reelConversationId, activeConversationId])
 
   // Scroll to bottom when content changes, but only when the user is near the bottom.
   // When they've scrolled up to read history, auto-scroll would yank them away.
@@ -581,7 +590,8 @@ export function ChatPage() {
   }
 
   const handleStartOver = () => {
-    snapshotCurrentReelRun() // preserve the finished run in its conversation before reset wipes it
+    // The dedicated terminal-cleanup effect snapshots any finished reel run automatically
+    // before it is removed from the cockpit; no manual snapshotCurrentReelRun() call needed here.
     resetReel()
     startNew() // a fresh conversation — the finished one stays in history (switchable)
     freshenAnalysis()
@@ -650,8 +660,10 @@ export function ChatPage() {
     if (handles.length === 0) return
     const convId = conversationId ?? activeConversationId
     setSelectedHandles([])
-    snapshotCurrentReelRun() // if a finished reel run is on screen, preserve it before this supersedes it
-    reelSnapshotFiredRef.current = false // reset guard for the new run
+    // The dedicated terminal-cleanup effect snapshots the previous run automatically before it
+    // is removed; no manual snapshotCurrentReelRun() call needed here. Reset the guard so the
+    // NEW run can snapshot when it completes.
+    reelSnapshotFiredRef.current = false
     reelActiveRef.current = true
     setReelConversationId(convId)
     launchHeavyRun('reel', handles.map((h) => `@${h}`).join(', '), convId, 'Scraping reels…', (runSignal) => {
@@ -889,7 +901,7 @@ export function ChatPage() {
 
               {/* Discovery results now render inline as a type:'result' message (Phase 2 stage 2). */}
 
-              {/* Reel analysis now renders in place at its `type:'reel'` marker (above). */}
+              {/* Reel analysis: progress renders in the cockpit pane (RunCockpit below); finished runs appear as type:'result' / kind:'reel' result messages above. */}
 
             </div>
             <div ref={messagesEndRef} />
