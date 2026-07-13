@@ -26,7 +26,7 @@ import { useReelAnalysis } from './useReelAnalysis'
 import { useSingleReelAnalysis } from './useSingleReelAnalysis'
 import { useRepurposeReel } from './useRepurposeReel'
 import { useTranscriptAnalysis } from './useTranscriptAnalysis'
-import { launchReelUrlRuns } from './agentRunLaunch'
+import { launchReelUrlRuns, launchHeavyRun } from './agentRunLaunch'
 import { callGeminiWithTools, callGeminiContent, GeminiError } from '../ai/gemini'
 import type { GeminiTurn } from '../ai/gemini'
 import type { ContentContext } from '../ai/prompts'
@@ -318,15 +318,12 @@ export function useAgentConversation() {
     }
 
     if (name === 'discover_by_location') {
-      discover(
-        {
-          city: String(args.city ?? ''),
-          niche: String(args.niche ?? ''),
-          depth: (args.depth as 'standard' | 'deep') ?? 'standard',
-          clientName: '',
-        },
-        signal,
-      )
+      const city = String(args.city ?? '')
+      const niche = String(args.niche ?? '')
+      const convId = useConversationsStore.getState().activeId
+      launchHeavyRun('discovery', [city, niche].filter(Boolean).join(' ') || 'discovery', convId, 'Finding creators…', (runSignal) => {
+        discover({ city, niche, depth: (args.depth as 'standard' | 'deep') ?? 'standard', clientName: '' }, runSignal)
+      })
       return
     }
 

@@ -50,9 +50,10 @@ import { MAX_INPUT_CHARS } from '../lib/constants'
 import { readAttachment, ACCEPT_ATTR, type ChatAttachment } from '../lib/attachment'
 import { TARGET_PER_CATEGORY } from '../hooks/useCompetitorAnalysis'
 import type { CompetitorResultPayload } from '../domain/chat'
-import { useRunsStore, selectActiveRuns } from '../store/runsStore'
+import { useRunsStore, selectActiveRuns, selectActiveRunOfKind } from '../store/runsStore'
 import { RunCockpit } from '../components/runs/RunCockpit'
 import { runToMessage } from './chatRunSnapshot'
+import { discoveryRunLabel } from './heavyRunLabels'
 import { disposeController } from '../lib/runControllers'
 import type { RunKind } from '../domain/runs'
 
@@ -110,6 +111,8 @@ export function ChatPage() {
   const discoveryProfiles = useDiscoveryStore((s) => s.candidateProfiles)
   const discoveryLocationRelaxed = useDiscoveryStore((s) => s.locationFilterRelaxed)
   const discoveryNiche = useDiscoveryStore((s) => s.niche)
+  const discoveryCurrentStep = useDiscoveryStore((s) => s.currentStep)
+  const discoveryStepProgressDetail = useDiscoveryStore((s) => s.stepProgressDetail)
   const resetDiscovery = useDiscoveryStore((s) => s.reset)
   const activePipeline = useActivePipeline()
 
@@ -226,6 +229,8 @@ export function ChatPage() {
       addMessageTo(discoveryRunConversationId ?? activeConversationId, { role: 'assistant', content: errMsg, type: 'error' })
       setStatus('chatting')
       resetDiscovery()
+      const run = selectActiveRunOfKind(useRunsStore.getState(), 'discovery', discoveryRunConversationId ?? activeConversationId)
+      if (run) { useRunsStore.getState().removeRun(run.id); disposeController(run.id) }
     }
   }, [discoveryStatus, discoveryError, addMessageTo, discoveryRunConversationId, activeConversationId, setStatus, resetDiscovery])
 
@@ -347,8 +352,16 @@ export function ChatPage() {
         .remember(harvestDiscovery(discoveryResults, matched, discoveryCity, discoveryNiche, Date.now()))
         .catch(() => {})
       resetDiscovery()
+      const run = selectActiveRunOfKind(useRunsStore.getState(), 'discovery', discoveryRunConversationId ?? activeConversationId)
+      if (run) { useRunsStore.getState().removeRun(run.id); disposeController(run.id) }
     }
   }, [discoveryStatus, discoveryResults, discoveryCity, discoveryNiche, discoveryProfiles, discoveryDidExpand, discoveryLocationRelaxed, addMessageTo, discoveryRunConversationId, activeConversationId, resetDiscovery])
+
+  // Progress-mirror: keep the discovery run's cockpit pane label in sync with the live step.
+  useEffect(() => {
+    const run = selectActiveRunOfKind(useRunsStore.getState(), 'discovery', activeConversationId)
+    if (run) useRunsStore.getState().updateRun(run.id, { progress: discoveryRunLabel(discoveryCurrentStep, discoveryStepProgressDetail) })
+  }, [discoveryStatus, discoveryCurrentStep, discoveryStepProgressDetail, activeConversationId])
 
   // Snapshot a finished repurpose run into the conversation, then reset the store. Armed only
   // while a real run is live so it fires once. The persisted payload carries everything the
@@ -912,16 +925,7 @@ export function ChatPage() {
                 </>
               )}
 
-              {/* ── Location discovery progress ───────────────────────── */}
-              {isDiscoveryRunning && (
-                <ProgressBubble
-                  currentStep={activePipeline.step}
-                  steps={activePipeline.stepLabels}
-                  label={activePipeline.progressLabel ?? undefined}
-                  onStop={agentConv.abort}
-                  elapsedSec={discoveryElapsed}
-                />
-              )}
+              {/* ── Location discovery progress now handled by RunCockpit ── */}
 
               {/* Competitor results now render inline as a type:'result' message (Phase 2). */}
 
