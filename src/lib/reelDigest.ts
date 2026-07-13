@@ -1,5 +1,5 @@
 import type { ReelData } from '../store/reelAnalysisStore'
-import type { SingleReelResult } from '../store/singleReelStore'
+import type { SingleReelResult } from '../domain/reel'
 
 export const SUMMARY_INPUT_TOKEN_BUDGET = 100_000
 export const TRANSCRIPT_PREFIX_CHARS = 600

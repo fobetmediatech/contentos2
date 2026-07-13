@@ -9,7 +9,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { supabaseStorage } from './supabaseStorage'
 import { isCleanReelRun } from './reelPersist'
-import type { SingleReelResult } from './singleReelStore'
+import type { SingleReelResult } from '../domain/reel'
 import type { CreatorHookSummary } from '../ai/prompts/creatorHookSummary'
 
 // ----- Creator status -----

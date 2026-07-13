@@ -31,9 +31,7 @@ import { ReelResultMessage } from '../components/ReelResultMessage'
 import { SingleReelResultMessage } from '../components/SingleReelResultMessage'
 import RepurposeResultMessage from '../components/RepurposeResultMessage'
 import { TranscriptResultMessage } from '../components/TranscriptResultMessage'
-import { useSingleReelStore } from '../store/singleReelStore'
 import { useRepurposeStore } from '../store/repurposeStore'
-import { useTranscriptStore } from '../store/transcriptStore'
 import { PIPELINE_REGISTRY } from '../tools/registry'
 import { SlashCommandMenu } from '../components/SlashCommandMenu'
 import { CHAT_TOOL_COMMANDS } from '../shared/utils/toolCommands'
@@ -125,20 +123,12 @@ export function ChatPage() {
   // routes its snapshot there on supersede (results-as-messages parity with competitor/discovery).
   const reelConversationId = useReelAnalysisStore((s) => s.reelConversationId)
   const setReelConversationId = useReelAnalysisStore((s) => s.setReelConversationId)
-  // Which conversation the current single-reel run belongs to — gates its live block to that
-  // chat (mirrors reelConversationId; the single-reel store calls this field `conversationId`).
-  const singleReelConversationId = useSingleReelStore((s) => s.conversationId)
   // Repurpose run state — drives the live progress marker; the finished result is snapshotted
   // into the conversation (kind 'repurpose') by the effect below, then the store is reset.
   const repurposeStatus = useRepurposeStore((s) => s.status)
   const repurposeConversationId = useRepurposeStore((s) => s.conversationId)
   const repurposeError = useRepurposeStore((s) => s.error)
   const resetRepurpose = useRepurposeStore((s) => s.reset)
-  // Which conversation the current transcript run belongs to — independent from single-reel.
-  const transcriptConversationId = useTranscriptStore((s) => s.conversationId)
-  const transcriptStatus = useTranscriptStore((s) => s.status)
-  const resetTranscript = useTranscriptStore((s) => s.reset)
-
   // RunCockpit focus — tracks which pipeline pane is "active" for steering (Plan 2 uses this).
   // For Phase 1 it's just wired to the cockpit so the UI highlights the focused pane.
   const [focusedKind, setFocusedKind] = useState<RunKind | null>(null)
@@ -163,7 +153,6 @@ export function ChatPage() {
   const discoveryResultArmedRef = useRef(false) // armed while a discovery run is live; fires once on done
   const reelContentArmedRef = useRef(false) // armed while a reel run is live; harvests content once on synthesis done
   const repurposeArmedRef = useRef(false) // armed while a repurpose run is live; snapshots once on done
-  const transcriptArmedRef = useRef(false) // armed while a transcript run is live; snapshots once on done
   // Registry snapshot: tracks run ids already snapshotted so we never double-add.
   const snapshotedRunIds = useRef<Set<string>>(new Set())
 
@@ -398,40 +387,6 @@ export function ChatPage() {
       resetRepurpose()
     }
   }, [repurposeStatus, addMessageTo, activeConversationId, resetRepurpose])
-
-  // Snapshot a finished transcript run into the conversation, then reset the store.
-  // Armed only while a real run is live so it fires once per run.
-  useEffect(() => {
-    if (transcriptStatus === 'running') {
-      transcriptArmedRef.current = true
-    } else if (transcriptStatus === 'done' && transcriptArmedRef.current) {
-      transcriptArmedRef.current = false
-      const s = useTranscriptStore.getState()
-      if (s.conversationId && s.result) {
-        addMessageTo(s.conversationId, {
-          role: 'assistant',
-          type: 'result',
-          content: 'Transcript ready.',
-          result: {
-            kind: 'transcript',
-            reelUrl: s.reelUrl ?? '',
-            transcript: s.result.transcript,
-            segments: s.result.segments,
-          },
-        })
-      }
-      resetTranscript()
-    } else if (transcriptStatus === 'failed' && transcriptArmedRef.current) {
-      transcriptArmedRef.current = false
-      const s = useTranscriptStore.getState()
-      addMessageTo(s.conversationId ?? activeConversationId, {
-        role: 'assistant',
-        type: 'error',
-        content: s.error || 'Could not transcribe that reel.',
-      })
-      resetTranscript()
-    }
-  }, [transcriptStatus, addMessageTo, activeConversationId, resetTranscript])
 
   // Registry snapshot effect: watches ALL runs in the store; when any run reaches a terminal
   // state (done/failed) and hasn't been snapshotted yet, adds it to the correct conversation
@@ -692,14 +647,9 @@ export function ChatPage() {
   // Only the most recent reel marker renders the live block (the store holds one run); older
   // markers no-op. Empty when no reel run has started this session.
   const lastReelMarkerId = [...conversationMessages].reverse().find((m) => m.type === 'reel')?.id
-  // Same one-live-run rule for single-reel: only the latest marker in the owning conversation
-  // renders the live block — older/cross-conversation markers no-op (prevents ghost renders).
-  const lastSingleReelMarkerId = [...conversationMessages].reverse().find((m) => m.type === 'single-reel')?.id
   // Same one-live-run rule for repurpose: only the latest marker in the owning conversation
   // renders the live progress block — older / cross-conversation markers no-op.
   const lastRepurposeMarkerId = [...conversationMessages].reverse().find((m) => m.type === 'repurpose')?.id
-  // Same one-live-run rule for transcript: only the latest marker in the owning conversation renders.
-  const lastTranscriptMarkerId = [...conversationMessages].reverse().find((m) => m.type === 'transcript')?.id
   const isAnalysisRunning = status === 'running'
   const isAnalysisClarifying = status === 'clarifying'
   const isAnalysisDone = status === 'done'
@@ -834,6 +784,10 @@ export function ChatPage() {
                   // A finished transcript run, snapshotted into this conversation. Renders
                   // statically from the persisted payload — survives new runs and reload.
                   <TranscriptResultMessage key={message.id} payload={message.result} />
+                ) : message.type === 'result' && message.result?.kind === 'single-reel' ? (
+                  // A finished single-reel case study, snapshotted into this conversation.
+                  // Renders statically from the persisted payload — survives reload.
+                  <SingleReelResultMessage key={message.id} payload={message.result} />
                 ) : message.type === 'reel' ? (
                   // Reel block renders in place at the LATEST reel marker (the store holds one
                   // live run). Older markers + a restored marker with no live run no-op.
@@ -887,16 +841,6 @@ export function ChatPage() {
                       )}
                     </Fragment>
                   ) : null
-                ) : message.type === 'single-reel' ? (
-                  // Single-reel case study renders inline from the live single-reel store
-                  // (one active run at a time — the component reads the store directly). Only the
-                  // LATEST marker in the owning conversation renders; older / cross-conversation
-                  // markers no-op (mirrors the reel branch's last-marker + same-conversation guard).
-                  message.id === lastSingleReelMarkerId && singleReelConversationId === activeConversationId ? (
-                    <div key={message.id} className="my-2">
-                      <SingleReelResultMessage />
-                    </div>
-                  ) : null
                 ) : message.type === 'repurpose' ? (
                   // Repurpose progress renders in place at the LATEST repurpose marker in the
                   // owning conversation while the run is live; older / cross-conversation markers
@@ -918,14 +862,6 @@ export function ChatPage() {
                           </span>
                         </>
                       )}
-                    </div>
-                  ) : null
-                ) : message.type === 'transcript' ? (
-                  // Transcript-only view — independent store + API (/api/get-transcript).
-                  // Only the latest marker in the owning conversation renders.
-                  message.id === lastTranscriptMarkerId && transcriptConversationId === activeConversationId ? (
-                    <div key={message.id} className="my-2">
-                      <TranscriptResultMessage />
                     </div>
                   ) : null
                 ) : (

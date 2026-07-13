@@ -15,7 +15,7 @@
 import { useState } from 'react'
 import { Bot, ChevronDown, ChevronUp } from 'lucide-react'
 import type { ReelData, ReelCaseStatus } from '../store/reelAnalysisStore'
-import type { SingleReelResult } from '../store/singleReelStore'
+import type { SingleReelResult } from '../domain/reel'
 import { CaseStudyMarkdown } from './markdown/CaseStudyMarkdown'
 import { ReelTranscriptView } from './ReelTranscriptView'
 

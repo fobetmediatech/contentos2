@@ -17,7 +17,7 @@ vi.mock('../ai/gemini', () => ({ callGeminiWithSchema: vi.fn() }))
 import { callGeminiWithSchema } from '../ai/gemini'
 import { synthesizeCreatorHooks } from './reelAnalyzer'
 import type { ReelData } from '../store/reelAnalysisStore'
-import type { SingleReelResult } from '../store/singleReelStore'
+import type { SingleReelResult } from '../domain/reel'
 
 const mockGemini = vi.mocked(callGeminiWithSchema)
 

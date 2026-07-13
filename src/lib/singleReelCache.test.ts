@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { getCachedSingleReel, setCachedSingleReel } from './singleReelCache'
-import type { SingleReelResult } from '../store/singleReelStore'
+import type { SingleReelResult } from '../domain/reel'
 
 const sample: SingleReelResult = { transcript: 't', segments: [], videoAnalysis: {} as never, markdown: '# hi' }
 

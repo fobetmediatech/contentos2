@@ -13,8 +13,7 @@ import type { CompetitorAnalysisResult, DiscoveryResult } from '../ai/prompts'
 import type { CreatorAnalysisState, SynthesisOutput } from '../store/reelAnalysisStore'
 import type { VoiceProfile } from '../ai/prompts/voiceProfile'
 import type { ReelRewriteResult } from '../ai/prompts/reelRewrite'
-import type { TranscriptSegment } from '../store/transcriptStore'
-import type { SingleReelResult } from './reel'
+import type { TranscriptSegment, SingleReelResult } from './reel'
 
 export type CompetitorResultPayload = {
   kind: 'competitor'

@@ -1,16 +1,15 @@
 /**
- * TranscriptResultMessage — renders the live transcript-only view for a reel.
+ * TranscriptResultMessage — renders a finished transcript result from a persisted payload.
  *
- * Reads useTranscriptStore directly (fully independent from singleReelStore).
- * ChatPage drops it at the `type:'transcript'` marker. Shows only the spoken
+ * Requires a `payload` prop (results-as-messages path). Shows only the spoken
  * transcript (timestamped segments or raw text), not a case-study breakdown.
  *
- * States: running → pulsing saffron dot; failed → error; done → segments + copy.
+ * The live progress for an in-flight transcript run is now handled by RunCockpit /
+ * the inline single-run progress row in ChatPage (registry-backed, Task 10).
  */
 
 import { useState } from 'react'
 import { Copy, FileText, Video } from 'lucide-react'
-import { useTranscriptStore } from '../store/transcriptStore'
 import type { TranscriptResultPayload } from '../domain/chat'
 import { GoogleExportButton } from './GoogleExportButton'
 
@@ -23,112 +22,79 @@ function fmtTime(seconds: number): string {
 }
 
 interface Props {
-  /** When provided, renders statically from the persisted payload (results-as-messages). */
-  payload?: TranscriptResultPayload
+  payload: TranscriptResultPayload
 }
 
-export function TranscriptResultMessage({ payload }: Props = {}) {
-  const status = useTranscriptStore((s) => s.status)
-  const progress = useTranscriptStore((s) => s.progress)
-  const liveResult = useTranscriptStore((s) => s.result)
-  const error = useTranscriptStore((s) => s.error)
-
-  // Static mode: render persisted payload without touching the store.
-  const result = payload ? { transcript: payload.transcript, segments: payload.segments } : liveResult
-
+export function TranscriptResultMessage({ payload }: Props) {
+  const result = { transcript: payload.transcript, segments: payload.segments }
   const [copied, setCopied] = useState(false)
 
-  // In static mode, always render the done view directly.
-  if (!payload && status === 'running') {
-    return (
-      <div className="flex items-center gap-2.5 px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(var(--border-rgb),0.08)] text-sm max-w-[80%]">
-        <span className="relative flex h-2.5 w-2.5 flex-shrink-0">
-          <span className="absolute inline-flex h-full w-full rounded-full bg-[var(--color-accent)] opacity-60 animate-ping" />
-          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[var(--color-accent)]" />
-        </span>
-        <span className="text-secondary">{progress || 'Transcribing reel…'}</span>
-      </div>
-    )
+  const hasTranscript = result.transcript.trim().length > 0
+
+  const fullText =
+    result.segments.length > 0
+      ? result.segments.map((seg) => `[${fmtTime(seg.start)}] ${seg.text}`).join('\n')
+      : result.transcript
+
+  const handleCopy = () => {
+    void navigator.clipboard.writeText(fullText)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
-  if (!payload && status === 'failed') {
+  if (!hasTranscript) {
     return (
       <div className="flex items-start gap-2">
         <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(224,92,92,0.12)] flex items-center justify-center mt-0.5">
           <Video size={14} className="text-danger" />
         </div>
-        <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-[rgba(224,92,92,0.08)] border border-[rgba(224,92,92,0.30)] text-sm leading-relaxed max-w-[80%]">
-          <p className="text-danger">{error ?? 'Could not transcribe that reel.'}</p>
+        <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(var(--border-rgb),0.08)] text-sm leading-relaxed max-w-[80%]">
+          <p className="text-muted italic">No spoken content detected in this reel.</p>
         </div>
       </div>
     )
   }
 
-  if ((payload || status === 'done') && result) {
-    const hasTranscript = result.transcript.trim().length > 0
-
-    const fullText =
-      result.segments.length > 0
-        ? result.segments.map((seg) => `[${fmtTime(seg.start)}] ${seg.text}`).join('\n')
-        : result.transcript
-
-    const handleCopy = () => {
-      void navigator.clipboard.writeText(fullText)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
-
-    return (
-      <div className="flex items-start gap-2">
-        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(var(--accent-rgb),0.12)] flex items-center justify-center mt-0.5">
-          <FileText size={14} className="text-[var(--color-accent)]" />
-        </div>
-        <div className="flex flex-col gap-3 max-w-[80%] min-w-0">
-          <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(var(--border-rgb),0.08)]">
-            <div className="flex items-center justify-between gap-2 mb-3">
-              <span className="font-mono text-[11px] uppercase tracking-wide text-muted">Transcript</span>
-              {hasTranscript && (
-                <button
-                  onClick={handleCopy}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-[rgba(var(--accent-rgb),0.12)] text-[var(--color-accent-light)] border border-[rgba(var(--accent-rgb),0.30)] hover:bg-[rgba(var(--accent-rgb),0.20)] transition-colors"
-                >
-                  <Copy size={11} />
-                  {copied ? 'Copied' : 'Copy'}
-                </button>
-              )}
-            </div>
-
-            {hasTranscript ? (
-              result.segments.length > 0 ? (
-                <div className="space-y-1.5">
-                  {result.segments.map((seg, i) => (
-                    <p key={`${i}-${seg.start}`} className="text-sm text-secondary leading-relaxed">
-                      <span className="font-mono text-xs text-[var(--color-accent)] tabular-nums mr-2">
-                        [{fmtTime(seg.start)}]
-                      </span>
-                      {seg.text}
-                    </p>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-secondary leading-relaxed whitespace-pre-wrap">{result.transcript}</p>
-              )
-            ) : (
-              <p className="text-sm text-muted italic">No spoken content detected in this reel.</p>
-            )}
+  return (
+    <div className="flex items-start gap-2">
+      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(var(--accent-rgb),0.12)] flex items-center justify-center mt-0.5">
+        <FileText size={14} className="text-[var(--color-accent)]" />
+      </div>
+      <div className="flex flex-col gap-3 max-w-[80%] min-w-0">
+        <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-surface border border-[rgba(var(--border-rgb),0.08)]">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <span className="font-mono text-[11px] uppercase tracking-wide text-muted">Transcript</span>
+            <button
+              onClick={handleCopy}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-[rgba(var(--accent-rgb),0.12)] text-[var(--color-accent-light)] border border-[rgba(var(--accent-rgb),0.30)] hover:bg-[rgba(var(--accent-rgb),0.20)] transition-colors"
+            >
+              <Copy size={11} />
+              {copied ? 'Copied' : 'Copy'}
+            </button>
           </div>
 
-          {/* Export — always at the bottom of the response */}
-          {hasTranscript && (
-            <GoogleExportButton
-              kind="doc"
-              buildPayload={() => ({ kind: 'doc', title: 'Reel transcript', markdown: fullText })}
-            />
+          {result.segments.length > 0 ? (
+            <div className="space-y-1.5">
+              {result.segments.map((seg, i) => (
+                <p key={`${i}-${seg.start}`} className="text-sm text-secondary leading-relaxed">
+                  <span className="font-mono text-xs text-[var(--color-accent)] tabular-nums mr-2">
+                    [{fmtTime(seg.start)}]
+                  </span>
+                  {seg.text}
+                </p>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-secondary leading-relaxed whitespace-pre-wrap">{result.transcript}</p>
           )}
         </div>
-      </div>
-    )
-  }
 
-  return null
+        {/* Export — always at the bottom of the response */}
+        <GoogleExportButton
+          kind="doc"
+          buildPayload={() => ({ kind: 'doc', title: 'Reel transcript', markdown: fullText })}
+        />
+      </div>
+    </div>
+  )
 }

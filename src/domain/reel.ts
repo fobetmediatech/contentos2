@@ -1,13 +1,31 @@
 /**
- * Domain types for single-reel analysis results.
+ * Domain types for single-reel analysis results and transcript results.
  *
  * Moved here from src/store/singleReelStore.ts (Task 6) so components, hooks,
  * and libraries can import types without pulling in Zustand store logic.
- * The store re-exports these for backward compatibility until Task 11 removes it.
+ * TranscriptSegment/TranscriptResult moved here from src/store/transcriptStore.ts (Task 11).
  *
  * Keep in sync with api/_lib/singleReelPrompt.ts
  * (app tsconfig.app.json includes only "src" — cannot import across the api/ boundary at build time)
  */
+
+// ---------------------------------------------------------------------------
+// Transcript types (moved from transcriptStore.ts — Task 11)
+// ---------------------------------------------------------------------------
+
+export interface TranscriptSegment {
+  start: number // seconds
+  text: string
+}
+
+export interface TranscriptResult {
+  transcript: string
+  segments: TranscriptSegment[]
+}
+
+// ---------------------------------------------------------------------------
+// Single-reel analysis types
+// ---------------------------------------------------------------------------
 
 export interface ReelSegment {
   start: number // seconds

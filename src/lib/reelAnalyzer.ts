@@ -27,7 +27,7 @@ import {
   SUMMARY_INPUT_TOKEN_BUDGET,
 } from './reelDigest'
 import { devWarn } from './devLog'
-import type { SingleReelResult } from '../store/singleReelStore'
+import type { SingleReelResult } from '../domain/reel'
 import { getCachedQuick, setCachedQuick } from './quickReelCache'
 import type {
   ReelData,

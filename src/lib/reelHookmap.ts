@@ -1,5 +1,5 @@
 import type { ReelData } from '../store/reelAnalysisStore'
-import type { SingleReelResult } from '../store/singleReelStore'
+import type { SingleReelResult } from '../domain/reel'
 import { getClerkSessionToken } from './clerkToken'
 
 /**

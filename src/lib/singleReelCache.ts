@@ -10,7 +10,7 @@
  */
 
 import { openDB, type IDBPDatabase } from 'idb'
-import type { SingleReelResult } from '../store/singleReelStore'
+import type { SingleReelResult } from '../domain/reel'
 
 // Keep in sync with SINGLE_REEL_PROMPT_VERSION in api/_lib/singleReelPrompt.ts —
 // bump when the extraction/synthesis prompts change so stale entries lazily invalidate.
