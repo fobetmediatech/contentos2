@@ -72,7 +72,7 @@ export function CreatorMode() {
             </button>
           </div>
           {generating && <p className="text-xs text-muted">First time with this creator can take ~a minute while we learn their voice.</p>}
-          {error && <div className="rounded-lg border border-red-500/30 bg-red-500/10 text-red-200 text-sm px-3 py-2">{error}</div>}
+          {error && <div className="rounded-lg border border-[var(--color-error-subtle)] bg-[var(--color-error-subtle)] text-[var(--color-error)] text-sm px-3 py-2">{error}</div>}
         </div>
         {result && <CreatorScriptResult result={result} />}
       </div>
