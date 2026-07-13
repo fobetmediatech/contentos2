@@ -129,6 +129,7 @@ export function ChatPage() {
   // Repurpose run state — drives the live progress marker; the finished result is snapshotted
   // into the conversation (kind 'repurpose') by the effect below, then the store is reset.
   const repurposeStatus = useRepurposeStore((s) => s.status)
+  const repurposeConversationId = useRepurposeStore((s) => s.conversationId)
   const resetRepurpose = useRepurposeStore((s) => s.reset)
   // RunCockpit focus — tracks which pipeline pane is "active" for steering (Plan 2 uses this).
   // For Phase 1 it's just wired to the cockpit so the UI highlights the focused pane.
@@ -363,10 +364,13 @@ export function ChatPage() {
   }, [discoveryStatus, discoveryCurrentStep, discoveryStepProgressDetail, discoveryRunConversationId, activeConversationId])
 
   // Progress-mirror: keep the repurpose run's cockpit pane label in sync with the live step.
+  // Use repurposeConversationId (the run's own conversation) so the label stays correct
+  // even if the user switches conversations mid-run.
   useEffect(() => {
-    const run = selectActiveRunOfKind(useRunsStore.getState(), 'repurpose', activeConversationId)
+    const targetId = repurposeConversationId ?? activeConversationId
+    const run = selectActiveRunOfKind(useRunsStore.getState(), 'repurpose', targetId)
     if (run) useRunsStore.getState().updateRun(run.id, { progress: repurposeRunLabel(repurposeStatus) })
-  }, [repurposeStatus, activeConversationId])
+  }, [repurposeStatus, repurposeConversationId, activeConversationId])
 
   // Snapshot a finished repurpose run into the conversation, then reset the store. Armed only
   // while a real run is live so it fires once. The persisted payload carries everything the
@@ -394,8 +398,10 @@ export function ChatPage() {
         })
       }
       resetRepurpose()
-      const run = selectActiveRunOfKind(useRunsStore.getState(), 'repurpose', activeConversationId)
-      if (run) { useRunsStore.getState().removeRun(run.id); disposeController(run.id) }
+      // Use the run's own conversation id (captured before reset) so cleanup works
+      // correctly even if the user switched conversations mid-run.
+      const runDone = selectActiveRunOfKind(useRunsStore.getState(), 'repurpose', repurposeConversationId ?? activeConversationId)
+      if (runDone) { useRunsStore.getState().removeRun(runDone.id); disposeController(runDone.id) }
     } else if (repurposeStatus === 'error' && repurposeArmedRef.current) {
       repurposeArmedRef.current = false
       const s = useRepurposeStore.getState()
@@ -405,10 +411,11 @@ export function ChatPage() {
         content: s.error || 'Could not repurpose this reel.',
       })
       resetRepurpose()
-      const run = selectActiveRunOfKind(useRunsStore.getState(), 'repurpose', activeConversationId)
-      if (run) { useRunsStore.getState().removeRun(run.id); disposeController(run.id) }
+      // Same: use the run's own conversation id, not the currently-active one.
+      const runErr = selectActiveRunOfKind(useRunsStore.getState(), 'repurpose', repurposeConversationId ?? activeConversationId)
+      if (runErr) { useRunsStore.getState().removeRun(runErr.id); disposeController(runErr.id) }
     }
-  }, [repurposeStatus, addMessageTo, activeConversationId, resetRepurpose])
+  }, [repurposeStatus, addMessageTo, activeConversationId, repurposeConversationId, resetRepurpose])
 
   // Registry snapshot effect: watches ALL runs in the store; when any run reaches a terminal
   // state (done/failed) and hasn't been snapshotted yet, adds it to the correct conversation
