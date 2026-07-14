@@ -1,0 +1,19 @@
+name: Voice Profile Warmer
+
+on:
+  schedule:
+    # Every 15 min — the endpoint warms 1-2 uncached directory creators per run.
+    - cron: '*/15 * * * *'
+  workflow_dispatch: # Manual trigger for testing
+
+jobs:
+  warm:
+    name: Warm voice profiles
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call the warmer endpoint
+        run: |
+          curl -fsSL \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.WARMER_URL }}"
