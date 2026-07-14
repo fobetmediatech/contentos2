@@ -11,7 +11,7 @@ A secret-gated **Vercel serverless endpoint** (`api/warm-voice-profile.ts`), fir
 
 ### Locked decisions
 - **Runtime: Vercel serverless (Node)** — reuses the app's tested `getTranscript` + `geminiFiles` + the pure voice-profile prompt, instead of a Deno reimplementation.
-- **Trigger: Vercel Cron** (endpoint is trigger-agnostic → a GitHub Action is a drop-in fallback if on the Hobby plan; see §9).
+- **Trigger: a scheduled GitHub Action** (the account is on Vercel **Hobby**, where Vercel Cron is once/day). A workflow cloning `tracking-cron.yml` runs every ~15 min and `curl`s the endpoint with the shared secret. The endpoint is trigger-agnostic, so this needs zero endpoint changes.
 - **Pacing: 1–2 handles per invocation, sequential** (stays well under the 300s function limit; bounds Apify load).
 - **Backoff via a small migration** (2–3 columns on `creator_directory`) so a bad handle doesn't retry forever.
 - **Reel count = the same `PROFILE_REEL_COUNT` (8)** as the client build.
@@ -42,7 +42,7 @@ A secret-gated **Vercel serverless endpoint** (`api/warm-voice-profile.ts`), fir
 - `api/_lib/apifyRun.ts` — `runApifyActorSync<T>(actorId, input, apifyKeys): Promise<T[]>` (Node port of `tracking-cron`'s Deno `apifyRunSync`: `run-sync-get-dataset-items` + round-robin key failover) + `getApifyKeys()` from `process.env`.
 - `api/_lib/geminiJson.ts` — `geminiGenerateJson(prompt, schema, apiKey): Promise<unknown>` (text→JSON via `responseMimeType: 'application/json'` + `responseSchema`, mirroring `get-transcript`'s inline call).
 - migration: backoff columns (§4).
-- `vercel.json` (or `vercel.ts`): a `crons` entry.
+- `.github/workflows/voice-warmer.yml` — a scheduled workflow (clone `.github/workflows/tracking-cron.yml`): `cron: '*/15 * * * *'`, `curl -sS -X POST "$WARMER_URL" -H "Authorization: Bearer $CRON_SECRET"` with the URL + secret from GitHub repo secrets.
 
 ## 4. Backoff migration
 
@@ -65,7 +65,7 @@ No new RLS policy — the existing `select` policy already exposes the columns t
 
 ## 6. Secrets / env (Vercel)
 
-New server-side vars: **`CRON_SECRET`** (Vercel auto-attaches it to Cron requests), **`SUPABASE_SERVICE_ROLE_KEY`**, and **`SUPABASE_URL`** (server-side; the browser uses `VITE_SUPABASE_URL`). Existing: `APIFY_KEY_N`/`APIFY_KEYS`, `GEMINI_API_KEY`/`GEMINI_KEYS`.
+New server-side vars: **`CRON_SECRET`** (the endpoint verifies the incoming `Authorization: Bearer`; the GitHub Action sends it), **`SUPABASE_SERVICE_ROLE_KEY`**, and **`SUPABASE_URL`** (server-side; the browser uses `VITE_SUPABASE_URL`). Existing: `APIFY_KEY_N`/`APIFY_KEYS`, `GEMINI_API_KEY`/`GEMINI_KEYS`.
 
 ## 7. Edge cases
 
@@ -88,8 +88,8 @@ New server-side vars: **`CRON_SECRET`** (Vercel auto-attaches it to Cron request
 ## 9. Ops / deploy
 
 1. Apply the backoff migration (SQL editor + `migration repair --status applied`).
-2. Add Vercel env: `CRON_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_URL`.
-3. Ship the `vercel.json` cron. **Cadence depends on plan:** Pro → `*/10 * * * *`; **Hobby → Vercel Cron is once/day**, so instead point a **GitHub Action** (clone `tracking-cron.yml`, every N min, `curl` the endpoint with `Bearer $CRON_SECRET`) — the endpoint is identical.
+2. Add **Vercel** env: `CRON_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_URL` (the endpoint reads these).
+3. Add **GitHub repo secrets**: `CRON_SECRET` (same value) + `WARMER_URL` (the deployed `/api/warm-voice-profile` URL) — the scheduled workflow reads these to `curl` the endpoint. (Account is Hobby → GitHub Action drives it, every ~15 min; no Vercel Cron.)
 4. Seed-handle verification ([[project_pending_todos]]) pays off here: wrong handles just burn 5 backed-off attempts then stop.
 
 ## 10. Out of scope (deliberate)
