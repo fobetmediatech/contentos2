@@ -7,16 +7,17 @@
 
 ## 1. Summary
 
-Two independent, low-risk changes that make voice-profile building faster/cheaper without touching output quality:
+One low-risk change that makes voice-profile building faster/cheaper without touching output quality:
 
 | # | Change | Impact |
 |---|---|---|
 | 3 | Voice-build transcribes via the existing lightweight `/api/get-transcript` instead of the full `/api/analyze-single-reel` | ~2–4× faster per reel; stops computing+discarding video analysis on 8 reels/build |
-| 2 | Downgrade the 2 grounded-search calls (`knowledgeSeed`, `webFallback`) from `PREMIUM_MODEL` to the default flash | Cost/latency on those calls (conditional — see caveat) |
+
+**#2 (model tiering) was DROPPED after code review** — see §3.
 
 ### Locked decisions
 - **Reel count stays 8** (protects voice quality) but the `PROFILE_REEL_COUNT` constant stays trivially tunable for later A/B.
-- **Only** the 2 grounded calls are downgraded. The 9 creative/quality-critical premium calls (rewrite, remix, creator-script, voice-synthesis, competitor-ranking) are **left untouched** to protect precision.
+- **No model-tier changes.** Reading the code showed the tiering is already deliberate (§3).
 - The **warmer (#1) is out of scope** — separate Phase 2 spec.
 
 ## 2. #3 — Transcript-only voice-build
@@ -34,13 +35,14 @@ Voice-build gets a **transcript-only** path backed by the existing **`/api/get-t
 
 Concurrency + batching stay as-is (batch Apify video-URL resolve → parallel transcription at `pLimit(3)`). Missing/failed transcripts are dropped per-reel exactly as today (voice synthesis tolerates gaps).
 
-## 3. #2 — Downgrade the 2 grounded-search calls
+## 3. #2 — DROPPED after code review
 
-`callGeminiGroundedJson` defaults its model to `PREMIUM_MODEL`. Its only two callers are mechanical grounded-search ranking: `src/lib/knowledgeSeed.ts` and `src/lib/webFallback.ts`. Grounding (Google Search) carries the quality there, so premium is wasted.
+Originally #2 proposed downgrading the two grounded-search calls (`knowledgeSeed`, `webFallback`) off `PREMIUM_MODEL`, on the assumption they were mechanical. **Reading the code reversed that:** the author put them on premium *deliberately* —
 
-**Change:** pass an explicit fast model (the default `MODEL` / `gemini-2.5-flash`) at those two call sites (do NOT change `callGeminiGroundedJson`'s default, in case a future grounded caller wants premium). Everything else stays on its current tier.
+> `gemini.ts:25-28`: *"PREMIUM model for the high-leverage calls only — competitor ranking + the knowledge seed, where quality directly drives result relevance/recall."*
+> `callGeminiGroundedJson`: *"defaults to the PREMIUM model (the recall-critical call)."*
 
-`★ Caveat (verify, doesn't block):` The default model is already `gemini-2.5-flash`, and `PREMIUM_MODEL` is env-gated by `VITE_GEMINI_PREMIUM_MODEL`. **If that Vercel env var is unset, premium already == flash and this saves nothing** (the code change is still correct hygiene). If it's set to a pro model, the downgrade saves real cost/latency. Worth checking the prod env; not a blocker.
+These calls **generate the candidate creators** for discovery/competitor — they drive *which creators surface*, so a stronger model improves recall. Downgrading is therefore either a **no-op** (if `VITE_GEMINI_PREMIUM_MODEL` is unset → premium already == flash) or a **deliberate precision regression** (if it's set). Neither is a safe efficiency win, and it fights the "precise" goal. **Decision: no model-tier change.** (The `VITE_GEMINI_PREMIUM_MODEL` env value is still worth confirming — tracked in the pending-todos memory — but it's informational, not a change to make here.)
 
 ## 4. Reel count
 
@@ -59,16 +61,15 @@ No new dependency, no new endpoint, no schema change. Voice-profile output is un
 
 ## 6. Testing
 
-- **New `transcribeReelsLight` (if added):** unit-test the pure request/response mapping against a `/api/get-transcript` fixture (`{ transcript, segments }` → transcript strings).
-- **Model downgrade:** assert the 2 grounded call sites pass the fast model (a cheap assertion or a focused test).
+- **New `transcribeReelsLight` transcript-parsing helper:** unit-test the pure response mapping against a `/api/get-transcript` fixture (`{ result: { transcript, segments } }` → transcript string).
 - **Parity check (manual/verify):** build a voice profile for one real handle before/after; confirm the profile is equivalent and the build is measurably faster (time both).
 - Full existing suite (repurpose / Script Studio / creator-voices) stays green; `bun run build` + lint clean.
 
 ## 7. Files
 
-**Likely new:** `src/lib/reelTranscriber.ts` gains `transcribeReelsLight` (or a new small file) + its test — *only if* `transcribeReels` is shared.
-**Modified:** `src/hooks/useRepurposeReel.ts` (`buildVoiceProfile` → transcript-only path); `src/lib/knowledgeSeed.ts` + `src/lib/webFallback.ts` (fast model on the grounded calls). Exact set confirmed in planning after reading the current code.
-**Untouched:** the reel-hook-analysis pipeline, `/api/analyze-single-reel`, all 9 creative premium calls, `PROFILE_REEL_COUNT` value.
+**New:** a lightweight reel transcript helper (`transcribeReelsLight` + a `getReelTranscript` client fn) — `transcribeReels` is CONFIRMED shared (it warms the corpus/gallery deep cache), so voice-build gets its own path. Plus its test.
+**Modified:** `src/hooks/useRepurposeReel.ts` (`buildVoiceProfile` @handle path → the light transcriber).
+**Untouched:** `transcribeReels` (shared), the reel-hook-analysis pipeline, `/api/analyze-single-reel`, all model tiers (#2 dropped), `PROFILE_REEL_COUNT` value.
 
 ## 8. Out of scope (deliberate)
 
