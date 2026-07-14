@@ -17,7 +17,7 @@ import { useCorpusStore } from '../store/corpusStore'
 import { useRepurposeStore } from '../store/repurposeStore'
 import { scrapeTopReels, NoReelsError } from '../lib/reelScraper'
 import { friendlyError } from '../lib/errorMessages'
-import { transcribeReels } from '../lib/reelTranscriber'
+import { transcribeReelsLight } from '../lib/reelTranscriber'
 import { scrapeSingleReel } from '../lib/singleReelClient'
 import { getCachedSingleReel, setCachedSingleReel } from '../lib/singleReelCache'
 import { getClerkSessionToken } from '../lib/clerkToken'
@@ -155,7 +155,7 @@ export function useRepurposeReel() {
       }
       if (signal?.aborted) throw new DOMException('aborted', 'AbortError')
 
-      const transcriptMap = await transcribeReels(handle, reels, apifyKeys, signal)
+      const transcriptMap = await transcribeReelsLight(reels, apifyKeys, signal)
       if (signal?.aborted) throw new DOMException('aborted', 'AbortError')
       const transcripts = reels.map((r) => transcriptMap[r.shortCode]).filter((t): t is string => !!t)
       const captions = reels.map((r) => r.caption).filter((c) => !!c)
