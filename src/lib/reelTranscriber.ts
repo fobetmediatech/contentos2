@@ -16,6 +16,7 @@ import type { ReelData } from '../store/reelAnalysisStore'
 import { scrapeReelVideos } from './reelVideoClient'
 import { getCachedSingleReel, setCachedSingleReel } from './singleReelCache'
 import { analyzeReelHookmap } from './reelHookmap'
+import { getReelTranscript } from './reelTranscriptClient'
 
 // Conservative: the serverless analyzer uses a SINGLE Gemini key (no server rotation), so
 // this caps concurrent Gemini uploads — same reasoning as the deep path's deepLimiter.
@@ -64,6 +65,47 @@ export async function transcribeReels(
         if (!result) return
         void setCachedSingleReel(reel.shortCode, result) // best-effort: makes re-runs free
         transcripts[reel.shortCode] = result.transcript
+      }),
+    ),
+  )
+  return transcripts
+}
+
+/**
+ * TRANSCRIPT-ONLY sibling of transcribeReels for the voice-profile build. Same cache-first +
+ * batched-URL-resolve + parallel(pLimit 3) shape, but hits /api/get-transcript (fast, no video
+ * analysis) and does NOT write the deep singleReelCache (its result is transcript-only). Reads
+ * the deep cache though — a reel already deep-analyzed yields its transcript for free.
+ */
+export async function transcribeReelsLight(
+  reels: ReelData[],
+  apifyKeys: string[],
+  signal?: AbortSignal,
+): Promise<Record<string, string>> {
+  const transcripts: Record<string, string> = {}
+  if (reels.length === 0) return transcripts
+
+  // Cache-first: a deep-cached reel already carries its transcript — no network.
+  const uncached: ReelData[] = []
+  for (const reel of reels) {
+    const cached = await getCachedSingleReel(reel.shortCode)
+    if (cached) transcripts[reel.shortCode] = cached.transcript
+    else uncached.push(reel)
+  }
+  if (signal?.aborted || uncached.length === 0) return transcripts
+
+  // ONE batch Apify run resolves stable video URLs for the UNCACHED reels only.
+  const videos = await scrapeReelVideos(uncached.map((r) => r.url), apifyKeys, signal)
+  if (signal?.aborted) return transcripts
+
+  await Promise.all(
+    uncached.map((reel) =>
+      transcribeLimiter(async () => {
+        if (signal?.aborted) return
+        const videoUrl = videos.get(reel.shortCode)
+        if (!videoUrl) return // no downloadable video → skip
+        const transcript = await getReelTranscript(reel.shortCode, videoUrl, signal)
+        if (transcript != null) transcripts[reel.shortCode] = transcript
       }),
     ),
   )
