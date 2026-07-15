@@ -26,7 +26,11 @@ export async function apifyRunSync<T>(
   ring: KeyRing,
 ): Promise<T[]> {
   let lastErr = 'no keys configured'
-  for (let attempt = 0; attempt < ring.keys.length; attempt++) {
+  // Cap rotation: with a large pool (~32 keys) a genuinely stuck/slow actor would otherwise burn
+  // every key at up to ACTOR_TIMEOUT_MS each and blow the caller's function budget. 3 attempts is
+  // enough to skip a couple of rate-limited keys; a real failure fails fast instead of hanging.
+  const maxAttempts = Math.min(3, ring.keys.length)
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const token = ring.keys[ring.i % ring.keys.length]
     ring.i++
     const ctrl = new AbortController()
@@ -54,5 +58,5 @@ export async function apifyRunSync<T>(
     }
     if (permanent) throw new Error(`Apify ${actorId} failed: ${permanent}`)
   }
-  throw new Error(`Apify ${actorId}: all ${ring.keys.length} key(s) failed (${lastErr})`)
+  throw new Error(`Apify ${actorId}: ${maxAttempts} key attempt(s) failed (${lastErr})`)
 }

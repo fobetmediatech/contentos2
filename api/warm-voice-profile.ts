@@ -20,12 +20,18 @@ import { pickHandlesToWarm, type DirectoryRow } from './_lib/warmSelector.js'
 
 export const config = { maxDuration: 300 }
 
-const MAX_HANDLES_PER_RUN = 2
+// ONE handle per run: the whole warm (2 Apify run-sync scrapes + up to 8 transcriptions +
+// synthesis) must fit a single 300s serverless invocation. Two handles overran it. At every 15
+// min this still drips ~96 builds/day — ample for a directory of tens–hundreds of creators.
+const MAX_HANDLES_PER_RUN = 1
 const REEL_LIMIT = 8
-// Mirror the client build (src/lib/reelScraper.ts): scrape a wide window of recent posts, then
-// filter to reels client-side. Filtering by shortCode alone would keep photos/carousels (which
-// have no downloadable video) and falsely fail mixed-content creators.
-const POST_SCRAPE_LIMIT = 120
+// Filter posts to reels client-side (productType 'clips') — filtering by shortCode alone keeps
+// photos/carousels (no downloadable video) and falsely fails mixed-content creators. NOTE: the
+// client build scrapes 120 posts with a 5–10 min start/poll budget; run-sync here is capped at
+// ~90s/attempt, so we scrape a SMALLER window that finishes in one attempt and take whatever
+// reels it yields (a warmer is best-effort — a 3–8-reel profile is fine; the interactive path
+// still uses the full 120-post scrape).
+const POST_SCRAPE_LIMIT = 40
 // Bound in-flight transcriptions so a handle with several slow (Files-API) reels can't serialize
 // past the 300s function budget. Mirrors the client's transcribeLimiter (pLimit(3)).
 const TRANSCRIBE_CONCURRENCY = 3
@@ -55,6 +61,7 @@ async function warmHandle(supabase: SupabaseClient, entry: DirectoryRow, geminiK
     .filter((p) => p.productType === 'clips' && p.shortCode)
     .sort((a, b) => reelViews(b) - reelViews(a))
     .slice(0, REEL_LIMIT)
+  console.log(`[warmer] scraped ${posts.length} posts -> ${reels.length} reels`) // counts only (C3)
   if (reels.length === 0) throw new Error('no reels')
   const reelUrls = reels.map((r) => r.url ?? `https://www.instagram.com/reel/${r.shortCode}/`)
   const captions = reels.map((r) => r.caption ?? '').filter((c): c is string => !!c)
@@ -65,6 +72,7 @@ async function warmHandle(supabase: SupabaseClient, entry: DirectoryRow, geminiK
   }, ring)
   const videoByCode = new Map<string, string>()
   for (const v of videos) if (v.shortCode && v.downloadedVideo) videoByCode.set(v.shortCode, v.downloadedVideo)
+  console.log(`[warmer] resolved ${videoByCode.size} video URLs`) // counts only (C3)
 
   // 3. Transcribe, capped-parallel (batches of TRANSCRIBE_CONCURRENCY).
   const targets = reels
@@ -81,6 +89,7 @@ async function warmHandle(supabase: SupabaseClient, entry: DirectoryRow, geminiK
     }))
     for (const tr of done) if (tr) transcripts.push(tr)
   }
+  console.log(`[warmer] transcribed ${transcripts.length}/${targets.length} reels`) // counts only (C3)
   if (transcripts.length === 0) throw new Error('no transcripts')
 
   // 4. Synthesize the voice profile.

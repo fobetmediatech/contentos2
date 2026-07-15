@@ -87,7 +87,7 @@ describe('apifyRunSync', () => {
     vi.stubGlobal('fetch', f)
     const ring: KeyRing = { keys: ['k1'], i: 0 }
     await expect(apifyRunSync('some~actor', {}, ring)).rejects.toThrow(
-      /all 1 key\(s\) failed \(boom\)/,
+      /1 key attempt\(s\) failed \(boom\)/,
     )
     expect(f).toHaveBeenCalledTimes(1)
   })
@@ -97,7 +97,7 @@ describe('apifyRunSync', () => {
     vi.stubGlobal('fetch', f)
     const ring: KeyRing = { keys: ['k1'], i: 0 }
     await expect(apifyRunSync('some~actor', {}, ring)).rejects.toThrow(
-      /all 1 key\(s\) failed \(non-array response\)/,
+      /1 key attempt\(s\) failed \(non-array response\)/,
     )
   })
 
@@ -106,9 +106,19 @@ describe('apifyRunSync', () => {
     vi.stubGlobal('fetch', f)
     const ring: KeyRing = { keys: ['k1', 'k2'], i: 0 }
     await expect(apifyRunSync('some~actor', {}, ring)).rejects.toThrow(
-      /all 2 key\(s\) failed \(HTTP 402\)/,
+      /2 key attempt\(s\) failed \(HTTP 402\)/,
     )
     expect(f).toHaveBeenCalledTimes(2)
+  })
+
+  it('caps rotation at 3 attempts even with a larger key pool', async () => {
+    const f = fetchReturning([429, 429, 429, 429, 429])
+    vi.stubGlobal('fetch', f)
+    const ring: KeyRing = { keys: ['k1', 'k2', 'k3', 'k4', 'k5'], i: 0 }
+    await expect(apifyRunSync('some~actor', {}, ring)).rejects.toThrow(
+      /3 key attempt\(s\) failed \(HTTP 429\)/,
+    )
+    expect(f).toHaveBeenCalledTimes(3) // stops at the cap, does not burn all 5 keys
   })
 
   it('advances the ring cursor (round-robin) across calls', async () => {
@@ -142,7 +152,7 @@ describe('apifyRunSync', () => {
   it('throws "no keys configured" when the ring is empty', async () => {
     const ring: KeyRing = { keys: [], i: 0 }
     await expect(apifyRunSync('some~actor', {}, ring)).rejects.toThrow(
-      /all 0 key\(s\) failed \(no keys configured\)/,
+      /0 key attempt\(s\) failed \(no keys configured\)/,
     )
   })
 })
