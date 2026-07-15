@@ -29,4 +29,15 @@ describe('pickHandlesToWarm', () => {
     ]
     expect(pickHandlesToWarm(rows, new Set(), NOW, 2).map((r) => r.handle)).toEqual(['new', 'older'])
   })
+  it('dedupes the same handle across categories (distinct rows, one profile)', () => {
+    // creator_directory PK is `${category}:${handle}` → same handle can be two rows.
+    const rows: DirectoryRow[] = [
+      { id: 'fashion:dup', handle: 'dup', display_name: 'n', warm_attempts: 0, warm_last_attempt_at: null },
+      { id: 'beauty:dup', handle: 'dup', display_name: 'n', warm_attempts: 0, warm_last_attempt_at: null },
+      { id: 'travel:other', handle: 'other', display_name: 'n', warm_attempts: 0, warm_last_attempt_at: null },
+    ]
+    const picked = pickHandlesToWarm(rows, new Set(), NOW, 2)
+    expect(picked.map((r) => r.handle)).toEqual(['dup', 'other']) // 'dup' selected once, not twice
+    expect(picked).toHaveLength(2)
+  })
 })

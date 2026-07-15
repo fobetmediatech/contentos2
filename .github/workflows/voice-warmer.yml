@@ -13,7 +13,7 @@ jobs:
     steps:
       - name: Call the warmer endpoint
         run: |
-          curl -fsSL \
+          curl -fsSL -o /dev/null \
             -X POST \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             "${{ secrets.WARMER_URL }}"

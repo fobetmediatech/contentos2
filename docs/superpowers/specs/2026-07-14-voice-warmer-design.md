@@ -24,13 +24,13 @@ A secret-gated **Vercel serverless endpoint** (`api/warm-voice-profile.ts`), fir
 2. **Supabase service-role client:** `createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } })` — bypasses RLS to read the directory + write profiles.
 3. **Pick 1–2 handles** (pure, unit-tested selector — §5): directory rows with **no** `corpus_voice_profiles` entry, not in backoff, oldest-attempt-first.
 4. **For each handle (sequential):**
-   a. **Scrape reels** — Apify `apify~instagram-scraper`, input `{ directUrls: ['https://www.instagram.com/<handle>/'], resultsType: 'posts', resultsLimit: 8 }`, via `run-sync-get-dataset-items` → reel items (shortCode, url, caption, metrics).
-   b. **Resolve video URLs** — Apify `apify~instagram-reel-scraper`, input `{ username: [reelUrls], includeDownloadedVideo: true }`, run-sync → shortCode → `downloadedVideo` URL.
-   c. **Transcribe** — `getTranscript({ downloadedVideoUrl, shortCode }, geminiKey)` (REUSED from `api/get-transcript.ts`) per reel, capped-parallel → transcripts.
-   d. **Synthesize** — `geminiGenerateJson(buildVoiceProfilePrompt(handle, transcripts, captions), VOICE_PROFILE_SCHEMA, geminiKey)` → `parseVoiceProfile(raw, { handle, displayName, reelCount, builtAt, fromScripts: false, exemplars: pickExemplars(transcripts) })`.
-   e. **Upsert** — `corpus_voice_profiles` (`onConflict: 'handle'`): `{ handle, owner_user_id: 'system:warmer', display_name, voice_data: profile, reel_count, updated_at }`.
-   f. **Record the attempt** on `creator_directory` (§4): success → clear backoff; failure (no reels / bad handle / scrape error) → `warm_attempts += 1`, `warm_last_attempt_at = now`, `warm_last_error = <code>`.
-5. Return `{ warmed: string[], failed: string[], skipped: number }` (booleans/counts only — never research-target data in logs, per C3).
+   a. **Pre-flight backoff** — BEFORE any work, write `warm_attempts += 1` + `warm_last_attempt_at = now` on the row. This makes the attempt durable even if the 300s function is killed mid-flight, so a slow/poison handle can't be re-selected first every run and starve the queue. Success resets `warm_attempts = 0` + clears the error (step f).
+   b. **Scrape reels** — Apify `apify~instagram-scraper`, input `{ directUrls: ['https://www.instagram.com/<handle>/'], resultsType: 'posts', resultsLimit: 120 }`, via `run-sync-get-dataset-items` → posts. Then filter to reels (`productType === 'clips'`), sort by views desc, take the top 8 — **the same selection as the client build** (`src/lib/reelScraper.ts` `filterAndSortReels`). (Filtering by shortCode alone would keep photos/carousels, which have no downloadable video → false "no transcripts".)
+   c. **Resolve video URLs** — Apify `apify~instagram-reel-scraper`, input `{ username: [reelUrls], includeDownloadedVideo: true }`, run-sync → shortCode → `downloadedVideo` URL.
+   d. **Transcribe** — `getTranscript({ downloadedVideoUrl, shortCode }, geminiKey)` (REUSED from `api/get-transcript.ts`) per reel, **capped-parallel (batches of 3)** to bound wall-clock under the 300s limit → transcripts. A fresh Gemini key is picked per handle so one throttled key can't fail both.
+   e. **Synthesize** — `geminiGenerateJson(buildVoiceProfilePrompt(handle, transcripts, captions), VOICE_PROFILE_SCHEMA, geminiKey)` → `parseVoiceProfile(raw, { handle, displayName, reelCount, builtAt, fromScripts: false, exemplars: pickExemplars(transcripts) })`.
+   f. **Upsert** — `corpus_voice_profiles` (`onConflict: 'handle'`): `{ handle, owner_user_id: 'system:warmer', display_name, voice_data: profile, reel_count, updated_at }`; on success reset the row's backoff (`warm_attempts = 0`, `warm_last_error = null`); on failure record `warm_last_error` (the pre-flight increment from step a stands).
+5. Return **counts only** — `{ warmedCount, failedCount, eligible, directory, profiled, skipped }`. No handles: the response is curled into the GitHub Action's CI log, and research-target data must never be logged (C3).
 
 ## 3. Reused vs new
 
@@ -55,7 +55,7 @@ alter table creator_directory
 ```
 No new RLS policy — the existing `select` policy already exposes the columns to the app (read-only badges later, optional); only the **service-role warmer** writes them (bypasses RLS). Client edits (add/remove) are unaffected. Apply via the SQL editor + `migration repair --status applied` (per [[project_supabase_migration_workflow]]).
 
-**Eligibility (the selector):** a handle is warmable when it has **no** `corpus_voice_profiles` row AND `warm_attempts < 5` AND (`warm_last_attempt_at IS NULL` OR `warm_last_attempt_at < now − 24h`). Order by `warm_last_attempt_at ASC NULLS FIRST` (never-tried first). This is computed in a **pure selector** over the fetched rows (Supabase-JS has no easy anti-join; two small reads + a JS diff at ≤200 rows is fine) so it's unit-testable.
+**Eligibility (the selector):** a handle is warmable when it has **no** `corpus_voice_profiles` row AND `warm_attempts < 5` AND (`warm_last_attempt_at IS NULL` OR `warm_last_attempt_at < now − 24h`). Order by `warm_last_attempt_at ASC NULLS FIRST` (never-tried first), then **dedupe by handle** (the `creator_directory` PK is `${category}:${handle}`, so one handle can occupy several rows across categories; the profile is handle-keyed + team-shared → build once). This is computed in a **pure selector** over the fetched rows (Supabase-JS has no easy anti-join; two small reads + a JS diff at ≤200 rows is fine) so it's unit-testable.
 
 ## 5. Server-side pieces (how each works)
 

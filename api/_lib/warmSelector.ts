@@ -18,10 +18,20 @@ export function pickHandlesToWarm(
   limit: number,
 ): DirectoryRow[] {
   const at = (r: DirectoryRow) => (r.warm_last_attempt_at == null ? -1 : Date.parse(r.warm_last_attempt_at))
-  return rows
+  const eligible = rows
     .filter((r) => !existingHandles.has(r.handle))
     .filter((r) => r.warm_attempts < MAX_ATTEMPTS)
     .filter((r) => r.warm_last_attempt_at == null || nowMs - Date.parse(r.warm_last_attempt_at) >= BACKOFF_MS)
     .sort((a, b) => at(a) - at(b))
-    .slice(0, limit)
+  // Dedupe by handle: creator_directory's PK is `${category}:${handle}`, so one handle can occupy
+  // several rows across categories. A voice profile is handle-keyed + team-shared, so building it
+  // once covers every category — selecting the same handle twice would waste a per-run slot.
+  const seen = new Set<string>()
+  const deduped: DirectoryRow[] = []
+  for (const r of eligible) {
+    if (seen.has(r.handle)) continue
+    seen.add(r.handle)
+    deduped.push(r)
+  }
+  return deduped.slice(0, limit)
 }
