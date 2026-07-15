@@ -21,6 +21,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { setGlobalDispatcher, Agent } from 'undici'
 import { requireClerkUser } from './_lib/auth.js'
+import { getApifyKeys } from './_lib/apifyRun.js'
 
 // Node's default autoSelectFamily ("Happy Eyeballs") connect logic stalls ~6s reaching
 // Apify's dual-A-record AWS host from some networks, intermittently exceeding undici's
@@ -38,15 +39,6 @@ const ALLOWED_ACTORS = new Set([
   'apify~instagram-reel-scraper',
   'topaz_sharingan~Youtube-Transcript-Scraper-1',
 ])
-
-function getApifyKeys(): string[] {
-  return [
-    ...Array.from({ length: 10 }, (_, i) => process.env[`APIFY_KEY_${i + 1}`] ?? ''),
-    ...String(process.env.APIFY_KEYS ?? '').split(','),
-  ]
-    .map((k) => k.trim())
-    .filter(Boolean)
-}
 
 function pickKey(keys: string[]): string {
   return keys[Math.floor(Math.random() * keys.length)]
