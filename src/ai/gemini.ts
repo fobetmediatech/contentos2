@@ -24,9 +24,25 @@ const MODEL = import.meta.env.VITE_GEMINI_MODEL ?? 'gemini-2.5-flash'
 
 // PREMIUM model for the high-leverage calls only — competitor ranking + the knowledge seed, where
 // quality directly drives result relevance/recall. Defaults to MODEL, so behavior is UNCHANGED
-// until VITE_GEMINI_PREMIUM_MODEL is set (e.g. 'gemini-3.5-flash'). This is the per-call split that
-// captures a stronger model where it pays off without paying its price on every cheap routing call.
-export const PREMIUM_MODEL = import.meta.env.VITE_GEMINI_PREMIUM_MODEL ?? MODEL
+// until VITE_GEMINI_PREMIUM_MODEL is set to a valid model name (e.g. 'gemini-2.5-pro').
+
+// The override must be a model NAME (gemini-*), mirroring api/gemini.ts's server allowlist. A stray
+// value — a typo, or an API key mistakenly pasted into this VITE_ var (keys belong in the
+// server-side GEMINI_API_KEY, never a VITE_ var) — would otherwise be sent as the request `model`
+// field and 400 EVERY premium call ("Invalid or missing model"). Fall back to the default and warn
+// instead of hard-failing the app. Exported for testing.
+const MODEL_NAME_RE = /^gemini-[\w.-]+$/
+export function resolvePremiumModel(raw: string | undefined, fallback: string): string {
+  if (!raw) return fallback
+  if (MODEL_NAME_RE.test(raw)) return raw
+  // Never echo `raw` — it may be the secret this guard exists to catch.
+  console.warn(
+    '[gemini] VITE_GEMINI_PREMIUM_MODEL is not a valid model name (expected e.g. gemini-2.5-pro); ' +
+      'using the default model. API keys belong in the server-side GEMINI_API_KEY, not this VITE_ var.',
+  )
+  return fallback
+}
+export const PREMIUM_MODEL = resolvePremiumModel(import.meta.env.VITE_GEMINI_PREMIUM_MODEL, MODEL)
 
 /**
  * Shared request headers for every Gemini REST call.
