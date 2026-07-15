@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Brain, MessageSquare, CalendarDays, Wallet, BarChart2, Clapperboard, ShieldCheck, Target, Menu, X, Sun, Moon, Wand2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -39,6 +39,16 @@ const NAV_SECTIONS: NavSection[] = [
 
 interface AppLayoutProps {
   noPadding?: boolean
+}
+
+/** Fallback shown while a lazy-loaded route chunk is fetched. Nav stays put; only the content swaps. */
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center py-24" role="status" aria-live="polite">
+      <div className="h-6 w-6 rounded-full border-2 border-[rgba(var(--accent-rgb),0.25)] border-t-[var(--color-accent)] animate-spin" />
+      <span className="sr-only">Loading…</span>
+    </div>
+  )
 }
 
 export function AppLayout({ noPadding = false }: AppLayoutProps) {
@@ -300,14 +310,18 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
         </div>
       )}
 
-      {/* Page content */}
+      {/* Page content — Suspense keeps the nav mounted while a lazy route chunk loads. */}
       {noPadding ? (
         <div className="flex-1 overflow-hidden">
-          <Outlet />
+          <Suspense fallback={<PageLoader />}>
+            <Outlet />
+          </Suspense>
         </div>
       ) : (
         <main className="max-w-7xl mx-auto px-6 py-8">
-          <Outlet />
+          <Suspense fallback={<PageLoader />}>
+            <Outlet />
+          </Suspense>
         </main>
       )}
     </div>
