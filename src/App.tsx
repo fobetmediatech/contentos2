@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { lazy, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Show, RedirectToSignIn, useAuth } from '@clerk/react'
@@ -8,21 +8,26 @@ import { useConversationsStore } from './store/conversationsStore'
 import { useReelAnalysisStore } from './store/reelAnalysisStore'
 import { useCorpusStore } from './store/corpusStore'
 import { AppLayout } from './components/AppLayout'
-import { ChatPage } from './pages/ChatPage'
-import { MemoryPage } from './pages/MemoryPage'
-import { GalleryPage } from './pages/GalleryPage'
-import { CalendarPage } from './pages/CalendarPage'
-import { PaymentsPage } from './pages/PaymentsPage'
-import { SignInPage } from './pages/SignInPage'
-import { TrackingListPage } from './pages/TrackingListPage'
-import { TrackingAccountPage } from './pages/TrackingAccountPage'
-import { TeamAccessPage } from './pages/TeamAccessPage'
-import { StrategyPage } from './pages/StrategyPage'
-import { StrategyClientPage } from './pages/StrategyClientPage'
-import { ScriptStudioPage } from './pages/ScriptStudioPage'
+import { ChatPage } from './pages/ChatPage' // eager: primary landing route (index)
+import { SignInPage } from './pages/SignInPage' // eager: public entry — no flash for signed-out visitors
 import { BreakGlassListener } from './components/BreakGlassListener'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ChaiToaster } from './components/ChaiToaster'
+
+// Secondary routes are lazy-loaded (code-split) so their weight stays out of the initial bundle
+// until navigated to — notably recharts (Strategy + Tracking), marked (export), and the Script
+// Studio pipeline. AppLayout wraps its <Outlet> in <Suspense>, so the nav stays put while a chunk
+// loads. Each page is a NAMED export, hence the `.then(m => ({ default: m.X }))` shim for lazy().
+const MemoryPage = lazy(() => import('./pages/MemoryPage').then((m) => ({ default: m.MemoryPage })))
+const GalleryPage = lazy(() => import('./pages/GalleryPage').then((m) => ({ default: m.GalleryPage })))
+const CalendarPage = lazy(() => import('./pages/CalendarPage').then((m) => ({ default: m.CalendarPage })))
+const PaymentsPage = lazy(() => import('./pages/PaymentsPage').then((m) => ({ default: m.PaymentsPage })))
+const TrackingListPage = lazy(() => import('./pages/TrackingListPage').then((m) => ({ default: m.TrackingListPage })))
+const TrackingAccountPage = lazy(() => import('./pages/TrackingAccountPage').then((m) => ({ default: m.TrackingAccountPage })))
+const TeamAccessPage = lazy(() => import('./pages/TeamAccessPage').then((m) => ({ default: m.TeamAccessPage })))
+const StrategyPage = lazy(() => import('./pages/StrategyPage').then((m) => ({ default: m.StrategyPage })))
+const StrategyClientPage = lazy(() => import('./pages/StrategyClientPage').then((m) => ({ default: m.StrategyClientPage })))
+const ScriptStudioPage = lazy(() => import('./pages/ScriptStudioPage').then((m) => ({ default: m.ScriptStudioPage })))
 
 const queryClient = new QueryClient({
   defaultOptions: {
