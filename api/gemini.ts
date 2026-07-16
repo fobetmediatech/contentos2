@@ -27,6 +27,23 @@ function getGeminiKeys(): string[] {
     .filter(Boolean)
 }
 
+/**
+ * True when a non-OK Gemini body signals a bad API KEY (revoked / invalid / expired) rather than a
+ * genuine bad prompt. A revoked key left in the pool returns 400 `API_KEY_INVALID` ("API key not
+ * valid…") or a 403; we fail over past it instead of surfacing it, so one dead key can't
+ * intermittently break requests for the team. Bounded to the key signal so a real bad-prompt 400
+ * still passes straight back (no pointless retries across every key).
+ */
+export function isInvalidKeyError(body: string): boolean {
+  const b = body.toLowerCase()
+  return (
+    b.includes('api_key_invalid') ||
+    b.includes('api key not valid') ||
+    b.includes('api key expired') ||
+    b.includes('api key is invalid')
+  )
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' })
@@ -62,8 +79,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return
   }
 
-  // Shuffle keys and retry on 429 so a single hot key does not block the team.
-  // Math.random() is fine here — this is load-balancing, not cryptography.
+  // Shuffle keys and fail over on a bad key so one rate-limited (429) OR revoked/invalid key sitting
+  // in the pool can't intermittently fail requests for the team. Math.random() is fine here — this
+  // is load-balancing, not cryptography.
   const shuffled = [...keys].sort(() => Math.random() - 0.5)
   for (let i = 0; i < shuffled.length; i++) {
     const apiKey = shuffled[i]
@@ -72,12 +90,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
       body: JSON.stringify(body),
     })
-    // On 429, try the next key if one is available; otherwise pass the 429 back.
-    if (upstream.status === 429 && i < shuffled.length - 1) {
+    const hasMore = i < shuffled.length - 1
+    // On 429 (rate-limited key), try the next key if one is available.
+    if (upstream.status === 429 && hasMore) {
       await upstream.body?.cancel()
       continue
     }
     const text = await upstream.text()
+    // A revoked/invalid key returns 400 API_KEY_INVALID (or a 403). Don't surface that to the user
+    // while valid keys remain — roll to the next key. If EVERY key is bad, the final iteration
+    // returns the error unchanged (so a truly missing/invalid config still reports honestly).
+    if ((upstream.status === 400 || upstream.status === 403) && hasMore && isInvalidKeyError(text)) {
+      continue
+    }
     res.status(upstream.status).setHeader('Content-Type', 'application/json').end(text)
     return
   }
