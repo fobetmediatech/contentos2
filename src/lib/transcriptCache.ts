@@ -14,7 +14,7 @@ import type { TranscriptResult } from '../domain/reel'
 import { getCachedSingleReel } from './singleReelCache'
 
 // Keep in sync with TRANSCRIPT_PROMPT_VERSION in api/_lib/transcriptPrompt.ts
-const TRANSCRIPT_PROMPT_VERSION = 2
+const TRANSCRIPT_PROMPT_VERSION = 3
 
 const DB_NAME = 'reel-intel-transcript'
 const STORE = 'transcript'
