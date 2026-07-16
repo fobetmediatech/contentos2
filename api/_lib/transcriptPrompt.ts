@@ -6,7 +6,7 @@
  */
 
 /** Bump when the prompt changes so transcriptCache lazily invalidates. */
-export const TRANSCRIPT_PROMPT_VERSION = 2
+export const TRANSCRIPT_PROMPT_VERSION = 3
 
 export interface TranscriptSegment {
   start: number // seconds
@@ -40,7 +40,7 @@ export function buildTranscriptPrompt(): string {
 transcript — the FULL spoken audio, transcribed VERBATIM. Return "" if there is no speech.
 segments — the transcript split into short timestamped chunks: [{ "start": <seconds, number>, "text": "<words in that chunk>" }]. Keep chunks to roughly one sentence. "start" is the second the chunk begins. Return [] if there is no speech.
 
-IMPORTANT — script rule: Always write in Roman script (Hinglish). If the speaker uses Hindi words, write them phonetically in English letters (e.g. "yaar", "kya", "bahut acha", "suno"). Never use Devanagari or any other non-Latin script, even if the speaker is speaking pure Hindi. English words stay as-is.
+CRITICAL — Latin script ONLY, no exceptions: You MUST write every single word in Roman/Latin letters. If the speaker speaks Hindi or any other Indic language, transliterate phonetically into English letters exactly as spoken (e.g. "aaj maine bahut achha product try kiya", "yaar sun", "kya hua"). NEVER output Devanagari, Arabic, or any non-Latin character — not even a single character. English words stay as-is.
 
 Transcribe only what is actually said — do not paraphrase, summarise, or invent.`
 }
