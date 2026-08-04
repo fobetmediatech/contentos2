@@ -27,6 +27,7 @@ const TrackingAccountPage = lazy(() => import('./pages/TrackingAccountPage').the
 const TeamAccessPage = lazy(() => import('./pages/TeamAccessPage').then((m) => ({ default: m.TeamAccessPage })))
 const StrategyPage = lazy(() => import('./pages/StrategyPage').then((m) => ({ default: m.StrategyPage })))
 const StrategyClientPage = lazy(() => import('./pages/StrategyClientPage').then((m) => ({ default: m.StrategyClientPage })))
+const StrategyReviewPage = lazy(() => import('./pages/StrategyReviewPage').then((m) => ({ default: m.StrategyReviewPage })))
 const ScriptStudioPage = lazy(() => import('./pages/ScriptStudioPage').then((m) => ({ default: m.ScriptStudioPage })))
 
 const queryClient = new QueryClient({
@@ -131,6 +132,8 @@ export default function App() {
 
                 {/* Content Strategizing — onboarding form → AI content strategy document (PDF) */}
                 <Route path="strategy" element={<StrategyPage />} />
+                {/* Must precede strategy/:id — otherwise "review" is matched as a client id. */}
+                <Route path="strategy/review/:clientId" element={<StrategyReviewPage />} />
                 <Route path="strategy/:id" element={<StrategyClientPage />} />
 
                 {/* Script Studio — reference reel/Short → new-topic script remix */}
