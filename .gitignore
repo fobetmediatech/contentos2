@@ -25,3 +25,10 @@ package-lock.json
 .gstack/
 .vercel
 .env*
+
+# Local scratch (agent tooling logs, debug output, large media)
+video/
+firebase-debug.log
+.claude/gearbox-*
+.claude/bench-*
+.claude/routing.md
