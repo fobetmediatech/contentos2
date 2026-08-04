@@ -174,6 +174,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         client_id: clientId,
         source: source.name,
         external_id: raw.externalId,
+        title: raw.title,
         meeting_type: inferMeetingType(raw.title),
         meeting_date: raw.meetingDateMs ? new Date(raw.meetingDateMs).toISOString() : null,
         duration_sec: raw.durationSec,
