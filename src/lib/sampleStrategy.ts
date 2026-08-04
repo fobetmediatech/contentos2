@@ -132,3 +132,98 @@ export const SAMPLE_RESULT: StrategyResult = {
     donts: ['Produce cringe or inauthentic content', 'Post anything negative about Dubai', 'Use Devanagari script', 'Focus only on real estate, ignoring relocation + compliance'],
   },
 }
+
+/**
+ * Sample extractions for the review UI — the SAME client as SAMPLE_RESULT above, as if their
+ * onboarding call had just been ingested and extracted.
+ *
+ * WHY THIS EXISTS: the review UI otherwise needs an ingested transcript, a live Gemini key and
+ * real credits before anyone can look at it. This fixture makes it previewable for free at
+ * /strategy/review/sample, which is also how its ergonomics get designed against something
+ * concrete rather than assumed output.
+ *
+ * It deliberately covers EVERY state the page can render, because the states are the point:
+ *   - extracted with one citation           (offer)
+ *   - extracted with THREE citations        (audience — the multi-source case, assembled from
+ *                                            separate moments across a 60-minute call)
+ *   - inferred + confidence, needing sign-off (primaryNiche)
+ *   - sheet-sourced, no citations            (every handle — the model may never author these)
+ *   - "none stated" explicitly               (offLimits — "we asked, there are none", which must
+ *                                            be distinguishable from "we never asked" = null)
+ *   - already edited, original retained      (subNiche)
+ *   - already approved                       (brandName)
+ *   - never extracted at all                 (brandColors is simply absent — an empty field must
+ *                                            look empty, not like a filled one)
+ */
+import type { ExtractionRow } from './reviewGate'
+
+/** Stable id used by the review route to render this fixture instead of querying Supabase. */
+export const SAMPLE_CLIENT_ID = 'sample'
+
+const b = SAMPLE_RESULT.brief
+
+const cite = (quote: string, startSec: number, chunk = 'sample-chunk') => ({
+  chunk_id: `${chunk}-${startSec}`,
+  quote,
+  start_sec: startSec,
+})
+
+export const SAMPLE_EXTRACTIONS: ExtractionRow[] = [
+  {
+    id: 'x-brandName', fieldName: 'brandName', value: b.brandName,
+    citations: [cite('Yeah so I am Ankur, I run the Dubai relocation practice', 41.2)],
+    provenance: 'extracted', confidence: null, reviewStatus: 'approved', originalValue: null,
+  },
+  {
+    id: 'x-primaryNiche', fieldName: 'primaryNiche', value: b.primaryNiche,
+    citations: [cite('we do property but honestly the visa side is bigger now', 188.4)],
+    provenance: 'inferred', confidence: 0.68, reviewStatus: 'pending', originalValue: null,
+  },
+  {
+    id: 'x-subNiche', fieldName: 'subNiche', value: b.subNiche,
+    citations: [cite('visas, school admissions, company setup, and then real estate', 214.9)],
+    provenance: 'extracted', confidence: null, reviewStatus: 'edited',
+    originalValue: 'Visas and real estate',
+  },
+  {
+    id: 'x-offer', fieldName: 'offer', value: b.offer,
+    citations: [cite('end to end — they land in Dubai and we have handled everything', 262.5)],
+    provenance: 'extracted', confidence: null, reviewStatus: 'pending', originalValue: null,
+  },
+  {
+    id: 'x-language', fieldName: 'language', value: b.language,
+    citations: [cite('our audience is Indian mostly so Hinglish works best', 402.1)],
+    provenance: 'extracted', confidence: null, reviewStatus: 'pending', originalValue: null,
+  },
+  {
+    id: 'x-audience', fieldName: 'audience', value: b.audience,
+    // Three separate moments — a single chunk reference would misrepresent the other two.
+    citations: [
+      cite('mostly high net worth, business owners', 331.0),
+      cite('they are looking at forty, forty five plus mostly', 358.7),
+      cite('the real problem is they do not know where to even start', 377.3),
+    ],
+    provenance: 'extracted', confidence: null, reviewStatus: 'pending', originalValue: null,
+  },
+  {
+    id: 'x-dislikes', fieldName: 'dislikes', value: b.dislikes,
+    citations: [cite('please no cringe videos, that is not our brand at all', 611.8)],
+    provenance: 'extracted', confidence: null, reviewStatus: 'pending', originalValue: null,
+  },
+  {
+    id: 'x-offLimits', fieldName: 'offLimits', value: b.offLimits,
+    citations: [cite('nothing negative about Dubai, that is the one hard rule', 640.2)],
+    provenance: 'extracted', confidence: null, reviewStatus: 'pending', originalValue: null,
+  },
+  // brandColors is intentionally ABSENT — never discussed on the call, so the field renders empty.
+  ...b.competitors.filter(Boolean).map((handle, i) => ({
+    id: `x-competitors-${i}`, fieldName: `competitors.${i}`, value: handle,
+    citations: [], provenance: 'sheet' as const, confidence: null,
+    reviewStatus: 'pending' as const, originalValue: null,
+  })),
+  ...b.aspirational.filter(Boolean).map((handle, i) => ({
+    id: `x-aspirational-${i}`, fieldName: `aspirational.${i}`, value: handle,
+    citations: [], provenance: 'sheet' as const, confidence: null,
+    reviewStatus: 'pending' as const, originalValue: null,
+  })),
+]

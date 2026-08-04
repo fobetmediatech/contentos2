@@ -144,3 +144,52 @@ describe('StrategyReviewPage', () => {
     expect(screen.getByText(/No extractions yet/i)).toBeTruthy()
   })
 })
+
+describe('SAMPLE_EXTRACTIONS fixture', () => {
+  // The fixture exists so the review UI can be previewed without an ingested transcript, a Gemini
+  // key or any credits. That only holds if it actually exercises every state the page renders —
+  // otherwise a state can silently rot with nothing to catch it.
+  it('covers every provenance and review state the page can render', async () => {
+    const { SAMPLE_EXTRACTIONS } = await import('../lib/sampleStrategy')
+
+    const provenances = new Set(SAMPLE_EXTRACTIONS.map((r) => r.provenance))
+    expect(provenances.has('extracted')).toBe(true)
+    expect(provenances.has('inferred')).toBe(true)
+    expect(provenances.has('sheet')).toBe(true)
+
+    const statuses = new Set(SAMPLE_EXTRACTIONS.map((r) => r.reviewStatus))
+    expect(statuses.has('pending')).toBe(true)
+    expect(statuses.has('approved')).toBe(true)
+    expect(statuses.has('edited')).toBe(true)
+
+    // An edited row must retain what the model originally produced, or the comparison is empty.
+    expect(SAMPLE_EXTRACTIONS.find((r) => r.reviewStatus === 'edited')?.originalValue).toBeTruthy()
+
+    // The multi-source case — a field assembled from several moments in the call.
+    expect(SAMPLE_EXTRACTIONS.some((r) => r.citations.length >= 3)).toBe(true)
+
+    // Handles are sheet-sourced and carry no citations; the model may never author them.
+    const handles = SAMPLE_EXTRACTIONS.filter((r) => /^(competitors|aspirational)\./.test(r.fieldName))
+    expect(handles.length).toBeGreaterThan(0)
+    expect(handles.every((r) => r.provenance === 'sheet' && r.citations.length === 0)).toBe(true)
+
+    // An inferred value must carry a confidence score — the DB rejects it otherwise.
+    expect(SAMPLE_EXTRACTIONS.find((r) => r.provenance === 'inferred')?.confidence).toBeTypeOf('number')
+
+    // brandColors is deliberately absent so the empty-field state has something to render.
+    expect(SAMPLE_EXTRACTIONS.some((r) => r.fieldName === 'brandColors')).toBe(false)
+  })
+
+  it('clears the export gate, so the preview reaches the "Use this brief" state', async () => {
+    const { SAMPLE_EXTRACTIONS } = await import('../lib/sampleStrategy')
+    const { evaluateGate } = await import('../lib/reviewGate')
+
+    // One inference is pending sign-off on purpose — that blocker is part of what is previewed.
+    expect(evaluateGate(SAMPLE_EXTRACTIONS).blockers.map((b) => b.code)).toEqual(['unreviewed_inferred'])
+
+    const signedOff = SAMPLE_EXTRACTIONS.map((r) =>
+      r.provenance === 'inferred' ? { ...r, reviewStatus: 'approved' as const } : r,
+    )
+    expect(evaluateGate(signedOff).blocked).toBe(false)
+  })
+})

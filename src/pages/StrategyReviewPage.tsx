@@ -24,6 +24,7 @@ import {
 } from '../lib/reviewGate'
 import { useStrategyStore } from '../store/strategyStore'
 import { useIsAdmin } from '../hooks/useIsAdmin'
+import { SAMPLE_EXTRACTIONS, SAMPLE_CLIENT_ID } from '../lib/sampleStrategy'
 
 const eyebrow = 'text-[11px] font-mono uppercase tracking-wider text-[var(--color-accent)] mb-3 mt-6 first:mt-0'
 const labelCls = 'block text-xs text-muted mb-1'
@@ -75,14 +76,20 @@ export function StrategyReviewPage() {
   const [open, setOpen] = useState<string | null>(null)
   const [drafts, setDrafts] = useState<Record<string, string>>({})
 
-  const clients = useQuery({ queryKey: ['cb-clients'], queryFn: listClients, enabled: isAdmin })
+  // Preview mode: /strategy/review/sample renders a fixture instead of querying Supabase, so the
+  // review surface can be looked at without an ingested transcript, a Gemini key, or any credits.
+  // It contains no real client data, so it is not admin-gated.
+  const isSample = clientId === SAMPLE_CLIENT_ID
+  const [sampleRows, setSampleRows] = useState(SAMPLE_EXTRACTIONS)
+
+  const clients = useQuery({ queryKey: ['cb-clients'], queryFn: listClients, enabled: isAdmin && !isSample })
   const rowsQ = useQuery({
     queryKey: ['cb-extractions', clientId],
     queryFn: () => listExtractions(clientId),
-    enabled: isAdmin && Boolean(clientId),
+    enabled: !isSample && isAdmin && Boolean(clientId),
   })
 
-  const rows = useMemo(() => rowsQ.data ?? [], [rowsQ.data])
+  const rows = useMemo(() => (isSample ? sampleRows : rowsQ.data ?? []), [isSample, sampleRows, rowsQ.data])
   const byField = useMemo(() => new Map(rows.map((r) => [r.fieldName, r])), [rows])
   const gate = useMemo(() => evaluateGate(rows), [rows])
   const pending = useMemo(() => approvableRows(rows), [rows])
@@ -90,19 +97,41 @@ export function StrategyReviewPage() {
 
   const invalidate = () => { void qc.invalidateQueries({ queryKey: ['cb-extractions', clientId] }) }
 
+  /** In preview mode edits stay in local state — there is no row to write and no client to own it. */
+  const patchSample = (ids: Set<string>, patch: Partial<ExtractionRow>) =>
+    setSampleRows((rs) =>
+      rs.map((r) =>
+        ids.has(r.id)
+          ? { ...r, ...patch, originalValue: r.originalValue ?? (patch.value !== undefined ? r.value : null) }
+          : r,
+      ),
+    )
+
   const save = useMutation({
-    mutationFn: ({ row, patch }: { row: ExtractionRow; patch: { value?: string | null; reviewStatus?: ExtractionRow['reviewStatus'] } }) =>
-      saveRow(row, patch),
-    onSuccess: invalidate,
+    mutationFn: async ({ row, patch }: { row: ExtractionRow; patch: { value?: string | null; reviewStatus?: ExtractionRow['reviewStatus'] } }) => {
+      if (isSample) {
+        patchSample(new Set([row.id]), {
+          ...(patch.value !== undefined ? { value: patch.value, reviewStatus: 'edited' as const } : {}),
+          ...(patch.reviewStatus !== undefined ? { reviewStatus: patch.reviewStatus } : {}),
+        })
+        return
+      }
+      await saveRow(row, patch)
+    },
+    onSuccess: () => { if (!isSample) invalidate() },
   })
   const approveAll = useMutation({
-    mutationFn: () => approveRows(pending.map((r) => r.id)),
-    onSuccess: invalidate,
+    mutationFn: async () => {
+      const ids = new Set(pending.map((r) => r.id))
+      if (isSample) { patchSample(ids, { reviewStatus: 'approved' }); return }
+      await approveRows([...ids])
+    },
+    onSuccess: () => { if (!isSample) invalidate() },
   })
 
   // Wait for the role check before saying "not allowed" — otherwise a permitted admin sees a
   // denial flash on every load.
-  if (adminLoading) {
+  if (!isSample && adminLoading) {
     return (
       <div className="flex items-center gap-2 text-secondary text-sm py-16 justify-center">
         <Loader2 size={15} className="animate-spin" /> Checking access…
@@ -110,7 +139,7 @@ export function StrategyReviewPage() {
     )
   }
 
-  if (!isAdmin) {
+  if (!isSample && !isAdmin) {
     return (
       <div className="max-w-2xl mx-auto py-16 text-center">
         <p className="text-secondary text-sm">
@@ -141,8 +170,14 @@ export function StrategyReviewPage() {
 
       <h1 className="font-serif italic text-3xl text-primary">Review brief</h1>
       <p className="text-secondary text-sm mt-1">
-        {client ? client.displayName : 'Client'} — every extracted value carries a citation. Correct anything wrong, then hand it to the form.
+        {isSample ? 'Sample client' : client ? client.displayName : 'Client'} — every extracted value carries a citation. Correct anything wrong, then hand it to the form.
       </p>
+
+      {isSample && (
+        <p className="mt-3 text-[11px] font-mono uppercase tracking-wider text-[var(--color-warning)]">
+          Preview · sample data · edits are not saved
+        </p>
+      )}
 
       {rows.length === 0 ? (
         <div className="mt-8 bg-surface border border-[rgba(var(--border-rgb),0.08)] rounded-lg p-6 text-center">
