@@ -12,6 +12,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useStrategyStore } from '../store/strategyStore'
 import { useContentStrategy } from '../hooks/useContentStrategy'
 import { StrategyDeck } from '../components/StrategyDeck'
+import { TranscriptBriefsStrip } from '../components/TranscriptBriefsStrip'
 import { resolveDeckColors, PRESET_LABELS } from '../lib/deckThemes'
 import { listSavedClients, saveClient } from '../lib/strategyRepo'
 import { SAMPLE_RESULT } from '../lib/sampleStrategy'
@@ -174,6 +175,9 @@ export function StrategyPage() {
           </button>
         )}
       </header>
+
+      {/* Transcript briefs — cb_clients, opens the pre-filled review form. Admin-only, self-hiding. */}
+      <TranscriptBriefsStrip />
 
       {/* Saved clients — the shared, persistent list. Click one to view its strategy + files. */}
       {savedClients.length > 0 && (
