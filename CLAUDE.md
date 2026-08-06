@@ -65,15 +65,28 @@ NEVER use `mcp__claude-in-chrome__*` tools.
 
 ## Project overview
 
-**Content OS 2.0** — a browser-based Instagram research SaaS (internal team tool). Three pipelines:
+**Content OS 2.0** — a browser-based Instagram research SaaS (internal team tool).
 
-1. **Competitor Analysis** — scrape reference accounts → extract `relatedProfiles` → Gemini ranking → top/trending cards
-2. **Location Discovery** — city + niche → hashtag generation → profile scrape → location filter → AI-ranked creator cards
-3. **Reel Hook Analysis** — scrape top reels → Gemini hook analysis per creator → cross-creator pattern synthesis
+**Chat pipelines** — invoked from `ChatPage` by Gemini function-calling (tool defs in `src/tools/agentTools.ts`):
 
-Entry point: `ChatPage` — conversational interface that routes to all three pipelines via Gemini function-calling.
+1. **Competitor Analysis** (`discover_competitors`) — scrape reference accounts → extract `relatedProfiles` → Gemini ranking → top/trending cards
+2. **Location Discovery** (`discover_by_location`) — city + niche → hashtag generation → profile scrape → location filter → AI-ranked creator cards
+3. **Reel Hook Analysis** (`analyze_reels`) — scrape top reels → Gemini hook analysis per creator → cross-creator pattern synthesis
+4. **Single-Reel Analysis** (`analyze_single_reel`) — one reel URL → deep case-study breakdown
+5. **Repurpose Reel** (`repurpose_reel`) — viral reel → rewritten in a client's voice
+6. **Transcript** (`get_reel_transcript`) — one reel URL → transcript only (the fast path)
 
-**Backend:** Four Vercel serverless functions under `api/` — `gemini.ts` (Gemini proxy), `apify.ts` (Apify proxy), `config.ts` (readiness flags), and `analyze-reel-video.ts` (deep multimodal, Gemini Files API). All gated by Clerk JWT via `api/_lib/auth.ts`. Supabase (Postgres + RLS) backs conversation sync (`user_state` table) and the shared team corpus (`corpus_creators`, `corpus_sightings`, `corpus_content`).
+**Dedicated-page features** (NOT chat-routed): Content Strategizing (`/strategy`), Script Studio
+(`/script-studio`), Content Calendar (`/calendar`), Payments (`/payments`, finance-only), Gallery
+(`/gallery`), Tracking Dashboard (`/tracking`).
+
+Entry point: `ChatPage` — conversational interface that routes to the chat pipelines above.
+
+**Backend:** Nine Vercel serverless functions under `api/` (see the tree below). All are gated by
+Clerk JWT via `api/_lib/auth.ts` — except `warm-voice-profile.ts`, which is secret-gated for a
+scheduled GitHub Action instead. Supabase (Postgres + RLS) backs conversation sync (`user_state`),
+the shared team corpus (`corpus_creators`, `corpus_sightings`, `corpus_content`), and the feature
+tables for strategies, calendar, payments, tracking, voice profiles and the creator directory.
 
 **Keys:** Gemini and Apify keys live **server-side only** (`process.env`, set in Vercel dashboard — never `VITE_` prefixed). The browser needs only three env vars: `VITE_CLERK_PUBLISHABLE_KEY`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`. `src/lib/env.ts` validates these at startup and surfaces a banner if any are missing.
 
@@ -82,7 +95,7 @@ Entry point: `ChatPage` — conversational interface that routes to all three pi
 ```bash
 bun run dev          # Start Vite dev server
 bun run build        # Typecheck (app + api) + Vite build
-bun run test         # Run 600+ unit tests (vitest) — exits 0 on a fresh clone
+bun run test         # Run 1000+ unit tests (vitest) — exits 0 on a fresh clone, no keys needed
 bun run test:watch   # Watch mode
 bun run lint         # ESLint
 bun run typecheck:api        # Typecheck api/ directory only
@@ -95,16 +108,36 @@ bun run test:discovery       # Integration test for discovery pipeline (needs re
 
 ```
 src/
-  pages/
+  pages/                      # 12 pages — nav order is driven by NAV_SECTIONS in AppLayout.tsx
     ChatPage.tsx              # Primary entry point — single-surface conversational UX (results render inline)
+    StrategyPage.tsx          # "Content Strategizing" — onboarding form → client-ready Content Strategy Document (print → PDF)
+    StrategyClientPage.tsx    # /strategy/:id — a saved client read-only + Attachments (upload/download/delete, informational only)
+    ScriptStudioPage.tsx      # Reference reel/Short → new-topic script; 3 modes (link, library pick, choose a creator)
+    CalendarPage.tsx          # Content calendar (plan-only) — month grid, drag to reschedule, per-tracked-account or all
+    PaymentsPage.tsx          # Manual payment tracking per client — FINANCE ROLE ONLY (useIsFinance + Supabase RLS)
     MemoryPage.tsx            # Browse the creator/content corpus remembered across searches
-    ReportPage.tsx            # Full-page deep niche report (client-ready view)
-  hooks/
+    GalleryPage.tsx           # Every reel the OS has scraped; click expands to an IG-desktop-style modal
+    TrackingListPage.tsx      # "Dashboard" — tracked accounts list + latest snapshots
+    TrackingAccountPage.tsx   # /tracking/:username — per-account snapshot history + reel trends
+    TeamAccessPage.tsx        # Admin-only — grant/revoke the finance role by email (RLS + SECURITY DEFINER enforce)
+    SignInPage.tsx            # Clerk auth gate, themed to DESIGN.md
+  hooks/                      # 17 hooks — the pipeline orchestrators plus small shared utilities
     useAgentConversation.ts   # Turn-based agent loop — THE conversation engine (latest-wins steering)
     useActivePipeline.ts      # Reads PIPELINE_REGISTRY, computes active pipeline state
-    useCompetitorAnalysis.ts  # TanStack Query mutation for competitor pipeline (discover → clarify → rank)
-    useLocationDiscovery.ts   # TanStack Query mutation for discovery pipeline
+    agentRunLaunch.ts         # One run per URL, each with its own AbortSignal (no sibling aborts)
+    useCompetitorAnalysis.ts  # Competitor pipeline (discover → clarify → rank)
+    useLocationDiscovery.ts   # Discovery pipeline
     useReelAnalysis.ts        # Reel scrape + hook analysis + synthesis; self-contained deep-report run
+    useSingleReelAnalysis.ts  # Chat-triggered "analyze ONE reel by URL"
+    useTranscriptAnalysis.ts  # Chat-triggered transcript-only path
+    useRepurposeReel.ts       # Chat-triggered "rewrite a viral reel in a client's voice"
+    useContentStrategy.ts     # Content Strategizing — the 4-stage pipeline (scrape → aspirational → reels → write)
+    useCreatorScript.ts       # Script Studio "Choose a creator" — handle + idea → script in their voice
+    useReelRemix.ts           # Script Studio orchestration (transcribe → remix)
+    useIsAdmin.ts / useIsFinance.ts  # Role checks (UX only — Supabase RLS is the real enforcement)
+    useSlashMenu.ts           # The "/" tool-picker state machine for the chat input
+    useColorScheme.ts         # Effective light/dark (honours the manual toggle, not just the OS)
+    useElapsedTime.ts         # Live seconds counter for long-running pipelines
   ai/
     gemini.ts                 # Gemini REST API caller (no SDK) — proxies through /api/gemini with Clerk Bearer token
     prompts.ts                # Prompt builders for all Gemini calls
@@ -122,7 +155,8 @@ src/
     reelAnalyzer.ts           # Hook analysis + cross-creator synthesis + deep niche report
     reelVideoClient.ts        # Batch-resolve reel video URLs (deep multimodal path)
     reelSnapshot.ts           # buildReelResultPayload — snapshot a finished reel run (per-conversation parity)
-    deepReelCache.ts          # IndexedDB cache for deep per-reel analyses (free re-runs)
+    singleReelCache.ts        # IndexedDB cache for deep per-reel analyses (free re-runs)
+    quickReelCache.ts         # Cache for the fast transcript/quick path
     corpus.ts                 # Pure corpus core (mergeCreator, recognition, CorpusRepository interface)
     corpusIdb.ts              # Re-exports createSupabaseCorpus() as `corpus` — filename kept for import compat
     supabaseCorpus.ts         # Supabase-backed CorpusRepository (the shared team brain)
@@ -133,39 +167,82 @@ src/
     clerkToken.ts             # Clerk session-token access for plain modules (wired once from App.tsx)
     storage.ts                # Cross-runtime storage adapter (browser / Node)
     constants.ts              # Shared string constants
+    # — feature repos (Supabase-backed) —
+    strategyRepo.ts           # Saved client strategies + attachments (signed URLs; bytes never parsed)
+    calendarRepo.ts           # Scheduled posts
+    trackingDb.ts / trackingClient.ts  # Tracked accounts + snapshots
+    creatorDirectory.ts       # Team-shared creator directory (Script Studio voices)
+    teamAccess.ts             # Role grant/revoke RPC wrappers
+    # — Script Studio / repurpose —
+    reelTranscriber.ts, reelTranscriptClient.ts, transcriptCache.ts, youtubeTranscript.ts,
+    remixFields.ts, repurposeHelpers.ts, singleReelClient.ts, singleReelCache.ts,
+    quickReelCache.ts, reelDigest.ts, reelHookmap.ts, reelUrl.ts, sourceUrl.ts
+    # — misc —
+    geminiKeyRotator.ts       # Gemini key pool rotation (mirrors keyRotator for Apify)
+    deckThemes.ts             # Deck palette presets + resolveDeckColors
+    sampleStrategy.ts         # SAMPLE_RESULT fixture — preview the deck with no credits
+    googleAuth.ts / googleExport.ts  # One-click export to Google Docs/Sheets
+    competitorCache.ts, deriveNiche.ts, actors.ts, abortControl.ts, runControllers.ts,
+    attachment.ts, fxRates.ts, knowledgeSeed.ts, webFallback.ts, toast.ts, clerkTheme.ts, konami.ts
   tools/
     registry.ts               # PIPELINE_REGISTRY — confirmMessage + confirmOptions per pipeline
     agentTools.ts             # Agent-loop tool defs + buildGeminiHistory
     types.ts                  # Shared TypeScript types
-  store/
-    analysisStore.ts          # Zustand — competitor analysis state + ResultPayload union
-    discoveryStore.ts         # Zustand — discovery state
-    reelAnalysisStore.ts      # Zustand — reel run state (persisted; reelConversationId tags the owning chat)
-    conversationsStore.ts     # Zustand — multi-conversation chat history (persisted) + legacy migration
-    corpusStore.ts            # Zustand — corpus hydration + remembered count
-    keysStore.ts              # Zustand — key store shim (empty after Phase 1; keys live server-side)
+  store/                      # 15 stores. Every PERSISTED one needs `version` + `migrate` (see below)
+    analysisStore.ts          # Competitor analysis state + ResultPayload union
+    discoveryStore.ts         # Discovery state
+    reelAnalysisStore.ts      # Reel run state (persisted; reelConversationId tags the owning chat)
+    repurposeStore.ts         # Repurpose Reel run state (transient)
+    runsStore.ts              # Per-run records (persisted) — one row per launched pipeline run
+    strategyStore.ts          # Content Strategizing brief (form draft) + last result; both persisted
+    conversationsStore.ts     # Multi-conversation chat history (persisted) + legacy migration
+    corpusStore.ts            # Corpus hydration + remembered count
+    creatorDirectoryStore.ts  # Sync mirror over the team-shared creator directory
+    trackingStore.ts          # Tracking dashboard UI state (in-flight fetches + errors)
+    themeStore.ts             # Light/dark preference driving `data-theme` on <html>
+    keysStore.ts              # Key store shim (empty — keys live server-side)
     persistStorage.ts         # Import-safe persist storage wrapper (never throws)
     reelPersist.ts            # Reel persist guard — drop interrupted mid-runs on restore
-    supabaseStorage.ts        # Zustand PersistStorage backed by Supabase user_state table
+    supabaseStorage.ts        # Zustand PersistStorage backed by the Supabase user_state table
+  domain/                     # Shared domain types (strategy, chat, reel, runs)
 ```
 
 ```
-api/
-  gemini.ts                   # Vercel serverless: Clerk JWT gate → Gemini REST proxy (model + endpoint allowlist)
-  apify.ts                    # Vercel serverless: Clerk JWT gate → Apify REST proxy (actor-ID allowlist)
-  config.ts                   # GET /api/config — returns { geminiReady, apifyReady } flags (never key material)
-  analyze-reel-video.ts       # Vercel serverless: Clerk JWT gate → Gemini Files API video analysis
-  _lib/
-    auth.ts                   # requireClerkUser() — shared Clerk JWT verification for all api/ functions
+api/                          # 9 serverless functions. Clerk-gated unless noted.
+  gemini.ts                   # Clerk JWT gate → Gemini REST proxy (model + endpoint allowlist)
+  apify.ts                    # Clerk JWT gate → Apify REST proxy (actor-ID allowlist)
+  config.ts                   # GET /api/config — { geminiReady, apifyReady } flags (never key material)
+  analyze-reel-video.ts       # Deep multimodal reel analysis (Gemini Files API)
+  analyze-single-reel.ts      # Deep case-study analysis of ONE reel
+  get-transcript.ts           # Transcript-only extraction for ONE reel (SSRF-allowlisted video host)
+  image-proxy.ts              # Proxies IG CDN images (their CDN blocks cross-origin <img>)
+  team-access.ts              # ADMIN-ONLY: grant the finance role by email (needs the Clerk secret key)
+  warm-voice-profile.ts       # SECRET-gated (not Clerk) — background warmer run by a GitHub Action cron
+  _lib/                       # 10 shared modules. All are SERVER-SIDE, ESM, self-contained —
+                              # they must NOT import from ../src.
+    auth.ts                   # requireClerkUser() — shared Clerk JWT verification
     geminiFiles.ts            # Gemini Files API helper (upload + generate)
+    geminiText.ts             # Server-side text-only generateContent
+    geminiJson.ts             # Text→JSON call with a responseSchema (+ pickGeminiKey)
+    apifyRun.ts               # run-sync-get-dataset-items with a round-robin key ring
     deepReelPrompt.ts         # Prompt builder for the deep multimodal path
+    singleReelPrompt.ts       # Single-reel deep analysis prompts
+    transcriptPrompt.ts       # Transcript-only prompt (TRANSCRIPT_PROMPT_VERSION lives here)
+    voiceProfilePrompt.ts     # Voice Profile prompt + schema + type
+    warmSelector.ts           # Pure selector — which directory handles to warm next
   tsconfig.json               # Separate tsconfig for Vercel functions (nodenext, strict: true)
 ```
+
+**Note on `api/` queries:** these functions talk to Supabase over PostgREST, so table and column
+names are plain strings. TypeScript, ESLint and the test suite cannot verify them — a wrong column
+name compiles, lints and tests clean, then fails at runtime. Check queries against the migration.
 
 ```
 src/
   components/
-    AppLayout.tsx             # Top nav (Chat | Memory | Report — NO Settings page) + Outlet
+    AppLayout.tsx             # Top nav + Outlet. NAV_SECTIONS is the single source of truth:
+                              #   Chat | Strategy | Script Studio | Calendar | Payments* | Memory | Gallery | Dashboard
+                              #   (*financeOnly; Team Access + Sign-in are routed but not in the nav). NO Settings page.
     ChatMessage.tsx           # Chat bubble with optional options
     CompetitorResultMessage.tsx  # Inline competitor results (results-as-messages)
     DiscoveryResultMessage.tsx   # Inline discovery results
