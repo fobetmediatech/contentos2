@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Content Strategy Deck | FOBET Media</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#E9EBEE;
+  --card:#FFFFFF;
+  --ink:#12151B;
+  --ink-2:#5A626E;
+  --line:#C9CED6;
+  --cobalt:#2733E0;
+  --tape:#FFD400;
+  --rec:#E23A2E;
+  --sans:'Archivo',system-ui,sans-serif;
+  --serif:'Source Serif 4',Georgia,serif;
+  --mono:'JetBrains Mono',ui-monospace,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--serif);
+  font-size:17px;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+body::before{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);
+  background-size:64px 64px;opacity:.35;
+}
+
+/* ---------- rails ---------- */
+.rail{
+  position:fixed;left:0;top:0;bottom:0;width:190px;z-index:20;
+  padding:26px 0 26px 26px;display:flex;flex-direction:column;gap:2px;
+  overflow-y:auto;scrollbar-width:none;
+}
+.rail::-webkit-scrollbar{display:none}
+.rail a{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;
+  color:var(--ink-2);text-decoration:none;padding:3px 0;
+  display:flex;gap:9px;align-items:baseline;transition:color .18s;
+}
+.rail a b{font-weight:700;color:var(--line)}
+.rail a:hover{color:var(--ink)}
+.rail a.on{color:var(--cobalt)}
+.rail a.on b{color:var(--cobalt)}
+.rail a:focus-visible{outline:2px solid var(--cobalt);outline-offset:2px}
+
+.rec{
+  position:fixed;right:22px;top:20px;z-index:30;
+  font-family:var(--mono);font-size:11px;letter-spacing:.08em;
+  background:var(--ink);color:#fff;padding:7px 12px;border-radius:2px;
+  display:flex;align-items:center;gap:8px;
+}
+.rec i{width:7px;height:7px;border-radius:50%;background:var(--rec);display:block;animation:blip 1.6s infinite}
+@keyframes blip{0%,49%{opacity:1}50%,100%{opacity:.25}}
+
+.bar{position:fixed;left:0;top:0;height:3px;background:var(--cobalt);z-index:40;width:0}
+
+/* ---------- layout ---------- */
+.wrap{position:relative;z-index:1;margin-left:190px;padding:0 46px 120px}
+section{max-width:960px;margin:0 auto;padding:74px 0 10px;scroll-margin-top:20px}
+.head{position:relative;padding:18px 20px 16px;margin-bottom:30px}
+.head::before,.head::after{
+  content:"";position:absolute;width:16px;height:16px;border:2px solid var(--ink);
+}
+.head::before{left:0;top:0;border-right:0;border-bottom:0}
+.head::after{right:0;bottom:0;border-left:0;border-top:0}
+.tc{font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:var(--cobalt);display:block;margin-bottom:7px}
+h2{font-family:var(--sans);font-weight:800;font-size:clamp(26px,3.4vw,40px);line-height:1.04;letter-spacing:-.02em;text-transform:uppercase}
+.sub{color:var(--ink-2);font-size:16px;margin-top:9px;max-width:62ch}
+
+h3{font-family:var(--sans);font-weight:800;font-size:15px;letter-spacing:.02em;text-transform:uppercase;margin-bottom:10px}
+p{margin-bottom:12px}
+strong{font-weight:600}
+.mono{font-family:var(--mono);font-size:12px;letter-spacing:.04em}
+.muted{color:var(--ink-2)}
+
+.card{background:var(--card);border:1px solid var(--line);padding:22px 24px;margin-bottom:14px}
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:repeat(2,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}
+
+ul{list-style:none}
+li{padding-left:18px;position:relative;margin-bottom:7px}
+li::before{content:"";position:absolute;left:0;top:11px;width:7px;height:1.5px;background:var(--cobalt)}
+
+/* ---------- cover ---------- */
+.cover{min-height:88vh;display:flex;flex-direction:column;justify-content:center;padding-top:40px}
+.cover .kick{font-family:var(--mono);font-size:12px;letter-spacing:.2em;color:var(--cobalt);margin-bottom:22px}
+.cover h1{
+  font-family:var(--sans);font-weight:800;text-transform:uppercase;
+  font-size:clamp(42px,8.4vw,104px);line-height:.9;letter-spacing:-.035em;
+}
+.cover h1 em{font-style:normal;background:var(--tape);padding:0 .12em;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+.meta{display:flex;flex-wrap:wrap;gap:0;margin-top:44px;border-top:1px solid var(--line)}
+.meta div{flex:1;min-width:150px;padding:14px 16px 14px 0;border-right:1px solid var(--line)}
+.meta div:last-child{border-right:0}
+.meta span{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--ink-2);margin-bottom:5px}
+.meta b{font-family:var(--sans);font-weight:600;font-size:15px}
+
+/* ---------- fill fields ---------- */
+.fill{border-bottom:1.5px dashed var(--cobalt);color:var(--cobalt);font-family:var(--mono);font-size:13px;padding:0 4px}
+.q{border-left:3px solid var(--tape);padding:2px 0 2px 14px;margin-bottom:14px}
+.q b{font-family:var(--sans);font-weight:600;font-size:15px;display:block;margin-bottom:3px}
+.q span{color:var(--ink-2);font-size:14px}
+
+/* ---------- table ---------- */
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);font-size:14px}
+th{
+  font-family:var(--sans);font-weight:800;font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;
+  text-align:left;padding:11px 12px;background:var(--ink);color:#fff;white-space:nowrap;
+}
+td{padding:11px 12px;border-top:1px solid var(--line);vertical-align:top}
+tbody tr:nth-child(even){background:#F7F8FA}
+.scroll-x{overflow-x:auto;border:0}
+
+/* ---------- format cards ---------- */
+.fmt{background:var(--card);border:1px solid var(--line);padding:0;display:flex;flex-direction:column}
+.fmt-top{padding:16px 18px 14px;border-bottom:1px solid var(--line)}
+.fmt-top .n{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--ink-2)}
+.fmt-top h4{font-family:var(--sans);font-weight:800;font-size:17px;text-transform:uppercase;letter-spacing:-.01em;margin:5px 0 6px}
+.fmt-top p{font-size:14px;color:var(--ink-2);margin:0}
+.fmt-body{padding:14px 18px;font-size:13.5px;display:grid;gap:8px}
+.row{display:flex;gap:10px}
+.row span{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;color:var(--ink-2);width:78px;flex-shrink:0;padding-top:3px}
+.row b{font-weight:600;font-size:13.5px}
+.ref{
+  margin-top:auto;padding:11px 18px;border-top:1px dashed var(--line);
+  font-family:var(--mono);font-size:11px;color:var(--cobalt);
+}
+.pill{display:inline-block;font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;padding:3px 7px;border:1px solid var(--line);border-radius:2px;color:var(--ink-2)}
+.pill.hi{background:var(--tape);border-color:var(--tape);color:var(--ink)}
+
+/* ---------- ig grid mock ---------- */
+.phone{background:var(--card);border:1px solid var(--line);padding:18px;max-width:400px}
+.ph-top{display:flex;gap:16px;align-items:center;margin-bottom:14px}
+.avatar{width:64px;height:64px;border-radius:50%;background:var(--ink);flex-shrink:0;display:grid;place-items:center;color:var(--tape);font-family:var(--sans);font-weight:800;font-size:22px}
+.stats{display:flex;gap:18px}
+.stats div{text-align:center}
+.stats b{display:block;font-family:var(--sans);font-weight:800;font-size:15px}
+.stats span{font-family:var(--mono);font-size:9px;letter-spacing:.08em;color:var(--ink-2)}
+.bio{font-size:13.5px;line-height:1.5;margin-bottom:12px}
+.hl{display:flex;gap:10px;margin-bottom:14px}
+.hl div{width:52px;text-align:center}
+.hl i{display:block;width:52px;height:52px;border-radius:50%;border:1.5px solid var(--line);background:#EFF1F4;margin-bottom:4px}
+.hl span{font-family:var(--mono);font-size:8.5px;letter-spacing:.04em;color:var(--ink-2)}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:3px}
+.tile{aspect-ratio:4/5;background:#DDE1E7;display:grid;place-items:center;text-align:center;padding:6px;font-family:var(--sans);font-weight:600;font-size:9.5px;text-transform:uppercase;letter-spacing:.03em;color:#4A525E;line-height:1.25}
+.tile.a{background:var(--ink);color:var(--tape)}
+.tile.b{background:var(--cobalt);color:#fff}
+.tile.c{background:var(--tape);color:var(--ink)}
+
+/* ---------- shots / screenshots ---------- */
+.shot{background:#DDE1E7;border:1px solid var(--line);aspect-ratio:9/16;display:grid;place-items:center;text-align:center;padding:12px;font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:#6B7280;line-height:1.6}
+
+/* ---------- timeline ---------- */
+.step{display:grid;grid-template-columns:74px 1fr;gap:18px;padding:16px 0;border-top:1px solid var(--line)}
+.step:last-child{border-bottom:1px solid var(--line)}
+.step .t{font-family:var(--mono);font-size:11px;letter-spacing:.08em;color:var(--cobalt);padding-top:3px}
+.step h4{font-family:var(--sans);font-weight:800;font-size:15px;text-transform:uppercase;margin-bottom:4px}
+.step p{font-size:14.5px;color:var(--ink-2);margin:0}
+
+/* ---------- roadmap ---------- */
+.phase{background:var(--card);border:1px solid var(--line);border-top:4px solid var(--cobalt);padding:20px}
+.phase:nth-child(2){border-top-color:var(--tape)}
+.phase:nth-child(3){border-top-color:var(--ink)}
+.phase .p{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--ink-2)}
+.phase h4{font-family:var(--sans);font-weight:800;font-size:19px;text-transform:uppercase;margin:5px 0 12px}
+.win{margin-top:14px;padding-top:12px;border-top:1px dashed var(--line);font-size:13.5px}
+.win span{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;color:var(--ink-2);display:block;margin-bottom:4px}
+
+/* ---------- kpi ---------- */
+.kpi{background:var(--card);border:1px solid var(--line);padding:16px}
+.kpi b{display:block;font-family:var(--sans);font-weight:800;font-size:26px;letter-spacing:-.02em;color:var(--cobalt)}
+.kpi span{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;color:var(--ink-2)}
+.kpi p{font-size:13px;color:var(--ink-2);margin:7px 0 0}
+
+/* ---------- checklist ---------- */
+.chk{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--line)}
+.chk i{width:17px;height:17px;border:1.5px solid var(--ink);flex-shrink:0;margin-top:3px}
+.chk b{font-family:var(--sans);font-weight:600;font-size:15px;display:block}
+.chk span{font-size:13.5px;color:var(--ink-2)}
+
+/* ---------- scope ---------- */
+.scope{background:var(--card);border:1px solid var(--line);padding:22px}
+.scope.out{background:transparent;border-style:dashed}
+.scope h4{font-family:var(--sans);font-weight:800;font-size:13px;letter-spacing:.06em;text-transform:uppercase;margin-bottom:12px;padding-bottom:9px;border-bottom:1px solid var(--line)}
+.scope li::before{background:var(--cobalt)}
+.scope.out li::before{background:var(--ink-2)}
+
+/* ---------- close ---------- */
+.close{background:var(--ink);color:#fff;padding:52px 44px;margin-top:24px}
+.close h2{color:#fff}
+.close .tc{color:var(--tape)}
+.close .sub{color:#A9B0BC}
+.close .step{border-color:#2A303B}
+.close .step h4{color:#fff}
+.close .step p{color:#A9B0BC}
+.close .step .t{color:var(--tape)}
+
+/* ---------- responsive ---------- */
+@media (max-width:1000px){
+  .rail{display:none}
+  .wrap{margin-left:0;padding:0 20px 80px}
+  .rec{right:14px;top:12px;font-size:10px;padding:6px 10px}
+  .g4{grid-template-columns:repeat(2,1fr)}
+  .g3{grid-template-columns:1fr}
+  .g2{grid-template-columns:1fr}
+  section{padding-top:56px}
+  .close{padding:36px 22px}
+  .step{grid-template-columns:1fr;gap:5px}
+}
+@media (max-width:520px){
+  .g4{grid-template-columns:1fr}
+  body{font-size:16px}
+  .head{padding:14px 12px}
+}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .rec i{animation:none}
+  *{transition:none!important}
+}
+@media print{
+  .rail,.rec,.bar{display:none}
+  body::before{display:none}
+  .wrap{margin:0;padding:0}
+  section{page-break-after:always;padding-top:20px}
+}
+</style>
+</head>
+<body>
+
+<div class="bar" id="bar"></div>
+<div class="rec"><i></i><span id="tcNow">00:00</span></div>
+
+<nav class="rail" aria-label="Sections">
+  <a href="#s00"><b>00</b>Cover</a>
+  <a href="#s01"><b>01</b>What we understood</a>
+  <a href="#s02"><b>02</b>Questions for you</a>
+  <a href="#s03"><b>03</b>Positioning</a>
+  <a href="#s04"><b>04</b>Competitors</a>
+  <a href="#s05"><b>05</b>Content pillars</a>
+  <a href="#s06"><b>06</b>Format library</a>
+  <a href="#s07"><b>07</b>Profile preview</a>
+  <a href="#s08"><b>08</b>Monthly output</a>
+  <a href="#s09"><b>09</b>Shoot day SOP</a>
+  <a href="#s10"><b>10</b>90 day roadmap</a>
+  <a href="#s11"><b>11</b>Metrics</a>
+  <a href="#s12"><b>12</b>Approvals</a>
+  <a href="#s13"><b>13</b>What we need</a>
+  <a href="#s14"><b>14</b>Scope</a>
+  <a href="#s15"><b>15</b>Case study</a>
+  <a href="#s16"><b>16</b>Next steps</a>
+</nav>
+
+<main class="wrap">
+
+<!-- 00 -->
+<section id="s00" class="cover">
+  <div class="kick">FOBET MEDIA / CONTENT STRATEGY / <span class="fill">MONTH YEAR</span></div>
+  <h1>Built for<br><em>[Client Name]</em><br>Camera on.</h1>
+  <p class="sub" style="margin-top:26px">A complete plan for what we shoot, how we shoot it, what goes live, and what it should return. Read it once and you will know exactly what the next 90 days look like.</p>
+  <div class="meta">
+    <div><span>PREPARED FOR</span><b class="fill">Client name, brand</b></div>
+    <div><span>PREPARED BY</span><b>FOBET Media</b></div>
+    <div><span>PLATFORMS</span><b class="fill">Instagram, YouTube</b></div>
+    <div><span>REVIEW CYCLE</span><b>Monthly</b></div>
+  </div>
+</section>
+
+<!-- 01 -->
+<section id="s01">
+  <div class="head"><span class="tc">01 / DISCOVERY</span><h2>What we understood<br>about your business</h2>
+  <p class="sub">Everything below comes from our conversation. If any line is wrong, correct it before we shoot. The strategy is built on top of this page.</p></div>
+
+  <div class="grid g2">
+    <div class="card">
+      <h3>The business</h3>
+      <ul>
+        <li>What you sell: <span class="fill">product or service</span></li>
+        <li>Revenue lines: <span class="fill">line 1, line 2, line 3</span></li>
+        <li>Highest margin offer: <span class="fill">offer</span></li>
+        <li>Ticket size: <span class="fill">Rs. range</span></li>
+        <li>Markets you serve: <span class="fill">cities or countries</span></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>The buyer</h3>
+      <ul>
+        <li>Age and profile: <span class="fill">28 to 45, salaried, tier 1</span></li>
+        <li>The pain they walk in with: <span class="fill">pain</span></li>
+        <li>What stops them from buying: <span class="fill">objection</span></li>
+        <li>Where they currently look for answers: <span class="fill">YouTube, WhatsApp, agents</span></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Where you are today</h3>
+      <ul>
+        <li>Followers: <span class="fill">0000</span> &nbsp;/&nbsp; Avg views: <span class="fill">0000</span></li>
+        <li>Posting frequency: <span class="fill">x per week</span></li>
+        <li>Leads from social right now: <span class="fill">n per month</span></li>
+        <li>Existing assets: <span class="fill">old footage, testimonials, site photos</span></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Guardrails</h3>
+      <ul>
+        <li>Never say on camera: <span class="fill">topics</span></li>
+        <li>Compliance limits: <span class="fill">SEBI, RERA, medical claims, none</span></li>
+        <li>Competitors we will not name: <span class="fill">names</span></li>
+        <li>Language: <span class="fill">Hinglish, English, Hindi</span></li>
+        <li>Camera comfort: <span class="fill">high, medium, needs prompting</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 02 -->
+<section id="s02">
+  <div class="head"><span class="tc">02 / INPUT NEEDED</span><h2>Questions we still<br>need answered</h2>
+  <p class="sub">Answer these on the call or on WhatsApp. Every answer directly changes what we script.</p></div>
+
+  <div class="card">
+    <div class="q"><b>What is the single question customers ask you most?</b><span>This usually becomes our best performing reel of month one.</span></div>
+    <div class="q"><b>What do you believe about your industry that most people in it disagree with?</b><span>This is where your differentiated content comes from.</span></div>
+    <div class="q"><b>Walk us through your last three closed deals. What made them say yes?</b><span>We turn these into story reels and proof content.</span></div>
+    <div class="q"><b>Which one number in your business are you happy to say publicly?</b><span>Numbers get watched. We need at least one you are comfortable repeating.</span></div>
+    <div class="q"><b>Who in your team can be on camera besides you?</b><span>A second face doubles our shooting capacity per day.</span></div>
+    <div class="q"><b>What does a good month look like in leads or calls?</b><span>We set our targets against your number, not a vanity number.</span></div>
+    <div class="q"><b>Which accounts do you personally admire, in or outside your industry?</b><span>Tells us your taste faster than any brief.</span></div>
+    <div class="q"><b>How many hours a month can you give to shooting?</b><span>Honest answer only. The whole plan is sized on this.</span></div>
+  </div>
+</section>
+
+<!-- 03 -->
+<section id="s03">
+  <div class="head"><span class="tc">03 / POSITIONING</span><h2>The one line<br>we are building</h2></div>
+
+  <div class="card" style="border-left:4px solid var(--cobalt)">
+    <span class="mono muted">POSITIONING STATEMENT</span>
+    <p style="font-family:var(--sans);font-weight:800;font-size:clamp(20px,3vw,30px);line-height:1.15;text-transform:uppercase;margin:10px 0 0">
+      You will be known as the <span class="fill">role</span> who <span class="fill">specific outcome</span> for <span class="fill">specific audience</span>.
+    </p>
+  </div>
+
+  <div class="grid g2" style="margin-top:14px">
+    <div class="card">
+      <h3>Tone we will use</h3>
+      <p><span class="pill hi">DIRECT</span> <span class="pill hi">PRACTICAL</span> <span class="pill hi">CONFIDENT</span></p>
+      <h3 style="margin-top:18px">Tone we will avoid</h3>
+      <p><span class="pill">SALESY</span> <span class="pill">ACADEMIC</span> <span class="pill">MOTIVATIONAL FLUFF</span></p>
+    </div>
+    <div class="card">
+      <h3>What changes for the viewer</h3>
+      <p class="muted" style="font-size:15px">Before: they see you as one more <span class="fill">category</span> account.<br><br>After 90 days: they open your profile to check an answer before they call anyone else.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 04 -->
+<section id="s04">
+  <div class="head"><span class="tc">04 / LANDSCAPE</span><h2>Who you are<br>up against</h2>
+  <p class="sub">We studied the accounts your buyer already follows. Numbers pulled on <span class="fill">date</span>.</p></div>
+
+  <div class="scroll-x">
+  <table>
+    <thead><tr><th>Account</th><th>Followers</th><th>Avg views</th><th>Posts / week</th><th>Their top formats</th><th>What they are missing</th></tr></thead>
+    <tbody>
+      <tr><td><b>@competitor_1</b></td><td>128K</td><td>42K</td><td>5</td><td>Talking head, walkthrough</td><td>No proof or client stories</td></tr>
+      <tr><td><b>@competitor_2</b></td><td>76K</td><td>18K</td><td>3</td><td>Podcast clips</td><td>Zero educational depth</td></tr>
+      <tr><td><b>@competitor_3</b></td><td>240K</td><td>90K</td><td>7</td><td>Rating and review</td><td>Nothing for serious buyers</td></tr>
+      <tr><td><b>@competitor_4</b></td><td>31K</td><td>6K</td><td>2</td><td>Static posts</td><td>Barely uses video</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="grid g4" style="margin-top:18px">
+    <div class="shot">SCREENSHOT<br>@competitor_1<br>top reel</div>
+    <div class="shot">SCREENSHOT<br>@competitor_2<br>profile grid</div>
+    <div class="shot">SCREENSHOT<br>@competitor_3<br>top reel</div>
+    <div class="shot">SCREENSHOT<br>@competitor_4<br>profile grid</div>
+  </div>
+
+  <div class="card" style="margin-top:18px;border-left:4px solid var(--tape)">
+    <h3>The gap we are attacking</h3>
+    <p style="margin:0">Everyone in this category is doing <span class="fill">what they all do</span>. Nobody is doing <span class="fill">the gap</span>. That is where we plant your flag, and it is why our format mix on the next page looks different from theirs.</p>
+  </div>
+</section>
+
+<!-- 05 -->
+<section id="s05">
+  <div class="head"><span class="tc">05 / PILLARS</span><h2>What we will<br>talk about</h2>
+  <p class="sub">Four pillars. Every single piece of content we make will belong to one of them. Nothing gets shot outside this.</p></div>
+
+  <div class="grid g4">
+    <div class="card"><span class="mono muted">40 PERCENT</span><h3 style="margin-top:6px">Educate</h3><p class="muted" style="font-size:14px;margin:0">The things your buyer gets wrong. Myths, mistakes, terms explained simply.</p></div>
+    <div class="card"><span class="mono muted">25 PERCENT</span><h3 style="margin-top:6px">Prove</h3><p class="muted" style="font-size:14px;margin:0">Client results, site visits, before and after, real numbers.</p></div>
+    <div class="card"><span class="mono muted">20 PERCENT</span><h3 style="margin-top:6px">Position</h3><p class="muted" style="font-size:14px;margin:0">Your opinions, your process, why you do it differently.</p></div>
+    <div class="card"><span class="mono muted">15 PERCENT</span><h3 style="margin-top:6px">Convert</h3><p class="muted" style="font-size:14px;margin:0">Offers, free resources, consultation calls, direct asks.</p></div>
+  </div>
+</section>
+
+<!-- 06 -->
+<section id="s06">
+  <div class="head"><span class="tc">06 / PRODUCTION</span><h2>Format library</h2>
+  <p class="sub">These are the exact shapes we will shoot in. Each one has a reference reel attached so you can see the output before we roll. Setup tells you what the shoot day needs.</p></div>
+
+  <div class="grid g2">
+
+    <div class="fmt">
+      <div class="fmt-top"><span class="n">FORMAT 01</span><h4>Podcast Cut</h4><p>Two camera sit down. Long conversation cut into 6 to 10 reels.</p></div>
+      <div class="fmt-body">
+        <div class="row"><span>WHY</span><b>Highest trust per second. Builds authority fast.</b></div>
+        <div class="row"><span>SETUP</span><b>2 cameras, 2 collar mics, seated set, 2 chairs</b></div>
+        <div class="row"><span>EFFORT</span><b><span class="pill hi">HIGH</span> one full day</b></div>
+        <div class="row"><span>OUTPUT</span><b>8 reels per session</b></div>
+      </div>
+      <div class="ref">REFERENCE REEL: <span class="fill">paste link</span></div>
+    </div>
+
+    <div class="fmt">
+      <div class="fmt-top"><span class="n">FORMAT 02</span><h4>Rating &amp; Review</h4><p>You rate options out of 10 on screen. Fast, opinionated, very shareable.</p></div>
+      <div class="fmt-body">
+        <div class="row"><span>WHY</span><b>Opinion drives comments and saves.</b></div>
+        <div class="row"><span>SETUP</span><b>1 camera, plain wall, rating graphics added in edit</b></div>
+        <div class="row"><span>EFFORT</span><b><span class="pill">LOW</span> 30 min per reel</b></div>
+        <div class="row"><span>OUTPUT</span><b>6 reels per session</b></div>
+      </div>
+      <div class="ref">REFERENCE REEL: <span class="fill">paste link</span></div>
+    </div>
+
+    <div class="fmt">
+      <div class="fmt-top"><span class="n">FORMAT 03</span><h4>Myth vs Fact</h4><p>One wrong belief, corrected in 45 seconds with a real example.</p></div>
+      <div class="fmt-body">
+        <div class="row"><span>WHY</span><b>Best hook rate in every niche we run.</b></div>
+        <div class="row"><span>SETUP</span><b>1 camera, mic, single location</b></div>
+        <div class="row"><span>EFFORT</span><b><span class="pill">LOW</span></b></div>
+        <div class="row"><span>OUTPUT</span><b>8 reels per session</b></div>
+      </div>
+      <div class="ref">REFERENCE REEL: <span class="fill">paste link</span></div>
+    </div>
+
+    <div class="fmt">
+      <div class="fmt-top"><span class="n">FORMAT 04</span><h4>On Location Walkthrough</h4><p>You walking through a site, office, factory or store, explaining as you move.</p></div>
+      <div class="fmt-body">
+        <div class="row"><span>WHY</span><b>Movement holds retention. Also doubles as proof.</b></div>
+        <div class="row"><span>SETUP</span><b>Gimbal, wireless mic, location permission</b></div>
+        <div class="row"><span>EFFORT</span><b><span class="pill hi">HIGH</span> travel day</b></div>
+        <div class="row"><span>OUTPUT</span><b>4 reels plus B roll bank</b></div>
+      </div>
+      <div class="ref">REFERENCE REEL: <span class="fill">paste link</span></div>
+    </div>
+
+    <div class="fmt">
+      <div class="fmt-top"><span class="n">FORMAT 05</span><h4>Green Screen Reaction</h4><p>You react to a news item, a post, or a competitor claim.</p></div>
+      <div class="fmt-body">
+        <div class="row"><span>WHY</span><b>Rides existing trends. Quick to turn around.</b></div>
+        <div class="row"><span>SETUP</span><b>Green screen or phone, shot same week as the news</b></div>
+        <div class="row"><span>EFFORT</span><b><span class="pill">LOW</span> can be self shot</b></div>
+        <div class="row"><span>OUTPUT</span><b>2 to 4 per month</b></div>
+      </div>
+      <div class="ref">REFERENCE REEL: <span class="fill">paste link</span></div>
+    </div>
+
+    <div class="fmt">
+      <div class="fmt-top"><span class="n">FORMAT 06</span><h4>Client Story</h4><p>One real case. Problem, what you did, result. Named or anonymous.</p></div>
+      <div class="fmt-body">
+        <div class="row"><span>WHY</span><b>Closest format to a sales call. Drives DMs.</b></div>
+        <div class="row"><span>SETUP</span><b>Seated, 1 camera, optional client on call</b></div>
+        <div class="row"><span>EFFORT</span><b><span class="pill">MEDIUM</span></b></div>
+        <div class="row"><span>OUTPUT</span><b>4 reels per session</b></div>
+      </div>
+      <div class="ref">REFERENCE REEL: <span class="fill">paste link</span></div>
+    </div>
+
+    <div class="fmt">
+      <div class="fmt-top"><span class="n">FORMAT 07</span><h4>Testimonial Capture</h4><p>Your customer on camera, guided by our questions so it does not sound scripted.</p></div>
+      <div class="fmt-body">
+        <div class="row"><span>WHY</span><b>Third party proof. Also reusable in ads.</b></div>
+        <div class="row"><span>SETUP</span><b>Client coordination needed from your side</b></div>
+        <div class="row"><span>EFFORT</span><b><span class="pill">MEDIUM</span></b></div>
+        <div class="row"><span>OUTPUT</span><b>1 to 2 per month</b></div>
+      </div>
+      <div class="ref">REFERENCE REEL: <span class="fill">paste link</span></div>
+    </div>
+
+    <div class="fmt">
+      <div class="fmt-top"><span class="n">FORMAT 08</span><h4>Carousel</h4><p>Designed slides for the topics that need reading, not watching.</p></div>
+      <div class="fmt-body">
+        <div class="row"><span>WHY</span><b>Highest save rate. Feeds your lead magnets.</b></div>
+        <div class="row"><span>SETUP</span><b>No shoot required</b></div>
+        <div class="row"><span>EFFORT</span><b><span class="pill">LOW</span> design only</b></div>
+        <div class="row"><span>OUTPUT</span><b>4 to 8 per month</b></div>
+      </div>
+      <div class="ref">REFERENCE POST: <span class="fill">paste link</span></div>
+    </div>
+
+  </div>
+</section>
+
+<!-- 07 -->
+<section id="s07">
+  <div class="head"><span class="tc">07 / PREVIEW</span><h2>What your profile<br>will look like</h2>
+  <p class="sub">Not a mood board. This is the actual structure we will build: name field, bio, highlights, and the first nine posts.</p></div>
+
+  <div class="grid g2" style="align-items:start">
+    <div class="phone">
+      <div class="ph-top">
+        <div class="avatar">CN</div>
+        <div class="stats">
+          <div><b>127</b><span>POSTS</span></div>
+          <div><b>24.8K</b><span>FOLLOWERS</span></div>
+          <div><b>312</b><span>FOLLOWING</span></div>
+        </div>
+      </div>
+      <div class="bio">
+        <b style="font-family:var(--sans);font-weight:800">Client Name</b><br>
+        <span class="mono muted">Keyword in name field</span><br>
+        <span class="fill">One line on who you help</span><br>
+        <span class="fill">One line of proof or credential</span><br>
+        <span class="fill">Free resource, link below</span>
+      </div>
+      <div class="hl">
+        <div><i></i><span>START</span></div>
+        <div><i></i><span>PROOF</span></div>
+        <div><i></i><span>FAQ</span></div>
+        <div><i></i><span>WORK</span></div>
+        <div><i></i><span>ASK</span></div>
+      </div>
+      <div class="tiles">
+        <div class="tile a">Myth vs Fact</div>
+        <div class="tile">Rating 1 to 10</div>
+        <div class="tile b">Client Story</div>
+        <div class="tile">Walkthrough</div>
+        <div class="tile c">Carousel</div>
+        <div class="tile a">Podcast Cut</div>
+        <div class="tile b">Reaction</div>
+        <div class="tile">Testimonial</div>
+        <div class="tile c">Free Guide</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <h3>Name field</h3>
+        <p class="muted" style="font-size:14.5px;margin:0">We put a searchable keyword next to your name, because Instagram search reads this field. Example: <b>Client Name | Dubai Property</b></p>
+      </div>
+      <div class="card">
+        <h3>Bio structure</h3>
+        <ul style="font-size:14.5px">
+          <li>Who you help, in plain words</li>
+          <li>One proof point, number or credential</li>
+          <li>One free thing to click</li>
+          <li>City or market</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Highlights we will build</h3>
+        <p class="muted" style="font-size:14.5px;margin:0">Start here, Proof, FAQ, Behind the work, Book a call. Custom covers in your brand colours.</p>
+      </div>
+      <div class="card">
+        <h3>Grid logic</h3>
+        <p class="muted" style="font-size:14.5px;margin:0">Colour rotation so the grid reads as one brand at a glance. Never two of the same format side by side.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 08 -->
+<section id="s08">
+  <div class="head"><span class="tc">08 / DELIVERABLES</span><h2>What you get<br>every month</h2></div>
+
+  <div class="grid g4">
+    <div class="kpi"><span>REELS</span><b>16</b><p>Shot, scripted, edited, captioned</p></div>
+    <div class="kpi"><span>CAROUSELS</span><b>6</b><p>Designed in your brand kit</p></div>
+    <div class="kpi"><span>STORIES</span><b>20</b><p>Frames with polls and CTAs</p></div>
+    <div class="kpi"><span>SHOOT DAYS</span><b>2</b><p>Full day, all formats covered</p></div>
+  </div>
+
+  <div class="scroll-x" style="margin-top:18px">
+  <table>
+    <thead><tr><th>Week</th><th>Reels</th><th>Formats covered</th><th>Carousel</th><th>Pillar focus</th></tr></thead>
+    <tbody>
+      <tr><td>Week 1</td><td>4</td><td>Myth vs Fact, Rating</td><td>1</td><td>Educate</td></tr>
+      <tr><td>Week 2</td><td>4</td><td>Podcast Cut, Reaction</td><td>2</td><td>Position</td></tr>
+      <tr><td>Week 3</td><td>4</td><td>Client Story, Walkthrough</td><td>1</td><td>Prove</td></tr>
+      <tr><td>Week 4</td><td>4</td><td>Testimonial, Rating</td><td>2</td><td>Convert</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- 09 -->
+<section id="s09">
+  <div class="head"><span class="tc">09 / PROCESS</span><h2>How a shoot day<br>actually runs</h2>
+  <p class="sub">This is fixed. Follow it and we finish on time, every time.</p></div>
+
+  <div class="step"><div class="t">D MINUS 7</div><div><h4>Topics locked</h4><p>We send the month's topic list. You approve or swap. No scripting starts before this.</p></div></div>
+  <div class="step"><div class="t">D MINUS 4</div><div><h4>Scripts sent</h4><p>All scripts for the shoot go to you in one document. You have 48 hours to approve or mark changes.</p></div></div>
+  <div class="step"><div class="t">D MINUS 2</div><div><h4>Call sheet sent</h4><p>Location, call time, wardrobe list, props, and which formats we are covering. Avoid stripes, small checks and pure white on camera.</p></div></div>
+  <div class="step"><div class="t">D DAY 10 AM</div><div><h4>Setup and first block</h4><p>Crew arrives 45 minutes early. First block is the easy formats to warm you up.</p></div></div>
+  <div class="step"><div class="t">D DAY 1 PM</div><div><h4>Heavy block</h4><p>Podcast or walkthrough. This is where the energy needs to be highest, so we do it after a break, not at the end.</p></div></div>
+  <div class="step"><div class="t">D DAY 4 PM</div><div><h4>B roll and wrap</h4><p>Cutaways, office shots, hands, product. These make every edit better for the next three months.</p></div></div>
+  <div class="step"><div class="t">D PLUS 5</div><div><h4>First edits delivered</h4><p>Delivered in batches, not all at the end. You get one round of revisions per video.</p></div></div>
+  <div class="step"><div class="t">D PLUS 8</div><div><h4>Scheduled and live</h4><p>Approved edits go into the calendar. Posting starts.</p></div></div>
+
+  <div class="grid g2" style="margin-top:22px">
+    <div class="scope"><h4>FOBET handles</h4><ul><li>Topic research and scripting</li><li>Crew, camera, audio, lighting</li><li>Direction on camera</li><li>Editing, captions, thumbnails</li><li>Posting and scheduling</li><li>Monthly reporting</li></ul></div>
+    <div class="scope out"><h4>You handle</h4><ul><li>Script approval within 48 hours</li><li>Being present and on time on shoot day</li><li>Location access and permissions</li><li>Wardrobe as per call sheet</li><li>Client coordination for testimonials</li><li>Replying to DMs and leads</li></ul></div>
+  </div>
+</section>
+
+<!-- 10 -->
+<section id="s10">
+  <div class="head"><span class="tc">10 / ROADMAP</span><h2>The first<br>90 days</h2></div>
+
+  <div class="grid g3">
+    <div class="phase"><span class="p">MONTH 01</span><h4>Set up<br>and test</h4>
+      <ul style="font-size:14.5px"><li>Profile rebuild, bio, highlights</li><li>First 2 shoot days</li><li>All 8 formats tested once</li><li>Baseline numbers recorded</li></ul>
+      <div class="win"><span>WHAT SUCCESS LOOKS LIKE</span>Consistent posting, two formats clearly outperforming the rest.</div>
+    </div>
+    <div class="phase"><span class="p">MONTH 02</span><h4>Double down<br>on winners</h4>
+      <ul style="font-size:14.5px"><li>Drop the two weakest formats</li><li>Increase output of the winners</li><li>First lead magnet live</li><li>Story engagement system running</li></ul>
+      <div class="win"><span>WHAT SUCCESS LOOKS LIKE</span>Reach up meaningfully over month 1, first inbound DMs from content.</div>
+    </div>
+    <div class="phase"><span class="p">MONTH 03</span><h4>Scale<br>and convert</h4>
+      <ul style="font-size:14.5px"><li>Best performers reshot as ads</li><li>DM to call funnel in place</li><li>Collaborations and features</li><li>Quarterly review and next plan</li></ul>
+      <div class="win"><span>WHAT SUCCESS LOOKS LIKE</span>A repeatable engine. We know what to shoot and why, without guessing.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 11 -->
+<section id="s11">
+  <div class="head"><span class="tc">11 / REPORTING</span><h2>What we<br>measure</h2>
+  <p class="sub">One report on the 1st of every month. Same metrics, every time, so you can see the trend and not just the last post.</p></div>
+
+  <div class="grid g4">
+    <div class="kpi"><span>REACH</span><b>&mdash;</b><p>How many new people saw you</p></div>
+    <div class="kpi"><span>PROFILE VISITS</span><b>&mdash;</b><p>Content did its job, they came to check you</p></div>
+    <div class="kpi"><span>SAVES &amp; SHARES</span><b>&mdash;</b><p>The real quality signal, more than likes</p></div>
+    <div class="kpi"><span>DMS &amp; LEADS</span><b>&mdash;</b><p>The only number that pays for this</p></div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h3>What we will not celebrate</h3>
+    <p class="muted" style="margin:0;font-size:15px">Likes, follower count alone, and one lucky viral reel. If reach goes up and leads do not, we change the strategy, not the report.</p>
+  </div>
+</section>
+
+<!-- 12 -->
+<section id="s12">
+  <div class="head"><span class="tc">12 / WORKING TOGETHER</span><h2>Approvals and<br>communication</h2></div>
+
+  <div class="grid g2">
+    <div class="card"><h3>Where we talk</h3><ul><li>One WhatsApp group, all approvals happen there</li><li>One point of contact on your side: <span class="fill">name</span></li><li>One account manager from FOBET: <span class="fill">name</span></li><li>Monthly review call, 30 minutes</li></ul></div>
+    <div class="card"><h3>Turnaround times</h3><ul><li>Script approval: 48 hours from your side</li><li>Edit delivery: 5 working days from shoot</li><li>Revisions: 1 round per video, within 3 days</li><li>Urgent trend content: 24 hours both sides</li></ul></div>
+  </div>
+  <div class="card" style="border-left:4px solid var(--rec)">
+    <h3>If approvals get delayed</h3>
+    <p style="margin:0">Posting continues from the backlog for one week. Beyond that, the calendar shifts and the month's count moves to the following month. We flag it early, not at the end.</p>
+  </div>
+</section>
+
+<!-- 13 -->
+<section id="s13">
+  <div class="head"><span class="tc">13 / CHECKLIST</span><h2>What we need<br>from you to start</h2>
+  <p class="sub">Tick these off and we can begin scripting the same week.</p></div>
+
+  <div class="card">
+    <div class="chk"><i></i><div><b>Logo files and brand colours</b><span>PNG and vector if you have them</span></div></div>
+    <div class="chk"><i></i><div><b>Instagram and YouTube access</b><span>Added as manager, not password sharing</span></div></div>
+    <div class="chk"><i></i><div><b>Two shoot dates blocked</b><span>Full days, in the first three weeks</span></div></div>
+    <div class="chk"><i></i><div><b>Three customer testimonials or case details</b><span>Even rough notes work</span></div></div>
+    <div class="chk"><i></i><div><b>Product, site or office access</b><span>For walkthrough and B roll</span></div></div>
+    <div class="chk"><i></i><div><b>Answers to section 02</b><span>The eight questions</span></div></div>
+    <div class="chk" style="border-bottom:0"><i></i><div><b>Point of contact confirmed</b><span>One person who can approve scripts</span></div></div>
+  </div>
+</section>
+
+<!-- 14 -->
+<section id="s14">
+  <div class="head"><span class="tc">14 / SCOPE</span><h2>Scope and<br>investment</h2></div>
+
+  <div class="grid g2">
+    <div class="scope"><h4>Included</h4><ul>
+      <li>Strategy and monthly content calendar</li>
+      <li>Full scripting for every video</li>
+      <li>2 shoot days with crew and equipment</li>
+      <li>16 reels, 6 carousels, 20 story frames</li>
+      <li>Editing, captions, covers</li>
+      <li>Posting, scheduling, hashtags</li>
+      <li>Profile setup and highlight covers</li>
+      <li>Monthly report and review call</li>
+    </ul></div>
+    <div class="scope out"><h4>Not included, quoted separately</h4><ul>
+      <li>Paid ad spend and ad management</li>
+      <li>Extra shoot days beyond 2</li>
+      <li>Studio or location rental</li>
+      <li>Actors, models, voice artists</li>
+      <li>Travel outside <span class="fill">city</span></li>
+      <li>Website, landing pages, funnels</li>
+      <li>Drone or specialised equipment</li>
+    </ul></div>
+  </div>
+
+  <div class="card" style="margin-top:14px;border-left:4px solid var(--cobalt)">
+    <div class="grid g3" style="gap:20px">
+      <div><span class="mono muted">MONTHLY RETAINER</span><p style="font-family:var(--sans);font-weight:800;font-size:26px;margin:4px 0 0">Rs. <span class="fill">00,000</span></p></div>
+      <div><span class="mono muted">MINIMUM TERM</span><p style="font-family:var(--sans);font-weight:800;font-size:26px;margin:4px 0 0">3 months</p></div>
+      <div><span class="mono muted">PAYMENT</span><p style="font-family:var(--sans);font-weight:800;font-size:26px;margin:4px 0 0">50 / 50</p></div>
+    </div>
+    <p class="muted" style="font-size:13.5px;margin:14px 0 0">Three months is not a lock in for our benefit. Nothing in this plan produces a clean signal in under 90 days.</p>
+  </div>
+</section>
+
+<!-- 15 -->
+<section id="s15">
+  <div class="head"><span class="tc">15 / PROOF</span><h2>We have done<br>this before</h2></div>
+
+  <div class="card">
+    <span class="mono muted">CASE STUDY / <span class="fill">CLIENT NAME, NICHE</span></span>
+    <h3 style="margin-top:8px;font-size:20px">From <span class="fill">0000</span> to <span class="fill">00,000</span> followers in <span class="fill">n</span> months</h3>
+    <div class="grid g4" style="margin-top:16px">
+      <div class="kpi"><span>REACH GROWTH</span><b class="fill">000%</b></div>
+      <div class="kpi"><span>AVG VIEWS</span><b class="fill">00K</b></div>
+      <div class="kpi"><span>INBOUND LEADS</span><b class="fill">00 / mo</b></div>
+      <div class="kpi"><span>TIME TAKEN</span><b class="fill">0 mo</b></div>
+    </div>
+    <div class="grid g4" style="margin-top:14px">
+      <div class="shot">BEFORE<br>profile grid</div>
+      <div class="shot">AFTER<br>profile grid</div>
+      <div class="shot">INSIGHTS<br>screenshot</div>
+      <div class="shot">TOP REEL<br>screenshot</div>
+    </div>
+    <p class="muted" style="font-size:14.5px;margin:16px 0 0">What we did: <span class="fill">one line on the strategy shift that caused the result</span></p>
+  </div>
+</section>
+
+<!-- 16 -->
+<section id="s16">
+  <div class="close">
+    <span class="tc">16 / NEXT</span>
+    <h2>Next steps</h2>
+    <p class="sub" style="margin-bottom:26px">Four things, in this order.</p>
+    <div class="step"><div class="t">STEP 1</div><div><h4>Correct section 01</h4><p>Tell us what we got wrong about your business.</p></div></div>
+    <div class="step"><div class="t">STEP 2</div><div><h4>Answer section 02</h4><p>Voice notes are fine. We do not need essays.</p></div></div>
+    <div class="step"><div class="t">STEP 3</div><div><h4>Block two shoot dates</h4><p>Send us dates and we build the call sheet around them.</p></div></div>
+    <div class="step"><div class="t">STEP 4</div><div><h4>Confirm and we start</h4><p>Scripting begins the same week. First content live within 14 days.</p></div></div>
+    <p style="margin-top:34px;font-family:var(--mono);font-size:12px;letter-spacing:.1em;color:var(--tape)">FOBET MEDIA &nbsp;/&nbsp; <span class="fill" style="color:var(--tape);border-color:var(--tape)">phone</span> &nbsp;/&nbsp; <span class="fill" style="color:var(--tape);border-color:var(--tape)">email</span></p>
+  </div>
+</section>
+
+</main>
+
+<script>
+(function(){
+  var secs = Array.prototype.slice.call(document.querySelectorAll('section'));
+  var links = Array.prototype.slice.call(document.querySelectorAll('.rail a'));
+  var bar = document.getElementById('bar');
+  var tcNow = document.getElementById('tcNow');
+  var ticking = false;
+
+  function update(){
+    var st = window.scrollY;
+    var h = document.body.scrollHeight - window.innerHeight;
+    bar.style.width = (h > 0 ? (st / h) * 100 : 0) + '%';
+    var idx = 0;
+    for (var i = 0; i < secs.length; i++){
+      if (secs[i].getBoundingClientRect().top <= window.innerHeight * 0.4) idx = i;
+    }
+    links.forEach(function(a, i){ a.classList.toggle('on', i === idx); });
+    tcNow.textContent = (idx < 10 ? '0' : '') + idx + ':' + (st % 60 < 10 ? '0' : '') + Math.floor(st % 60);
+    ticking = false;
+  }
+  window.addEventListener('scroll', function(){
+    if (!ticking){ window.requestAnimationFrame(update); ticking = true; }
+  }, {passive:true});
+  update();
+})();
+</script>
+</body>
+</html>

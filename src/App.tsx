@@ -30,6 +30,7 @@ const StrategyClientPage = lazy(() => import('./pages/StrategyClientPage').then(
 const StrategyReviewPage = lazy(() => import('./pages/StrategyReviewPage').then((m) => ({ default: m.StrategyReviewPage })))
 const StrategyMeetingsPage = lazy(() => import('./pages/StrategyMeetingsPage').then((m) => ({ default: m.StrategyMeetingsPage })))
 const StrategyMeetingPage = lazy(() => import('./pages/StrategyMeetingPage').then((m) => ({ default: m.StrategyMeetingPage })))
+const StrategyDeckPage = lazy(() => import('./pages/StrategyDeckPage').then((m) => ({ default: m.StrategyDeckPage })))
 const ScriptStudioPage = lazy(() => import('./pages/ScriptStudioPage').then((m) => ({ default: m.ScriptStudioPage })))
 
 const queryClient = new QueryClient({
@@ -138,6 +139,7 @@ export default function App() {
                 <Route path="strategy/brief" element={<StrategyPage />} />
                 {/* Must precede strategy/:id — otherwise these are matched as a client id. */}
                 <Route path="strategy/meeting/:externalId" element={<StrategyMeetingPage />} />
+                <Route path="strategy/deck/:clientId" element={<StrategyDeckPage />} />
                 <Route path="strategy/review/:clientId" element={<StrategyReviewPage />} />
                 <Route path="strategy/:id" element={<StrategyClientPage />} />
 
