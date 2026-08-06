@@ -28,6 +28,8 @@ const TeamAccessPage = lazy(() => import('./pages/TeamAccessPage').then((m) => (
 const StrategyPage = lazy(() => import('./pages/StrategyPage').then((m) => ({ default: m.StrategyPage })))
 const StrategyClientPage = lazy(() => import('./pages/StrategyClientPage').then((m) => ({ default: m.StrategyClientPage })))
 const StrategyReviewPage = lazy(() => import('./pages/StrategyReviewPage').then((m) => ({ default: m.StrategyReviewPage })))
+const StrategyMeetingsPage = lazy(() => import('./pages/StrategyMeetingsPage').then((m) => ({ default: m.StrategyMeetingsPage })))
+const StrategyMeetingPage = lazy(() => import('./pages/StrategyMeetingPage').then((m) => ({ default: m.StrategyMeetingPage })))
 const ScriptStudioPage = lazy(() => import('./pages/ScriptStudioPage').then((m) => ({ default: m.ScriptStudioPage })))
 
 const queryClient = new QueryClient({
@@ -131,8 +133,11 @@ export default function App() {
                 <Route path="team-access" element={<TeamAccessPage />} />
 
                 {/* Content Strategizing — onboarding form → AI content strategy document (PDF) */}
-                <Route path="strategy" element={<StrategyPage />} />
-                {/* Must precede strategy/:id — otherwise "review" is matched as a client id. */}
+                {/* Entry is now the Fireflies meeting list; the blank form moved to /strategy/brief. */}
+                <Route path="strategy" element={<StrategyMeetingsPage />} />
+                <Route path="strategy/brief" element={<StrategyPage />} />
+                {/* Must precede strategy/:id — otherwise these are matched as a client id. */}
+                <Route path="strategy/meeting/:externalId" element={<StrategyMeetingPage />} />
                 <Route path="strategy/review/:clientId" element={<StrategyReviewPage />} />
                 <Route path="strategy/:id" element={<StrategyClientPage />} />
 

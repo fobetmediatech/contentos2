@@ -159,12 +159,12 @@ export function StrategyReviewPage() {
 
   const useBrief = () => {
     setBrief(buildBriefFromExtractions(rows))
-    void navigate('/strategy')
+    void navigate('/strategy/brief')
   }
 
   return (
     <div className="max-w-4xl mx-auto pb-16">
-      <Link to="/strategy" className="inline-flex items-center gap-1.5 text-muted hover:text-primary text-sm mb-4">
+      <Link to="/strategy/brief" className="inline-flex items-center gap-1.5 text-muted hover:text-primary text-sm mb-4">
         <ArrowLeft size={14} /> Strategy
       </Link>
 
