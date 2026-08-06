@@ -37,6 +37,7 @@ import { requireClerkUser } from './auth.js'
 import { createFirefliesSource, TranscriptSourceError } from './transcriptSource.js'
 import { chunkTranscript } from './chunkTranscript.js'
 import { embedTexts, toVectorLiteral, EMBED_MODEL } from './embed.js'
+import { pickGeminiKey } from './geminiJson.js'
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL ?? process.env.SUPABASE_URL ?? ''
 const SUPABASE_ANON = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY ?? ''
@@ -82,7 +83,10 @@ export async function handleIngest(req: VercelRequest, res: VercelResponse): Pro
   if (!user) return
 
   const firefliesKey = process.env.FIREFLIES_API_KEY
-  const geminiKey = process.env.GEMINI_API_KEY
+  // GEMINI_API_KEY holds a COMMA-SEPARATED POOL, not a single key — pickGeminiKey() splits it and
+  // also folds in GEMINI_KEYS. Reading the env var raw sends the whole joined string as one key and
+  // Gemini answers 401. Every other endpoint here uses pickGeminiKey(); this one did not.
+  const geminiKey = pickGeminiKey()
   if (!SUPABASE_URL || !SUPABASE_ANON || !firefliesKey || !geminiKey) {
     res.status(500).json({ error: 'Server not configured' })
     return
