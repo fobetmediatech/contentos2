@@ -10,8 +10,9 @@
 import { useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { ArrowLeft, Loader2, CheckCircle2, AlertTriangle, Play, Paperclip, X, Sparkles } from 'lucide-react'
-import { listMeetings, ingestMeeting, meetingType, fileToDoc, runExtraction, type ExtractResult } from '../lib/meetingsClient'
+import { ArrowLeft, Loader2, CheckCircle2, AlertTriangle, Play, Paperclip, X, Sparkles, UserPlus, Link2 } from 'lucide-react'
+import { listMeetings, ingestMeeting, meetingType, fileToDoc, runExtraction, createClient, type ExtractResult } from '../lib/meetingsClient'
+import { listClients } from '../lib/reviewRepo'
 import { useIsAdmin } from '../hooks/useIsAdmin'
 
 export function StrategyMeetingPage() {
@@ -21,6 +22,9 @@ export function StrategyMeetingPage() {
   const [result, setResult] = useState<{ joinStatus: string; clientId: string | null; chunks: number } | null>(null)
   const [files, setFiles] = useState<File[]>([])
   const [extract, setExtract] = useState<ExtractResult | null>(null)
+  const [pickedClient, setPickedClient] = useState('')
+  const [newName, setNewName] = useState('')
+  const [newEmail, setNewEmail] = useState('')
 
   const list = useQuery({ queryKey: ['fireflies-meetings'], queryFn: listMeetings, enabled: isAdmin })
   const meeting = list.data?.transcripts.find((m) => m.externalId === externalId)
@@ -28,6 +32,25 @@ export function StrategyMeetingPage() {
   const ingest = useMutation({
     mutationFn: () => ingestMeeting(externalId),
     onSuccess: (r) => setResult({ joinStatus: r.joinStatus, clientId: r.clientId, chunks: r.chunks }),
+  })
+
+  const clients = useQuery({ queryKey: ['cb-clients'], queryFn: listClients, enabled: isAdmin })
+
+  /** Re-ingest with an explicit clientId — the manual-assignment path the join already supports. */
+  const assign = useMutation({
+    mutationFn: async (clientId: string) => ingestMeeting(externalId, clientId),
+    onSuccess: (r) => setResult({ joinStatus: r.joinStatus, clientId: r.clientId, chunks: r.chunks }),
+  })
+
+  const createAndAssign = useMutation({
+    mutationFn: async () => {
+      const c = await createClient(newName.trim(), newEmail.trim() || undefined)
+      return ingestMeeting(externalId, c.clientId)
+    },
+    onSuccess: (r) => {
+      setResult({ joinStatus: r.joinStatus, clientId: r.clientId, chunks: r.chunks })
+      void clients.refetch()
+    },
   })
 
   const analyse = useMutation({
@@ -102,14 +125,81 @@ export function StrategyMeetingPage() {
                   Continue to the brief review →
                 </button>
               ) : (
-                <p className="text-secondary mt-1">
-                  Not matched to a client. Register the client&apos;s email first, then re-ingest.
-                </p>
+                <p className="text-secondary mt-1">Not matched to a client — assign one below.</p>
               )}
             </div>
           </div>
         )}
       </div>
+
+      {/* Assignment — only while there is an ingested transcript with no client. A link-joined call
+          can never auto-match, so without this the flow dead-ends here for every such call. */}
+      {result && !result.clientId && (
+        <div className="mt-3 bg-surface border border-[var(--color-warning)] rounded-lg p-4">
+          <h2 className="text-[11px] font-mono uppercase tracking-wider text-[var(--color-warning)] mb-2">
+            Assign a client
+          </h2>
+
+          {(clients.data?.length ?? 0) > 0 && (
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <select
+                aria-label="Existing client"
+                value={pickedClient}
+                onChange={(e) => setPickedClient(e.target.value)}
+                className="bg-[var(--color-surface-raised)] border border-[rgba(var(--border-rgb),0.08)] rounded-md px-2.5 py-1.5 text-sm text-primary focus:outline-none focus:border-[var(--color-accent)]"
+              >
+                <option value="">Choose an existing client…</option>
+                {clients.data?.map((c) => <option key={c.id} value={c.id}>{c.displayName}</option>)}
+              </select>
+              <button
+                onClick={() => assign.mutate(pickedClient)}
+                disabled={!pickedClient || assign.isPending}
+                className="flex items-center gap-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] disabled:opacity-40 text-white text-sm font-medium rounded-md px-3 py-1.5"
+              >
+                {assign.isPending ? <Loader2 size={14} className="animate-spin" /> : <Link2 size={14} />} Assign
+              </button>
+            </div>
+          )}
+
+          <p className="text-muted text-xs mb-2">
+            {(clients.data?.length ?? 0) > 0 ? 'Or create a new one:' : 'No clients yet — create the first one:'}
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="Client name"
+              aria-label="New client name"
+              className="bg-[var(--color-surface-raised)] border border-[rgba(var(--border-rgb),0.08)] rounded-md px-3 py-1.5 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-[var(--color-accent)]"
+            />
+            <input
+              value={newEmail}
+              onChange={(e) => setNewEmail(e.target.value)}
+              placeholder="their@email.com (optional)"
+              aria-label="New client email"
+              className="bg-[var(--color-surface-raised)] border border-[rgba(var(--border-rgb),0.08)] rounded-md px-3 py-1.5 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-[var(--color-accent)]"
+            />
+            <button
+              onClick={() => createAndAssign.mutate()}
+              disabled={!newName.trim() || createAndAssign.isPending}
+              className="flex items-center gap-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] disabled:opacity-40 text-white text-sm font-medium rounded-md px-3 py-1.5"
+            >
+              {createAndAssign.isPending ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />}
+              Create &amp; assign
+            </button>
+          </div>
+          {/* The email is what lets FUTURE calendar-invited calls match automatically. */}
+          <p className="text-muted text-xs mt-2">
+            Adding the email is optional here, but it is what lets future calls auto-match.
+          </p>
+
+          {(assign.isError || createAndAssign.isError) && (
+            <p className="text-[var(--color-error)] text-sm mt-2 font-mono text-[12px]">
+              {((assign.error ?? createAndAssign.error) as Error).message}
+            </p>
+          )}
+        </div>
+      )}
 
       <div className={`mt-3 bg-surface border border-[rgba(var(--border-rgb),0.08)] rounded-lg p-4 ${result?.clientId ? '' : 'opacity-50 pointer-events-none'}`}>
         <h2 className="text-[11px] font-mono uppercase tracking-wider text-[var(--color-accent)] mb-2">Step 2 · Context documents (optional)</h2>
