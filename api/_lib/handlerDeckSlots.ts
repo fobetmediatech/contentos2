@@ -14,9 +14,9 @@
  * it accompanies.
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { requireClerkUser } from './_lib/auth.js'
-import { geminiGenerateJson, pickGeminiKey, GeminiJsonError } from './_lib/geminiJson.js'
-import { DECK_SLOT_PROMPT, DECK_SLOT_SCHEMA, pickSlots } from './_lib/deckSlots.js'
+import { requireClerkUser } from './auth.js'
+import { geminiGenerateJson, pickGeminiKey, GeminiJsonError } from './geminiJson.js'
+import { DECK_SLOT_PROMPT, DECK_SLOT_SCHEMA, pickSlots } from './deckSlots.js'
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL ?? process.env.SUPABASE_URL ?? ''
 const SUPABASE_ANON = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY ?? ''
@@ -24,12 +24,7 @@ const SUPABASE_ANON = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE
 /** Only the doc fields that map onto a slot — sending the whole deck would be mostly noise. */
 const DOC_KEYS = ['positioning', 'audienceInsight', 'competitiveSummary', 'currentMarketingFlaw'] as const
 
-export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
-  if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method not allowed' })
-    return
-  }
-
+export async function handleDeckSlots(req: VercelRequest, res: VercelResponse): Promise<void> {
   const user = await requireClerkUser(req, res)
   if (!user) return
   if (!SUPABASE_URL || !SUPABASE_ANON) {

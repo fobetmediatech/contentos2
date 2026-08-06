@@ -15,10 +15,10 @@
  * SECURITY INVOKER for the same reason — it must not bypass those policies.
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { requireClerkUser } from './_lib/auth.js'
-import { embedTexts } from './_lib/embed.js'
-import { geminiGenerateJson, pickGeminiKey } from './_lib/geminiJson.js'
-import { planQuery, relevantChunks, MIN_SIMILARITY, type RetrievedChunk } from './_lib/askQuery.js'
+import { requireClerkUser } from './auth.js'
+import { embedTexts } from './embed.js'
+import { geminiGenerateJson, pickGeminiKey } from './geminiJson.js'
+import { planQuery, relevantChunks, MIN_SIMILARITY, type RetrievedChunk } from './askQuery.js'
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL ?? process.env.SUPABASE_URL ?? ''
 const SUPABASE_ANON = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY ?? ''
@@ -74,12 +74,7 @@ RULES:
 const fmtTime = (s: number | null): string =>
   s === null ? '' : `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 
-export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
-  if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method not allowed' })
-    return
-  }
-
+export async function handleAsk(req: VercelRequest, res: VercelResponse): Promise<void> {
   const user = await requireClerkUser(req, res)
   if (!user) return
   if (!SUPABASE_URL || !SUPABASE_ANON) {

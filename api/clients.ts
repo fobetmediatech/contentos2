@@ -14,7 +14,10 @@
  * model is forbidden from authoring them (prompt, verifyExtraction, and a DB constraint all say so).
  * Without a sheet import, the handle slots can only ever be filled by typing.
  *
- * Actions: list | create | add-email | link-strategy
+ * Actions: list | create | add-email | link-strategy | list-meetings | ingest-meeting
+ *
+ * The two meeting actions delegate to _lib/handlerIngest — merged here because Vercel's Hobby plan
+ * caps a deployment at 12 Serverless Functions and every file in api/ counts as one.
  *
  * AUTH: the caller's own token is forwarded to PostgREST, so the admin-only RLS on the cb_ tables
  * evaluates against the real user. No service_role, so no new secret.
@@ -22,6 +25,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { requireClerkUser } from './_lib/auth.js'
 import { mapSheetRow, type SheetRow } from './_lib/sheetRow.js'
+import { handleIngest } from './_lib/handlerIngest.js'
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL ?? process.env.SUPABASE_URL ?? ''
 const SUPABASE_ANON = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY ?? ''
@@ -79,6 +83,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     sheet?: unknown
   } | undefined
   const action = typeof body?.action === 'string' ? body.action : ''
+
+  // ---- Fireflies meetings (delegated; keeps its own admin gate) ---------------------------------
+  if (action === 'list-meetings' || action === 'ingest-meeting') {
+    return handleIngest(req, res)
+  }
 
   // ---- list -----------------------------------------------------------------------------------
   if (action === 'list') {
@@ -232,5 +241,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return
   }
 
-  res.status(400).json({ error: 'unknown action', allowed: ['list', 'create', 'add-email', 'link-strategy'] })
+  res.status(400).json({
+    error: 'unknown action',
+    allowed: ['list', 'create', 'add-email', 'link-strategy', 'list-meetings', 'ingest-meeting'],
+  })
 }

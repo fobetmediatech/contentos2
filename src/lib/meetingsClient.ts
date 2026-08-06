@@ -18,7 +18,7 @@ export interface Meeting {
 
 async function post<T>(body: unknown): Promise<T> {
   const token = await getClerkSessionToken()
-  const res = await fetch('/api/ingest-transcript', {
+  const res = await fetch('/api/clients', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -26,15 +26,15 @@ async function post<T>(body: unknown): Promise<T> {
     },
     body: JSON.stringify(body),
   })
-  if (!res.ok) throw new Error(`ingest-transcript ${res.status}`)
+  if (!res.ok) throw new Error(`clients ${res.status}`)
   return res.json() as Promise<T>
 }
 
-export const listMeetings = (): Promise<{ transcripts: Meeting[] }> => post({ action: 'list' })
+export const listMeetings = (): Promise<{ transcripts: Meeting[] }> => post({ action: 'list-meetings' })
 
 export const ingestMeeting = (externalId: string, clientId?: string) =>
   post<{ transcriptId: string; joinStatus: string; clientId: string | null; chunks: number }>({
-    action: 'ingest',
+    action: 'ingest-meeting',
     externalId,
     ...(clientId ? { clientId } : {}),
   })
@@ -78,13 +78,13 @@ export async function runExtraction(
   documents: Array<{ name: string; mimeType: string; data: string }>,
 ): Promise<ExtractResult> {
   const token = await getClerkSessionToken()
-  const res = await fetch('/api/extract-brief', {
+  const res = await fetch('/api/strategy-ai', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify({ clientId, documents }),
+    body: JSON.stringify({ action: 'extract', clientId, documents }),
   })
   const json = (await res.json()) as ExtractResult & { error?: string; detail?: string }
   if (!res.ok) throw new Error(json.detail ?? json.error ?? `extract-brief ${res.status}`)
@@ -97,14 +97,14 @@ export async function fillDeckSlots(
   doc: unknown,
 ): Promise<{ slots: Record<string, string>; blank: string[]; usedDoc: boolean }> {
   const token = await getClerkSessionToken()
-  const res = await fetch('/api/fill-deck', {
+  const res = await fetch('/api/strategy-ai', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify({ brief, doc }),
+    body: JSON.stringify({ action: 'deck-slots', brief, doc }),
   })
-  if (!res.ok) throw new Error(`fill-deck ${res.status}`)
+  if (!res.ok) throw new Error(`strategy-ai ${res.status}`)
   return res.json() as Promise<{ slots: Record<string, string>; blank: string[]; usedDoc: boolean }>
 }

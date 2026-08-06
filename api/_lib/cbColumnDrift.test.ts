@@ -91,6 +91,12 @@ function referencedColumns(): Reference[] {
   const out: Reference[] = []
   const files = [
     ...readdirSync(join(ROOT, 'api')).filter((f) => f.endsWith('.ts') && !f.includes('.test.')).map((f) => join('api', f)),
+    // The real query bodies live in _lib/handler*.ts — they were moved out of api/ so they stop
+    // counting against Vercel's 12-function cap. Scanning only api/ root would silently stop
+    // guarding them, which is exactly the drift this test exists to catch.
+    ...readdirSync(join(ROOT, 'api/_lib'))
+      .filter((f) => f.startsWith('handler') && f.endsWith('.ts') && !f.includes('.test.'))
+      .map((f) => join('api', '_lib', f)),
     join('src', 'lib', 'reviewRepo.ts'),
   ]
 

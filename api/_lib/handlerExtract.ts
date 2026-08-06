@@ -24,16 +24,16 @@
  * caller gets a clear count instead of a constraint violation.
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { requireClerkUser } from './_lib/auth.js'
-import { geminiGenerateJson, pickGeminiKey, GeminiJsonError } from './_lib/geminiJson.js'
+import { requireClerkUser } from './auth.js'
+import { geminiGenerateJson, pickGeminiKey, GeminiJsonError } from './geminiJson.js'
 import {
   EXTRACTION_SCHEMA,
   EXTRACTION_SYSTEM_PROMPT,
   EXTRACTABLE_FIELDS,
   buildExtractionPayload,
-} from './_lib/extractionPrompt.js'
-import { verifyExtraction } from './_lib/verifyExtraction.js'
-import { decodeDocs, uploadDocs, ContextDocError } from './_lib/contextDocs.js'
+} from './extractionPrompt.js'
+import { verifyExtraction } from './verifyExtraction.js'
+import { decodeDocs, uploadDocs, ContextDocError } from './contextDocs.js'
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL ?? process.env.SUPABASE_URL ?? ''
 const SUPABASE_ANON = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY ?? ''
@@ -77,12 +77,7 @@ interface ModelField {
   citations?: unknown
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
-  if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method not allowed' })
-    return
-  }
-
+export async function handleExtract(req: VercelRequest, res: VercelResponse): Promise<void> {
   const user = await requireClerkUser(req, res)
   if (!user) return
   if (!SUPABASE_URL || !SUPABASE_ANON) {

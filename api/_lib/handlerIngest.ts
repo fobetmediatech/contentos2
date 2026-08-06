@@ -33,10 +33,10 @@
  *   populated. An unmatched transcript in a queue is a visible problem; a mis-matched one is not.
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { requireClerkUser } from './_lib/auth.js'
-import { createFirefliesSource, TranscriptSourceError } from './_lib/transcriptSource.js'
-import { chunkTranscript } from './_lib/chunkTranscript.js'
-import { embedTexts, toVectorLiteral, EMBED_MODEL } from './_lib/embed.js'
+import { requireClerkUser } from './auth.js'
+import { createFirefliesSource, TranscriptSourceError } from './transcriptSource.js'
+import { chunkTranscript } from './chunkTranscript.js'
+import { embedTexts, toVectorLiteral, EMBED_MODEL } from './embed.js'
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL ?? process.env.SUPABASE_URL ?? ''
 const SUPABASE_ANON = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY ?? ''
@@ -77,12 +77,7 @@ async function rest(
   return { ok: res.ok, status: res.status, json }
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
-  if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method not allowed' })
-    return
-  }
-
+export async function handleIngest(req: VercelRequest, res: VercelResponse): Promise<void> {
   const user = await requireClerkUser(req, res)
   if (!user) return
 
@@ -102,12 +97,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   }
 
   const body = req.body as { action?: unknown; externalId?: unknown; clientId?: unknown } | undefined
-  const action = typeof body?.action === 'string' ? body.action : 'ingest'
+  const action = typeof body?.action === 'string' ? body.action : 'ingest-meeting'
   const source = createFirefliesSource(firefliesKey)
 
   try {
     // ---- list: what can be ingested? --------------------------------------------------------
-    if (action === 'list') {
+    if (action === 'list-meetings') {
       const items = await source.list?.(25) ?? []
       res.status(200).json({
         transcripts: items.map((t) => ({
