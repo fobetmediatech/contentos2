@@ -86,7 +86,17 @@ export function StrategyMeetingsPage() {
         <div className="flex items-center gap-2 text-secondary text-sm py-12 justify-center"><Loader2 size={15} className="animate-spin" /> Loading meetings…</div>
       ) : q.isError ? (
         <div className="bg-surface border border-[var(--color-error)] rounded-lg p-4 text-sm text-secondary">
-          Could not reach Fireflies. <Link to="/strategy/brief" className="text-[var(--color-accent)] hover:underline">Start from a blank brief</Link> instead.
+          <p className="text-primary font-medium">Could not load meetings</p>
+          <p className="mt-1 font-mono text-[12px] text-[var(--color-error)]">{(q.error as Error).message}</p>
+          {/* 'Server not configured' means an env var is missing on the deployment, not an outage. */}
+          {/Server not configured/i.test((q.error as Error).message) && (
+            <p className="mt-1 text-muted text-xs">
+              A required key is missing on this deployment — most likely FIREFLIES_API_KEY.
+            </p>
+          )}
+          <p className="mt-2">
+            <Link to="/strategy/brief" className="text-[var(--color-accent)] hover:underline">Start from a blank brief</Link> instead.
+          </p>
         </div>
       ) : meetings.length === 0 ? (
         <div className="bg-surface border border-[rgba(var(--border-rgb),0.08)] rounded-lg p-6 text-center">

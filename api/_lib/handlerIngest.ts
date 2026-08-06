@@ -180,7 +180,10 @@ export async function handleIngest(req: VercelRequest, res: VercelResponse): Pro
       }],
     })
     if (!upsert.ok) {
-      res.status(502).json({ error: 'transcript_upsert_failed', detail: upsert.status })
+      res.status(502).json({
+        error: 'transcript_upsert_failed',
+        detail: `HTTP ${upsert.status} ${JSON.stringify(upsert.json).slice(0, 300)}`,
+      })
       return
     }
     const transcriptId = (upsert.json as Array<{ id: string }>)?.[0]?.id
@@ -215,7 +218,10 @@ export async function handleIngest(req: VercelRequest, res: VercelResponse): Pro
         })),
       })
       if (!insert.ok) {
-        res.status(502).json({ error: 'chunk_insert_failed', detail: insert.status })
+        res.status(502).json({
+        error: 'chunk_insert_failed',
+        detail: `HTTP ${insert.status} ${JSON.stringify(insert.json).slice(0, 300)}`,
+      })
         return
       }
       embedded = chunks.length
@@ -240,7 +246,13 @@ export async function handleIngest(req: VercelRequest, res: VercelResponse): Pro
       res.status(502).json({ error: 'source_failed', detail: err.message })
       return
     }
-    res.status(500).json({ error: 'ingest_failed' })
+    // Say WHAT failed. A bare 'ingest_failed' sent us guessing between the embedding call, the
+    // vector insert and the DB write — the error already knew which. Our error messages are
+    // written to never echo a key or an upstream response body, so this is safe to surface.
+    res.status(500).json({
+      error: 'ingest_failed',
+      detail: err instanceof Error ? `${err.name}: ${err.message}` : 'unknown error',
+    })
   }
 }
 
