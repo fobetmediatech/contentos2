@@ -47,3 +47,46 @@ export function meetingType(title: string | null): 'onboarding' | 'strategy' | '
   if (t.includes('review')) return 'review'
   return 'sales'
 }
+
+// ---------------------------------------------------------------------------------------------
+// Context documents + extraction
+// ---------------------------------------------------------------------------------------------
+
+/** ponytail: base64 in the JSON body. Total cap is 4 MB (Vercel's request limit), enforced server-side. */
+export async function fileToDoc(file: File): Promise<{ name: string; mimeType: string; data: string }> {
+  const buf = await file.arrayBuffer()
+  let binary = ''
+  const bytes = new Uint8Array(buf)
+  // Chunked so a large file doesn't blow the argument limit of String.fromCharCode.
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+  }
+  return { name: file.name, mimeType: file.type, data: btoa(binary) }
+}
+
+export interface ExtractResult {
+  fieldsWritten: number
+  filled: number
+  empty: number
+  inferred: number
+  droppedCitations: number
+  documentsRead: number
+}
+
+export async function runExtraction(
+  clientId: string,
+  documents: Array<{ name: string; mimeType: string; data: string }>,
+): Promise<ExtractResult> {
+  const token = await getClerkSessionToken()
+  const res = await fetch('/api/extract-brief', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ clientId, documents }),
+  })
+  const json = (await res.json()) as ExtractResult & { error?: string; detail?: string }
+  if (!res.ok) throw new Error(json.detail ?? json.error ?? `extract-brief ${res.status}`)
+  return json
+}

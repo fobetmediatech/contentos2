@@ -33,6 +33,7 @@ import {
   buildExtractionPayload,
 } from './_lib/extractionPrompt.js'
 import { verifyExtraction } from './_lib/verifyExtraction.js'
+import { decodeDocs, uploadDocs, ContextDocError } from './_lib/contextDocs.js'
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL ?? process.env.SUPABASE_URL ?? ''
 const SUPABASE_ANON = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY ?? ''
@@ -98,7 +99,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return
   }
 
-  const body = req.body as { clientId?: unknown } | undefined
+  const body = req.body as { clientId?: unknown; documents?: unknown } | undefined
   const clientId = typeof body?.clientId === 'string' ? body.clientId.trim() : ''
   if (!clientId) {
     res.status(400).json({ error: 'clientId required' })
@@ -143,12 +144,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     chunks.map((c) => ({ id: c.id, text: c.text, speaker: c.speaker, startSec: c.start_sec })),
   )
 
+  // Context documents go straight to Gemini — never parsed here. They are ADDITIONAL evidence,
+  // not a replacement for the call: a value sourced from a document still needs a citation, and
+  // the prompt's cardinal rule (say null if it was not said) is unchanged.
+  const geminiKey = pickGeminiKey()
+  let docs: { count: number; parts: unknown[] }
+  try {
+    const decoded = decodeDocs(body?.documents)
+    docs = { count: decoded.length, parts: decoded.length > 0 ? await uploadDocs(decoded, geminiKey) : [] }
+  } catch (err) {
+    const status = err instanceof ContextDocError ? err.status : 400
+    res.status(status).json({ error: 'document_failed', detail: err instanceof Error ? err.message : 'bad document' })
+    return
+  }
+
   let parsed: { fields?: ModelField[] }
   try {
     parsed = (await geminiGenerateJson(
       `${EXTRACTION_SYSTEM_PROMPT}\n\n${payload}`,
       EXTRACTION_SCHEMA,
-      pickGeminiKey(),
+      geminiKey,
+      docs.parts,
     )) as { fields?: ModelField[] }
   } catch (err) {
     const status = err instanceof GeminiJsonError ? 502 : 500
@@ -193,6 +209,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     ok: true,
     clientId,
     chunksRead: chunks.length,
+    documentsRead: docs.count,
     fieldsWritten: rows.length,
     filled: rows.filter((r) => r.value !== null).length,
     empty: rows.filter((r) => r.value === null).length,

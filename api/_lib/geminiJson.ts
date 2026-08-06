@@ -28,12 +28,22 @@ export function pickGeminiKey(): string {
 }
 
 /** Generate a JSON object from a text prompt + response schema. Throws GeminiJsonError on failure. */
-export async function geminiGenerateJson(prompt: string, schema: unknown, apiKey: string): Promise<unknown> {
+/**
+ * `fileParts` are Files API references (documents, images) placed BEFORE the prompt — Gemini
+ * attends better to instructions that follow the material they refer to. Optional, so every
+ * existing text-only caller is unaffected.
+ */
+export async function geminiGenerateJson(
+  prompt: string,
+  schema: unknown,
+  apiKey: string,
+  fileParts: unknown[] = [],
+): Promise<unknown> {
   const res = await fetch(`${GEMINI_BASE}/v1beta/models/${GEMINI_MODEL}:generateContent`, {
     method: 'POST',
     headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
+      contents: [{ parts: [...fileParts, { text: prompt }] }],
       generationConfig: { responseMimeType: 'application/json', responseSchema: schema },
     }),
   })
