@@ -26,7 +26,12 @@ async function post<T>(body: unknown): Promise<T> {
     },
     body: JSON.stringify(body),
   })
-  if (!res.ok) throw new Error(`clients ${res.status}`)
+  if (!res.ok) {
+    // Surface what the server actually said. Collapsing every failure into one message hid a
+    // missing FIREFLIES_API_KEY behind "could not reach Fireflies" — a different problem entirely.
+    const detail = await res.json().catch(() => null) as { error?: string; detail?: string } | null
+    throw new Error(detail?.detail ?? detail?.error ?? `HTTP ${res.status}`)
+  }
   return res.json() as Promise<T>
 }
 
@@ -105,6 +110,9 @@ export async function fillDeckSlots(
     },
     body: JSON.stringify({ action: 'deck-slots', brief, doc }),
   })
-  if (!res.ok) throw new Error(`strategy-ai ${res.status}`)
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null) as { error?: string } | null
+    throw new Error(detail?.error ?? `HTTP ${res.status}`)
+  }
   return res.json() as Promise<{ slots: Record<string, string>; blank: string[]; usedDoc: boolean }>
 }
