@@ -90,3 +90,21 @@ export async function runExtraction(
   if (!res.ok) throw new Error(json.detail ?? json.error ?? `extract-brief ${res.status}`)
   return json
 }
+
+/** Ask the server to write the deck's AI slots. The brief is already client-side, so nothing is re-fetched. */
+export async function fillDeckSlots(
+  brief: unknown,
+  doc: unknown,
+): Promise<{ slots: Record<string, string>; blank: string[]; usedDoc: boolean }> {
+  const token = await getClerkSessionToken()
+  const res = await fetch('/api/fill-deck', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ brief, doc }),
+  })
+  if (!res.ok) throw new Error(`fill-deck ${res.status}`)
+  return res.json() as Promise<{ slots: Record<string, string>; blank: string[]; usedDoc: boolean }>
+}
