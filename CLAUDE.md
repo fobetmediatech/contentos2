@@ -76,13 +76,20 @@ NEVER use `mcp__claude-in-chrome__*` tools.
 5. **Repurpose Reel** (`repurpose_reel`) — viral reel → rewritten in a client's voice
 6. **Transcript** (`get_reel_transcript`) — one reel URL → transcript only (the fast path)
 
-**Dedicated-page features** (NOT chat-routed): Content Strategizing (`/strategy`), Script Studio
-(`/script-studio`), Content Calendar (`/calendar`), Payments (`/payments`, finance-only), Gallery
-(`/gallery`), Tracking Dashboard (`/tracking`).
+**Transcript intelligence** (NOT chat-routed) — Fireflies call → cited brief → deck:
+`/strategy` (meeting list) → `/strategy/meeting/:externalId` (ingest + context docs + analysis) →
+`/strategy/review/:clientId` (cited brief review) → `/strategy/deck/:clientId` (the FOBET deck).
+The blank onboarding form now lives at `/strategy/brief`. Backed by six `cb_` tables with
+**admin-only RLS** — transcripts carry client margins and ticket sizes, unlike every other table
+here which is open to any signed-in member.
+
+**Other dedicated-page features** (NOT chat-routed): Script Studio (`/script-studio`), Content
+Calendar (`/calendar`), Payments (`/payments`, finance-only), Gallery (`/gallery`), Tracking
+Dashboard (`/tracking`).
 
 Entry point: `ChatPage` — conversational interface that routes to the chat pipelines above.
 
-**Backend:** Nine Vercel serverless functions under `api/` (see the tree below). All are gated by
+**Backend:** Eleven Vercel serverless functions under `api/` (see the tree below). All are gated by
 Clerk JWT via `api/_lib/auth.ts` — except `warm-voice-profile.ts`, which is secret-gated for a
 scheduled GitHub Action instead. Supabase (Postgres + RLS) backs conversation sync (`user_state`),
 the shared team corpus (`corpus_creators`, `corpus_sightings`, `corpus_content`), and the feature
@@ -95,7 +102,7 @@ tables for strategies, calendar, payments, tracking, voice profiles and the crea
 ```bash
 bun run dev          # Start Vite dev server
 bun run build        # Typecheck (app + api) + Vite build
-bun run test         # Run 1000+ unit tests (vitest) — exits 0 on a fresh clone, no keys needed
+bun run test         # Run 1100+ unit tests (vitest) — exits 0 on a fresh clone, no keys needed
 bun run test:watch   # Watch mode
 bun run lint         # ESLint
 bun run typecheck:api        # Typecheck api/ directory only
@@ -108,10 +115,16 @@ bun run test:discovery       # Integration test for discovery pipeline (needs re
 
 ```
 src/
-  pages/                      # 12 pages — nav order is driven by NAV_SECTIONS in AppLayout.tsx
+  pages/                      # 16 pages — nav order is driven by NAV_SECTIONS in AppLayout.tsx
     ChatPage.tsx              # Primary entry point — single-surface conversational UX (results render inline)
-    StrategyPage.tsx          # "Content Strategizing" — onboarding form → client-ready Content Strategy Document (print → PDF)
+    StrategyPage.tsx          # The onboarding FORM, now at /strategy/brief (not /strategy). Also the
+                              #   handoff target after a brief review — do NOT move it back without
+                              #   updating StrategyReviewPage's navigate(), or the brief is dropped.
     StrategyClientPage.tsx    # /strategy/:id — a saved client read-only + Attachments (upload/download/delete, informational only)
+    StrategyMeetingsPage.tsx  # /strategy — THE ENTRY POINT. Fireflies call list, filter + sort
+    StrategyMeetingPage.tsx   # /strategy/meeting/:externalId — ingest → context docs → run analysis
+    StrategyReviewPage.tsx    # /strategy/review/:clientId — pre-filled brief with visible provenance + citations
+    StrategyDeckPage.tsx      # /strategy/deck/:clientId — the FOBET deck (iframe; `sample` previews free)
     ScriptStudioPage.tsx      # Reference reel/Short → new-topic script; 3 modes (link, library pick, choose a creator)
     CalendarPage.tsx          # Content calendar (plan-only) — month grid, drag to reschedule, per-tracked-account or all
     PaymentsPage.tsx          # Manual payment tracking per client — FINANCE ROLE ONLY (useIsFinance + Supabase RLS)
@@ -180,7 +193,11 @@ src/
     # — misc —
     geminiKeyRotator.ts       # Gemini key pool rotation (mirrors keyRotator for Apify)
     deckThemes.ts             # Deck palette presets + resolveDeckColors
-    sampleStrategy.ts         # SAMPLE_RESULT fixture — preview the deck with no credits
+    sampleStrategy.ts         # SAMPLE_RESULT + SAMPLE_EXTRACTIONS — preview the review UI + deck free
+    deckTemplate.ts           # FOBET deck slot filling over src/deck/fobetDeck.html (imported ?raw)
+    reviewGate.ts             # Pure — extractions → StrategyBrief + the export gate
+    reviewRepo.ts             # cb_clients / cb_extractions access
+    meetingsClient.ts         # Browser → /api/clients + /api/strategy-ai
     googleAuth.ts / googleExport.ts  # One-click export to Google Docs/Sheets
     competitorCache.ts, deriveNiche.ts, actors.ts, abortControl.ts, runControllers.ts,
     attachment.ts, fxRates.ts, knowledgeSeed.ts, webFallback.ts, toast.ts, clerkTheme.ts, konami.ts
@@ -208,7 +225,11 @@ src/
 ```
 
 ```
-api/                          # 9 serverless functions. Clerk-gated unless noted.
+api/                          # 11 serverless functions. Clerk-gated unless noted.
+                              # HARD CAP: Vercel's Hobby plan allows 12 Serverless Functions per
+                              # deployment, and EVERY file in api/ is one. Files in api/_lib/ are
+                              # not. Exceeding it fails at "Deploying outputs..." with a clean
+                              # build — add actions to an existing endpoint, don't add files.
   gemini.ts                   # Clerk JWT gate → Gemini REST proxy (model + endpoint allowlist)
   apify.ts                    # Clerk JWT gate → Apify REST proxy (actor-ID allowlist)
   config.ts                   # GET /api/config — { geminiReady, apifyReady } flags (never key material)
@@ -217,9 +238,14 @@ api/                          # 9 serverless functions. Clerk-gated unless noted
   get-transcript.ts           # Transcript-only extraction for ONE reel (SSRF-allowlisted video host)
   image-proxy.ts              # Proxies IG CDN images (their CDN blocks cross-origin <img>)
   team-access.ts              # ADMIN-ONLY: grant the finance role by email (needs the Clerk secret key)
+  clients.ts                  # ADMIN-ONLY. actions: list | create | add-email | link-strategy
+                              #   | list-meetings | ingest-meeting (delegates to _lib/handlerIngest)
+  strategy-ai.ts              # ADMIN-ONLY dispatcher. actions: extract | deck-slots | ask
+                              #   (delegates to _lib/handlerExtract / handlerDeckSlots / handlerAsk)
   warm-voice-profile.ts       # SECRET-gated (not Clerk) — background warmer run by a GitHub Action cron
-  _lib/                       # 10 shared modules. All are SERVER-SIDE, ESM, self-contained —
-                              # they must NOT import from ../src.
+  _lib/                       # 23 shared modules. All are SERVER-SIDE, ESM, self-contained —
+                              # they must NOT import from ../src. Handler bodies live here so they
+                              # do not count against the 12-function cap.
     auth.ts                   # requireClerkUser() — shared Clerk JWT verification
     geminiFiles.ts            # Gemini Files API helper (upload + generate)
     geminiText.ts             # Server-side text-only generateContent
@@ -230,6 +256,20 @@ api/                          # 9 serverless functions. Clerk-gated unless noted
     transcriptPrompt.ts       # Transcript-only prompt (TRANSCRIPT_PROMPT_VERSION lives here)
     voiceProfilePrompt.ts     # Voice Profile prompt + schema + type
     warmSelector.ts           # Pure selector — which directory handles to warm next
+    # — transcript intelligence —
+    handlerIngest.ts          # Fireflies list + ingest (chunk, embed, exact-email join)
+    handlerExtract.ts         # Brief extraction w/ citation verification + context documents
+    handlerDeckSlots.ts       # Writes the deck's 10 AI slots
+    handlerAsk.ts             # QnA — metadata + semantic retrieval, grounded
+    transcriptSource.ts       # TranscriptSource interface + FirefliesSource (minutes→sec at the boundary)
+    chunkTranscript.ts        # Pure speaker-turn chunking w/ overlap (start_sec survives)
+    embed.ts                  # gemini-embedding-2 @ 768; throws on dim mismatch, refuses partial batches
+    verifyExtraction.ts       # Pure — every citation checked VERBATIM against its chunk
+    extractionPrompt.ts       # The 9 extractable fields (handles excluded by design)
+    deckSlots.ts              # The 10 AI deck slots (keys mirrored from src, drift-tested)
+    contextDocs.ts            # Validate/decode uploads — files go to Gemini, never parsed here
+    sheetRow.ts               # Sales-sheet row → sheet-provenance extractions
+    askQuery.ts               # Pure query planner: metadata vs semantic retrieval
   tsconfig.json               # Separate tsconfig for Vercel functions (nodenext, strict: true)
 ```
 
