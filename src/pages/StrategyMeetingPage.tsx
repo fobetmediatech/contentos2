@@ -82,7 +82,11 @@ export function StrategyMeetingPage() {
           {result ? 'Ingested' : 'Ingest transcript'}
         </button>
 
-        {ingest.isError && <p className="text-[var(--color-error)] text-sm mt-2">Ingest failed. Check that Fireflies is reachable.</p>}
+        {ingest.isError && (
+          <p className="text-[var(--color-error)] text-sm mt-2 font-mono text-[12px] break-words">
+            {(ingest.error as Error).message}
+          </p>
+        )}
 
         {result && (
           <div className="mt-3 flex items-start gap-2 text-sm">
