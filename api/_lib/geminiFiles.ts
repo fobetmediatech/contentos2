@@ -57,13 +57,24 @@ export interface AnalyzeVideoResult {
  * Throws GeminiFilesError (with an HTTP-ish status) on any step failure so the
  * handler can map it to a clean response. Never leaks the API key in messages.
  */
-export async function analyzeVideoWithGemini(args: AnalyzeVideoArgs): Promise<AnalyzeVideoResult> {
-  const { bytes, mimeType, apiKey, prompt, schema } = args
-  const model = args.model ?? DEFAULT_MODEL
-  const activeTimeoutMs = args.activeTimeoutMs ?? 120_000
+/**
+ * Upload bytes to the Files API and wait until ACTIVE. Shared by the video and document paths.
+ *
+ * ponytail: if the poll fails the uploaded file is not deleted here — Gemini expires Files API
+ * uploads after 48h, so the leak is bounded and self-healing. Add explicit cleanup only if the
+ * quota ever actually bites.
+ */
+export async function uploadFileToGemini(args: {
+  bytes: ArrayBuffer
+  mimeType: string
+  apiKey: string
+  displayName?: string
+  activeTimeoutMs?: number
+}): Promise<FileResource> {
+  const { bytes, mimeType, apiKey } = args
   const numBytes = bytes.byteLength
+  const activeTimeoutMs = args.activeTimeoutMs ?? 120_000
 
-  // 1) start resumable upload session
   const start = await fetch(`${GEMINI_BASE}/upload/v1beta/files`, {
     method: 'POST',
     headers: {
@@ -74,13 +85,12 @@ export async function analyzeVideoWithGemini(args: AnalyzeVideoArgs): Promise<An
       'X-Goog-Upload-Header-Content-Type': mimeType,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ file: { display_name: 'reel' } }),
+    body: JSON.stringify({ file: { display_name: args.displayName ?? 'upload' } }),
   })
   if (!start.ok) throw new GeminiFilesError(`Files API start failed (${start.status})`, start.status)
   const uploadUrl = start.headers.get('x-goog-upload-url')
   if (!uploadUrl) throw new GeminiFilesError('Files API did not return an upload URL', 502)
 
-  // 2) upload bytes + finalize
   const up = await fetch(uploadUrl, {
     method: 'POST',
     headers: {
@@ -95,18 +105,26 @@ export async function analyzeVideoWithGemini(args: AnalyzeVideoArgs): Promise<An
   if (!up.ok) throw new GeminiFilesError(`Files API upload failed (${up.status})`, up.status)
   let file = ((await up.json()) as { file: FileResource }).file
 
-  try {
-    // 3) poll until ACTIVE
-    const deadline = Date.now() + activeTimeoutMs
-    while (file.state === 'PROCESSING') {
-      if (Date.now() > deadline) throw new GeminiFilesError('Uploaded file never became ACTIVE (timeout)', 504)
-      await sleep(2000)
-      const poll = await fetch(`${GEMINI_BASE}/v1beta/${file.name}`, { headers: { 'x-goog-api-key': apiKey } })
-      if (!poll.ok) throw new GeminiFilesError(`Files API poll failed (${poll.status})`, poll.status)
-      file = (await poll.json()) as FileResource
-    }
-    if (file.state !== 'ACTIVE') throw new GeminiFilesError(`Uploaded file is ${file.state}, not ACTIVE`, 502)
+  const deadline = Date.now() + activeTimeoutMs
+  while (file.state === 'PROCESSING') {
+    if (Date.now() > deadline) throw new GeminiFilesError('Uploaded file never became ACTIVE (timeout)', 504)
+    await sleep(2000)
+    const poll = await fetch(`${GEMINI_BASE}/v1beta/${file.name}`, { headers: { 'x-goog-api-key': apiKey } })
+    if (!poll.ok) throw new GeminiFilesError(`Files API poll failed (${poll.status})`, poll.status)
+    file = (await poll.json()) as FileResource
+  }
+  if (file.state !== 'ACTIVE') throw new GeminiFilesError(`Uploaded file is ${file.state}, not ACTIVE`, 502)
+  return file
+}
 
+export async function analyzeVideoWithGemini(args: AnalyzeVideoArgs): Promise<AnalyzeVideoResult> {
+  const { bytes, mimeType, apiKey, prompt, schema } = args
+  const model = args.model ?? DEFAULT_MODEL
+  const activeTimeoutMs = args.activeTimeoutMs ?? 120_000
+
+  const file = await uploadFileToGemini({ bytes, mimeType, apiKey, displayName: 'reel', activeTimeoutMs })
+
+  try {
     // 4) generateContent with the file + responseSchema
     const gen = await fetch(`${GEMINI_BASE}/v1beta/models/${model}:generateContent`, {
       method: 'POST',
