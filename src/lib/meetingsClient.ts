@@ -116,3 +116,11 @@ export async function fillDeckSlots(
   }
   return res.json() as Promise<{ slots: Record<string, string>; blank: string[]; usedDoc: boolean }>
 }
+
+/** Create a client. The email is optional but is what lets FUTURE calls auto-match. */
+export const createClient = (displayName: string, email?: string) =>
+  post<{ clientId: string; displayName: string }>({
+    action: 'create',
+    displayName,
+    ...(email ? { sheet: { emails: [email] } } : {}),
+  })
