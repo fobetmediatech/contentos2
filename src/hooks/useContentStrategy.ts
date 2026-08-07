@@ -26,8 +26,16 @@ import type { CreatorHookSummary } from '../ai/prompts/creatorHookSummary'
 import type { StrategyBrief, AnalyzedAccount } from '../domain/strategy'
 
 const HOOKMAP_COMPETITORS = 3 // top-N competitors to deep-analyse (plus ALL aspirational)
-const creatorLimit = pLimit(2) // creators analysed in parallel
-const reelLimit = pLimit(3)    // reels per creator
+// Concurrency is tuned for WALL CLOCK, not cost. Measured from a real run: 76 reel analyses,
+// ~61 min of cumulative model time, slowest single call 180s. At the old 2x3=6 concurrent that
+// floor was ~10 min and the observed run took 25-40. Fanning out to 8x10=80 makes the floor the
+// slowest SINGLE call (~3 min) plus the per-creator scrape/resolve that precedes it.
+//
+// ponytail: the ceiling now is Gemini rate limiting, not our fan-out. The key pool
+// (pickGeminiKey) spreads load across keys; if 429s appear, lower reelLimit first — it multiplies
+// against every creator.
+const creatorLimit = pLimit(8) // every target creator at once (max 7: 4 aspirational + 3 competitors)
+const reelLimit = pLimit(10)   // all 10 reels of a creator at once
 
 const clean = (h: string) => h.trim().replace(/^@/, '').toLowerCase()
 

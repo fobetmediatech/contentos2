@@ -24,7 +24,9 @@ import {
 } from './_lib/singleReelPrompt.js'
 import { requireClerkUser } from './_lib/auth.js'
 
-export const config = { maxDuration: 180 }
+// 180 was the ceiling a real run hit: slowest SUCCESSFUL call was 180.3s and one reel 504'd.
+// 300 is the current Vercel default cap and gives ~65% headroom over the observed worst case.
+export const config = { maxDuration: 300 }
 
 const ALLOWED_HOSTS = new Set(['api.apify.com'])
 const MAX_VIDEO_BYTES = 50 * 1024 * 1024
