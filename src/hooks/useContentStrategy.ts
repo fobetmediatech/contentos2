@@ -13,7 +13,7 @@ import { useRef } from 'react'
 import pLimit from 'p-limit'
 import { useKeysStore } from '../store/keysStore'
 import { useStrategyStore } from '../store/strategyStore'
-import { discoverCompetitors, scrapeHandles } from '../lib/apifyClient'
+import { scrapeHandles } from '../lib/apifyClient'
 import { scrapeTopReels } from '../lib/reelScraper'
 import { scrapeReelVideos } from '../lib/reelVideoClient'
 import { analyzeReelHookmap, singleReelFnAvailable } from '../lib/reelHookmap'
@@ -25,7 +25,6 @@ import type { SingleReelResult } from '../domain/reel'
 import type { CreatorHookSummary } from '../ai/prompts/creatorHookSummary'
 import type { StrategyBrief, AnalyzedAccount } from '../domain/strategy'
 
-const HOOKMAP_COMPETITORS = 3 // top-N competitors to deep-analyse (plus ALL aspirational)
 // Concurrency is tuned for WALL CLOCK, not cost. Measured from a real run: 76 reel analyses,
 // ~61 min of cumulative model time, slowest single call 180s. At the old 2x3=6 concurrent that
 // floor was ~10 min and the observed run took 25-40. Fanning out to 8x10=80 makes the floor the
@@ -105,8 +104,14 @@ export function useContentStrategy() {
 
     start()
     try {
-      // 1. Competitor landscape: scrape the seeds + discover similar accounts.
-      setStep('Scraping competitors & discovering similar accounts…')
+      // 1. Scrape exactly the handles on the form. NO DISCOVERY.
+      //
+      // This used to call discoverCompetitors(), which expanded the seeds via hashtags across 3
+      // rounds, ranked candidates with Gemini, and added 12 'discovered' accounts. That is gone by
+      // request: the team picks the competitors deliberately, so inventing more diluted the deck
+      // with accounts nobody chose — and every discovered account fed the deep reel analysis,
+      // which is where the wall clock and the credits go.
+      setStep('Scraping the accounts on the form…')
       const accounts: AnalyzedAccount[] = []
       const seen = new Set<string>()
       const push = (p: NormalizedProfile, source: AnalyzedAccount['source']) => {
@@ -116,32 +121,22 @@ export function useContentStrategy() {
         accounts.push(toAccount(p, source))
       }
 
-      if (competitors.length > 0) {
-        const { inputProfiles, candidateProfiles } = await discoverCompetitors(
-          competitors, apifyKeys, signal, 'standard', { niche: brief.primaryNiche, geminiKeys },
-        )
-        if (signal.aborted) return
-        inputProfiles.forEach((p) => push(p, 'competitor'))
-        candidateProfiles.slice(0, 12).forEach((p) => push(p, 'discovered'))
-      }
+      // Both groups scrape in parallel — they are independent and this is the only network wait
+      // before the reel analysis begins.
+      const [comp, asp] = await Promise.all([
+        competitors.length > 0 ? scrapeHandles(competitors, apifyKeys, signal).catch(() => []) : [],
+        aspirational.length > 0 ? scrapeHandles(aspirational, apifyKeys, signal).catch(() => []) : [],
+      ])
+      if (signal.aborted) return
+      comp.forEach((p) => push(p, 'competitor'))
+      asp.forEach((p) => push(p, 'aspirational'))
 
-      // 2. Aspirational accounts: scrape for metrics.
-      if (aspirational.length > 0) {
-        setStep('Analysing aspirational accounts…')
-        const asp = await scrapeHandles(aspirational, apifyKeys, signal).catch(() => [])
-        if (signal.aborted) return
-        asp.forEach((p) => push(p, 'aspirational'))
-      }
-
-      // 3. HookMap: deep-analyse the top competitors + all aspirational accounts.
+      // 2. HookMap: deep-analyse EVERY handle on the form — no ranking, no top-N cut.
+      // The team chose these accounts; silently analysing only the best-performing 3 meant a
+      // deliberately-picked competitor could be dropped without anyone being told.
       let hookSummaries: CreatorHookSummary[] = []
       if (await singleReelFnAvailable(signal)) {
-        const topCompetitors = accounts
-          .filter((a) => a.source !== 'aspirational')
-          .sort((a, b) => (b.engagementRate ?? 0) - (a.engagementRate ?? 0))
-          .slice(0, HOOKMAP_COMPETITORS)
-          .map((a) => a.username)
-        const targets = [...new Set([...aspirational, ...topCompetitors])]
+        const targets = [...new Set([...competitors, ...aspirational])]
         setStep(`Deep-analysing reels for ${targets.length} accounts (this takes a few minutes)…`)
         const summaries = await Promise.all(
           targets.map((h) => creatorLimit(() => analyzeCreatorHooks(h, apifyKeys, geminiKeys, signal))),
@@ -153,6 +148,7 @@ export function useContentStrategy() {
       }
 
       // 4. Synthesize the strategy document.
+      // 3. Write the document.
       setStep('Writing the content strategy…')
       const doc = await analyzeContentStrategy(geminiKeys, brief, accounts, hookSummaries, signal)
       if (signal.aborted) return
