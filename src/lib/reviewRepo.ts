@@ -106,3 +106,32 @@ export async function transcriptForChunk(
   const t = (data as Record<string, unknown>).cb_transcripts as { title?: string } | null
   return { title: t?.title ?? null, speaker: ((data as Record<string, unknown>).speaker as string) ?? null }
 }
+
+/**
+ * Create a row for a field extraction never produced — a handle, or any value a human types into
+ * an empty field. Without this, typing into such a field silently does nothing: there is no row to
+ * update, so the value never leaves component state and the export gate never sees it.
+ *
+ * provenance 'sheet' because it is the only value legal for handle fields (the DB forbids
+ * model-authored handles) and, unlike 'extracted', it carries no citation requirement — correct
+ * here, since a human typing a value has no transcript quote behind it.
+ */
+export async function createRow(
+  clientId: string,
+  fieldName: string,
+  value: string,
+): Promise<void> {
+  const { error } = await supabase.from('cb_extractions').upsert(
+    {
+      client_id: clientId,
+      field_name: fieldName,
+      value: value.trim() || null,
+      citations: [],
+      provenance: 'sheet',
+      review_status: 'edited',
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'client_id,field_name' },
+  )
+  if (error) throw error
+}

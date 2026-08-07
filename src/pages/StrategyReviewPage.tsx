@@ -16,7 +16,7 @@ import { useMemo, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Loader2, Quote, Sparkles, CheckCheck, AlertTriangle, Undo2 } from 'lucide-react'
-import { listExtractions, listClients, saveRow, approveRows } from '../lib/reviewRepo'
+import { listExtractions, listClients, saveRow, approveRows, createRow } from '../lib/reviewRepo'
 import {
   buildBriefFromExtractions, evaluateGate, approvableRows,
   COMPETITOR_SLOTS, ASPIRATIONAL_SLOTS,
@@ -106,6 +106,21 @@ export function StrategyReviewPage() {
           : r,
       ),
     )
+
+  /** Typing into a field extraction never produced — creates the row instead of dropping the value. */
+  const createValue = useMutation({
+    mutationFn: async ({ fieldName, value }: { fieldName: string; value: string }) => {
+      if (isSample) {
+        setSampleRows((rs) => [...rs, {
+          id: `new-${fieldName}`, fieldName, value: value.trim() || null, citations: [],
+          provenance: 'sheet', confidence: null, reviewStatus: 'edited', originalValue: null,
+        }])
+        return
+      }
+      await createRow(clientId, fieldName, value)
+    },
+    onSuccess: () => { if (!isSample) invalidate() },
+  })
 
   const save = useMutation({
     mutationFn: async ({ row, patch }: { row: ExtractionRow; patch: { value?: string | null; reviewStatus?: ExtractionRow['reviewStatus'] } }) => {
@@ -274,8 +289,12 @@ export function StrategyReviewPage() {
                         onChange={(e) => setDrafts((d) => ({ ...d, [f.name]: e.target.value }))}
                         onBlur={() => {
                           const draft = drafts[f.name]
-                          if (row && draft !== undefined && draft !== (row.value ?? '')) {
-                            save.mutate({ row, patch: { value: draft } })
+                          if (draft === undefined) return
+                          if (row) {
+                            if (draft !== (row.value ?? '')) save.mutate({ row, patch: { value: draft } })
+                          } else if (draft.trim()) {
+                            // No extraction row for this field — create one, or the value is lost.
+                            createValue.mutate({ fieldName: f.name, value: draft })
                           }
                         }}
                       />
