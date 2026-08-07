@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { SLOTS, AI_SLOTS, fillDeck, slotsFromBrief, rawTemplate, slotPattern, type SlotKey } from './deckTemplate'
+import { SLOTS, AI_SLOTS, fillDeck, slotsFromBrief, rawTemplate, slotPattern, fillCompetitorTable, type SlotKey } from './deckTemplate'
 import { SAMPLE_RESULT } from './sampleStrategy'
 
 const NOW = new Date('2026-08-04T12:00:00Z')
@@ -66,5 +66,57 @@ describe('slotsFromBrief', () => {
   it('leaves every AI slot to the model', () => {
     const s = slotsFromBrief(SAMPLE_RESULT.brief, NOW)
     for (const key of AI_SLOTS) expect(s[key]).toBeUndefined()
+  })
+})
+
+describe('fillCompetitorTable', () => {
+  const rows = [
+    { username: 'thealphatraderofficial', followers: 128000, medianViews: 42000, engagementRate: 4.2, formats: ['Bold market claim', 'Direct question'] },
+    { username: 'the_real_sourabh', followers: 76500, medianViews: null, engagementRate: null, formats: [] },
+  ]
+
+  it('replaces the hardcoded placeholder rows', () => {
+    const html = fillCompetitorTable(rawTemplate(), rows)
+    expect(html).not.toContain('@competitor_1')
+    expect(html).toContain('@thealphatraderofficial')
+    expect(html).toContain('128K')
+    expect(html).toContain('42K')
+    expect(html).toContain('4.2% ER')
+  })
+
+  it('relabels the header, because the number is a median not a mean', () => {
+    const html = fillCompetitorTable(rawTemplate(), rows)
+    expect(html).toContain('<th>Median views</th>')
+    expect(html).not.toContain('<th>Avg views</th>')
+  })
+
+  it('leaves columns we cannot measure as visible blanks, never invented values', () => {
+    // Posts/week is not measured and "what they are missing" is a judgment nobody has made.
+    // A plausible guess here would put fabricated numbers in front of a client.
+    const html = fillCompetitorTable(rawTemplate(), rows)
+    expect(html).toContain('<span class="fill">n</span>')
+    expect(html).toContain('<span class="fill">the gap</span>')
+  })
+
+  it('shows a blank rather than a zero when an account had no reels analysed', () => {
+    const html = fillCompetitorTable(rawTemplate(), rows)
+    expect(html).toContain('no reels analysed')
+  })
+
+  it('names the analysed accounts in the screenshot placeholders', () => {
+    const html = fillCompetitorTable(rawTemplate(), rows)
+    expect(html).toContain('@thealphatraderofficial<br>top reel')
+    // Only 2 rows supplied, so placeholders 3 and 4 keep their generic label.
+    expect(html).toContain('@competitor_3')
+  })
+
+  it('leaves the template untouched when there is nothing to show', () => {
+    expect(fillCompetitorTable(rawTemplate(), [])).toBe(rawTemplate())
+  })
+
+  it('escapes a handle rather than trusting it as markup', () => {
+    const html = fillCompetitorTable(rawTemplate(), [{ ...rows[0], username: 'a<img>b' }])
+    expect(html).toContain('a&lt;img&gt;b')
+    expect(html).not.toContain('<img>')
   })
 })

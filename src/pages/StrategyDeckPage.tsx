@@ -8,7 +8,7 @@
 import { useMemo, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, Printer, Sparkles, Loader2 } from 'lucide-react'
-import { fillDeck, slotsFromBrief, type SlotKey } from '../lib/deckTemplate'
+import { fillDeck, slotsFromBrief, fillCompetitorTable, type SlotKey, type CompetitorRow } from '../lib/deckTemplate'
 import { fillDeckSlots } from '../lib/meetingsClient'
 import { SAMPLE_RESULT } from '../lib/sampleStrategy'
 import { useStrategyStore } from '../store/strategyStore'
@@ -22,7 +22,28 @@ export function StrategyDeckPage() {
   const [aiSlots, setAiSlots] = useState<Partial<Record<SlotKey, string>>>({})
 
   const brief = isSample ? SAMPLE_RESULT.brief : storeBrief
-  const doc = isSample ? SAMPLE_RESULT.doc : storeResult?.doc
+  const result = isSample ? SAMPLE_RESULT : storeResult
+  const doc = result?.doc
+
+  /**
+   * Section 04's table, built from the accounts actually analysed. Aspirational accounts are
+   * excluded — that section is about who the client competes with, not who they admire.
+   */
+  const competitorRows: CompetitorRow[] = useMemo(() => {
+    const byHandle = new Map((result?.hookSummaries ?? []).map((h) => [h.handle.toLowerCase(), h]))
+    return (result?.accounts ?? [])
+      .filter((a) => a.source !== 'aspirational')
+      .map((a) => {
+        const hooks = byHandle.get(a.username.toLowerCase())
+        return {
+          username: a.username,
+          followers: a.followers,
+          medianViews: hooks?.benchmarks?.medianViews ?? null,
+          engagementRate: a.engagementRate,
+          formats: (hooks?.dominantHooks ?? []).map((h) => h.pattern),
+        }
+      })
+  }, [result])
 
   const fill = useMutation({
     mutationFn: () => fillDeckSlots(brief, doc),
@@ -32,8 +53,8 @@ export function StrategyDeckPage() {
   // Slots the model has not written stay as the template's dashed blanks — that is how a
   // strategist sees what still needs writing, rather than reading filler as finished work.
   const html = useMemo(
-    () => fillDeck({ ...slotsFromBrief(brief, new Date()), ...aiSlots }),
-    [brief, aiSlots],
+    () => fillCompetitorTable(fillDeck({ ...slotsFromBrief(brief, new Date()), ...aiSlots }), competitorRows),
+    [brief, aiSlots, competitorRows],
   )
 
   return (

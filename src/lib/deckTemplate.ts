@@ -58,8 +58,9 @@ export const rawTemplate = (): string => template
 export const slotPattern = (placeholder: string): RegExp =>
   new RegExp(`<(span|b) class="fill">${placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}</\\1>`, 'g')
 
-const escapeHtml = (s: string): string =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
 
 /**
  * Replace filled slots. A filled slot loses the dashed `.fill` styling so a real value reads as a
@@ -94,4 +95,66 @@ export function slotsFromBrief(brief: StrategyBrief, now: Date): Partial<Record<
     category: brief.primaryNiche || undefined,
     competitorDate: now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
   }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Section 04 — the competitor table
+// ---------------------------------------------------------------------------------------------
+
+export interface CompetitorRow {
+  username: string
+  followers: number
+  /** MEDIAN views from the reel benchmarks — not a mean. The header is relabelled to match. */
+  medianViews: number | null
+  engagementRate: number | null
+  /** Dominant hook patterns, which is the closest real signal we have to "their top formats". */
+  formats: string[]
+}
+
+const compact = (n: number): string =>
+  n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `${Math.round(n / 1_000)}K` : String(n)
+
+/** A blank a strategist must fill, styled like every other unfilled slot in the template. */
+const BLANK = (label: string) => `<span class="fill">${label}</span>`
+
+/**
+ * Replace the hardcoded @competitor_1..4 rows with the accounts actually analysed.
+ *
+ * TWO COLUMNS STAY BLANK ON PURPOSE. "Posts / week" is not something the pipeline measures, and
+ * "What they are missing" is a judgment nobody has made yet. Filling either with a plausible guess
+ * would put invented numbers in front of a client — the whole point of this table is that the other
+ * four columns are real.
+ *
+ * The "Avg views" header is rewritten to "Median views" because that is what the number is.
+ */
+export function fillCompetitorTable(html: string, rows: CompetitorRow[]): string {
+  if (rows.length === 0) return html
+
+  const body = rows
+    .map((r) => {
+      const er = r.engagementRate == null ? '' : ` <span class="muted">(${r.engagementRate.toFixed(1)}% ER)</span>`
+      return (
+        '<tr>' +
+        `<td><b>@${escapeHtml(r.username)}</b></td>` +
+        `<td>${compact(r.followers)}${er}</td>` +
+        `<td>${r.medianViews == null ? BLANK('no reels analysed') : compact(r.medianViews)}</td>` +
+        `<td>${BLANK('n')}</td>` +
+        `<td>${r.formats.length ? escapeHtml(r.formats.slice(0, 2).join(', ')) : BLANK('formats')}</td>` +
+        `<td>${BLANK('the gap')}</td>` +
+        '</tr>'
+      )
+    })
+    .join('')
+
+  return html
+    .replace(/<th>Avg views<\/th>/, '<th>Median views</th>')
+    .replace(/<tbody>[\s\S]*?<\/tbody>/, `<tbody>${body}</tbody>`)
+    // The four screenshot placeholders name the accounts we actually analysed.
+    .replace(/<div class="shot">SCREENSHOT<br>@competitor_(\d)<br>(top reel|profile grid)<\/div>/g,
+      (full, n: string, kind: string) => {
+        const row = rows[Number(n) - 1]
+        return row
+          ? `<div class="shot">SCREENSHOT<br>@${escapeHtml(row.username)}<br>${kind}</div>`
+          : full
+      })
 }
