@@ -2,22 +2,18 @@
 /**
  * TranscriptBriefsStrip tests — the entry point into the review flow.
  *
- * The important behaviours are the two that are easy to get wrong: it must stay hidden from
- * non-admins (the cb_ tables carry margins), and its empty state must explain what to do rather
- * than looking broken.
+ * Access was widened to every signed-in member (20260810000000) — this used to be admin-only.
+ * The remaining behaviour worth pinning is that the empty state explains what to do rather than
+ * looking broken.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, cleanup } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
-const { listClientsMock, isAdminMock } = vi.hoisted(() => ({
-  listClientsMock: vi.fn(),
-  isAdminMock: vi.fn(),
-}))
+const { listClientsMock } = vi.hoisted(() => ({ listClientsMock: vi.fn() }))
 
 vi.mock('../lib/reviewRepo', () => ({ listClients: listClientsMock }))
-vi.mock('../hooks/useIsAdmin', () => ({ useIsAdmin: isAdminMock }))
 
 import { TranscriptBriefsStrip } from './TranscriptBriefsStrip'
 
@@ -34,18 +30,17 @@ const renderStrip = () => {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  isAdminMock.mockReturnValue({ isAdmin: true, isLoading: false })
   listClientsMock.mockResolvedValue([])
 })
 afterEach(cleanup)
 
 describe('TranscriptBriefsStrip', () => {
-  it('renders nothing at all for a non-admin', () => {
-    isAdminMock.mockReturnValue({ isAdmin: false, isLoading: false })
+  it('renders for any signed-in member — no longer admin-gated', () => {
+    // Reversed deliberately: the cb_ tables were widened to every authenticated user, so hiding
+    // this strip would leave the feature built and unreachable for most of the team.
     const { container } = renderStrip()
-    expect(container.firstChild).toBeNull()
-    // And never queries — a permanently-empty section would just confuse.
-    expect(listClientsMock).not.toHaveBeenCalled()
+    expect(container.firstChild).not.toBeNull()
+    expect(listClientsMock).toHaveBeenCalled()
   })
 
   it('explains what to do when there are no clients yet', async () => {

@@ -23,7 +23,6 @@ import {
   type ExtractionRow,
 } from '../lib/reviewGate'
 import { useStrategyStore } from '../store/strategyStore'
-import { useIsAdmin } from '../hooks/useIsAdmin'
 import { SAMPLE_EXTRACTIONS, SAMPLE_CLIENT_ID } from '../lib/sampleStrategy'
 
 const eyebrow = 'text-[11px] font-mono uppercase tracking-wider text-[var(--color-accent)] mb-3 mt-6 first:mt-0'
@@ -71,7 +70,6 @@ export function StrategyReviewPage() {
   const { clientId = '' } = useParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const { isAdmin, isLoading: adminLoading } = useIsAdmin()
   const setBrief = useStrategyStore((s) => s.setBrief)
   const [open, setOpen] = useState<string | null>(null)
   const [drafts, setDrafts] = useState<Record<string, string>>({})
@@ -82,11 +80,11 @@ export function StrategyReviewPage() {
   const isSample = clientId === SAMPLE_CLIENT_ID
   const [sampleRows, setSampleRows] = useState(SAMPLE_EXTRACTIONS)
 
-  const clients = useQuery({ queryKey: ['cb-clients'], queryFn: listClients, enabled: isAdmin && !isSample })
+  const clients = useQuery({ queryKey: ['cb-clients'], queryFn: listClients, enabled: !isSample })
   const rowsQ = useQuery({
     queryKey: ['cb-extractions', clientId],
     queryFn: () => listExtractions(clientId),
-    enabled: !isSample && isAdmin && Boolean(clientId),
+    enabled: !isSample && Boolean(clientId),
   })
 
   const rows = useMemo(() => (isSample ? sampleRows : rowsQ.data ?? []), [isSample, sampleRows, rowsQ.data])
@@ -143,26 +141,6 @@ export function StrategyReviewPage() {
     },
     onSuccess: () => { if (!isSample) invalidate() },
   })
-
-  // Wait for the role check before saying "not allowed" — otherwise a permitted admin sees a
-  // denial flash on every load.
-  if (!isSample && adminLoading) {
-    return (
-      <div className="flex items-center gap-2 text-secondary text-sm py-16 justify-center">
-        <Loader2 size={15} className="animate-spin" /> Checking access…
-      </div>
-    )
-  }
-
-  if (!isSample && !isAdmin) {
-    return (
-      <div className="max-w-2xl mx-auto py-16 text-center">
-        <p className="text-secondary text-sm">
-          Transcript data is admin-only — it carries client revenue and margin detail.
-        </p>
-      </div>
-    )
-  }
 
   if (rowsQ.isLoading) {
     return (

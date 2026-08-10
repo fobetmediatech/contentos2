@@ -13,7 +13,6 @@ import { useNavigate, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Loader2, Calendar, CalendarOff, Clock, ArrowRight, Target } from 'lucide-react'
 import { listMeetings, meetingType, type Meeting } from '../lib/meetingsClient'
-import { useIsAdmin } from '../hooks/useIsAdmin'
 
 const eyebrow = 'text-[11px] font-mono uppercase tracking-wider text-[var(--color-accent)]'
 const selectCls =
@@ -27,13 +26,12 @@ const fmtDate = (ms: number | null) =>
 const fmtDur = (s: number | null) => (s ? `${Math.round(s / 60)} min` : '—')
 
 export function StrategyMeetingsPage() {
-  const { isAdmin, isLoading: adminLoading } = useIsAdmin()
   const navigate = useNavigate()
   const [type, setType] = useState<(typeof TYPES)[number]>('all')
   const [sort, setSort] = useState<SortKey>('newest')
   const [calendarOnly, setCalendarOnly] = useState(false)
 
-  const q = useQuery({ queryKey: ['fireflies-meetings'], queryFn: listMeetings, enabled: isAdmin })
+  const q = useQuery({ queryKey: ['fireflies-meetings'], queryFn: listMeetings })
 
   const meetings = useMemo(() => {
     const all = q.data?.transcripts ?? []
@@ -47,13 +45,6 @@ export function StrategyMeetingsPage() {
     }
     return [...filtered].sort(by[sort])
   }, [q.data, type, sort, calendarOnly])
-
-  if (adminLoading) {
-    return <div className="flex items-center gap-2 text-secondary text-sm py-16 justify-center"><Loader2 size={15} className="animate-spin" /> Checking access…</div>
-  }
-  if (!isAdmin) {
-    return <p className="text-secondary text-sm text-center py-16">Call transcripts are admin-only — they carry client revenue and margin detail.</p>
-  }
 
   return (
     <div className="max-w-5xl mx-auto">

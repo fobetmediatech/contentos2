@@ -83,10 +83,7 @@ export async function handleAsk(req: VercelRequest, res: VercelResponse): Promis
   }
 
   const token = bearer(req)
-  if ((await rest('rpc/is_admin', token, { method: 'POST', body: {} })).json !== true) {
-    res.status(403).json({ error: 'forbidden' })
-    return
-  }
+  // Signed-in is enough — this feature is open to the whole team (20260810000000).
 
   const body = req.body as { question?: unknown; clientId?: unknown } | undefined
   const question = typeof body?.question === 'string' ? body.question.trim() : ''

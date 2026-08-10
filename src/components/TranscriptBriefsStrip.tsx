@@ -9,25 +9,19 @@
  *   Transcript briefs -> cb_clients        — a client identity, opens the pre-filled form to review
  * They are different tables with different lifecycles; one client can have many saved strategies.
  *
- * Admin-only. The cb_ tables carry client revenue and margin detail, and their RLS is admin-only —
- * so for anyone else this query returns an empty list, and rendering a permanently-empty section
- * would just be confusing. Hidden entirely instead.
+ * Open to every signed-in member (20260810000000 widened the RLS to match).
  */
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { FileSearch, ArrowRight, Loader2 } from 'lucide-react'
 import { listClients } from '../lib/reviewRepo'
-import { useIsAdmin } from '../hooks/useIsAdmin'
 import { SAMPLE_CLIENT_ID } from '../lib/sampleStrategy'
 
 const relDate = (ms: number): string =>
   ms ? new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : ''
 
 export function TranscriptBriefsStrip() {
-  const { isAdmin } = useIsAdmin()
-  const q = useQuery({ queryKey: ['cb-clients'], queryFn: listClients, enabled: isAdmin })
-
-  if (!isAdmin) return null
+  const q = useQuery({ queryKey: ['cb-clients'], queryFn: listClients })
 
   const clients = q.data ?? []
 
