@@ -11,9 +11,9 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useStrategyStore } from '../store/strategyStore'
 import { useContentStrategy } from '../hooks/useContentStrategy'
-import { StrategyDeck } from '../components/StrategyDeck'
+import { FobetDeck } from '../components/FobetDeck'
 import { TranscriptBriefsStrip } from '../components/TranscriptBriefsStrip'
-import { resolveDeckColors, PRESET_LABELS } from '../lib/deckThemes'
+import { PRESET_LABELS } from '../lib/deckThemes'
 import { listSavedClients, saveClient } from '../lib/strategyRepo'
 import { SAMPLE_RESULT } from '../lib/sampleStrategy'
 import type { StrategyBrief, ContentLanguage, DeckPreset } from '../domain/strategy'
@@ -354,7 +354,10 @@ export function StrategyPage() {
             <button onClick={() => save.mutate(result)} className="text-[var(--color-accent)] hover:underline">Save as client</button>
             {' '}to keep it in the shared list and attach reference files (brief, brand kit, screenshots) on the client’s page.
           </p>
-          <StrategyDeck result={result} colors={resolveDeckColors(brief)} />
+          {/* The FOBET template is THE deck. It was previously only reachable at
+              /strategy/deck/:clientId, which nothing linked to, so this surface still showed the
+              older StrategyDeck component. */}
+          <FobetDeck result={result} />
         </>
       )}
     </div>
