@@ -13,7 +13,7 @@
  *   4. Resolve the join by EXACT email match (see below).
  *   5. Upsert the transcript, then replace its chunks (embedded).
  *
- * AUTH MODEL: the caller's own token is forwarded to PostgREST, so the admin-only RLS on the cb_
+ * AUTH MODEL: the caller's own token is forwarded to PostgREST, so the RLS on the cb_
  * tables evaluates against the real user. No service_role key, so no new secret and no way for a
  * bug here to escalate past what the caller could already do.
  *
@@ -54,15 +54,6 @@ const restHeaders = (token: string, extra: Record<string, string> = {}): Record<
   ...extra,
 })
 
-async function rpc(fn: string, token: string, body: Record<string, unknown>): Promise<unknown> {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
-    method: 'POST',
-    headers: restHeaders(token),
-    body: JSON.stringify(body),
-  })
-  try { return await res.json() } catch { return null }
-}
-
 async function rest(
   path: string,
   token: string,
@@ -94,11 +85,7 @@ export async function handleIngest(req: VercelRequest, res: VercelResponse): Pro
 
   const token = bearer(req)
 
-  // Admin gate FIRST — before any source call, so this cannot become a meeting-enumeration oracle.
-  if ((await rpc('is_admin', token, {})) !== true) {
-    res.status(403).json({ error: 'forbidden' })
-    return
-  }
+  // Signed-in is enough — this feature is open to the whole team (20260810000000).
 
   const body = req.body as { action?: unknown; externalId?: unknown; clientId?: unknown } | undefined
   const action = typeof body?.action === 'string' ? body.action : 'ingest-meeting'
