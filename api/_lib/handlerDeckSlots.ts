@@ -32,19 +32,7 @@ export async function handleDeckSlots(req: VercelRequest, res: VercelResponse): 
     return
   }
 
-  // Admin gate before the model call — this costs money.
-  const token = (req.headers.authorization ?? '').replace(/^Bearer /, '')
-  const admin = await fetch(`${SUPABASE_URL}/rest/v1/rpc/is_admin`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON, Authorization: `Bearer ${token}` },
-    body: '{}',
-  })
-    .then((r) => r.json())
-    .catch(() => null)
-  if (admin !== true) {
-    res.status(403).json({ error: 'forbidden' })
-    return
-  }
+  // Signed-in is enough — this feature is open to the whole team (20260810000000).
 
   const body = req.body as { brief?: Record<string, unknown>; doc?: Record<string, unknown> } | undefined
   const brief = body?.brief

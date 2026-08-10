@@ -13,12 +13,10 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { ArrowLeft, Loader2, CheckCircle2, AlertTriangle, Play, Paperclip, X, Sparkles, UserPlus, Link2 } from 'lucide-react'
 import { listMeetings, ingestMeeting, meetingType, fileToDoc, runExtraction, createClient, type ExtractResult } from '../lib/meetingsClient'
 import { listClients } from '../lib/reviewRepo'
-import { useIsAdmin } from '../hooks/useIsAdmin'
 
 export function StrategyMeetingPage() {
   const { externalId = '' } = useParams()
   const navigate = useNavigate()
-  const { isAdmin, isLoading: adminLoading } = useIsAdmin()
   const [result, setResult] = useState<{ joinStatus: string; clientId: string | null; chunks: number } | null>(null)
   const [files, setFiles] = useState<File[]>([])
   const [extract, setExtract] = useState<ExtractResult | null>(null)
@@ -26,7 +24,7 @@ export function StrategyMeetingPage() {
   const [newName, setNewName] = useState('')
   const [newEmail, setNewEmail] = useState('')
 
-  const list = useQuery({ queryKey: ['fireflies-meetings'], queryFn: listMeetings, enabled: isAdmin })
+  const list = useQuery({ queryKey: ['fireflies-meetings'], queryFn: listMeetings })
   const meeting = list.data?.transcripts.find((m) => m.externalId === externalId)
 
   const ingest = useMutation({
@@ -34,7 +32,7 @@ export function StrategyMeetingPage() {
     onSuccess: (r) => setResult({ joinStatus: r.joinStatus, clientId: r.clientId, chunks: r.chunks }),
   })
 
-  const clients = useQuery({ queryKey: ['cb-clients'], queryFn: listClients, enabled: isAdmin })
+  const clients = useQuery({ queryKey: ['cb-clients'], queryFn: listClients })
 
   /** Re-ingest with an explicit clientId — the manual-assignment path the join already supports. */
   const assign = useMutation({
@@ -62,13 +60,6 @@ export function StrategyMeetingPage() {
   })
 
   const totalMb = files.reduce((n, f) => n + f.size, 0) / 1024 / 1024
-
-  if (adminLoading) {
-    return <div className="flex items-center gap-2 text-secondary text-sm py-16 justify-center"><Loader2 size={15} className="animate-spin" /> Checking access…</div>
-  }
-  if (!isAdmin) {
-    return <p className="text-secondary text-sm text-center py-16">Call transcripts are admin-only.</p>
-  }
 
   return (
     <div className="max-w-3xl mx-auto pb-16">

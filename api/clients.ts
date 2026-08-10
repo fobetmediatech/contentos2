@@ -69,10 +69,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   }
 
   const token = bearer(req)
-  if ((await rest('rpc/is_admin', token, { method: 'POST', body: {} })).json !== true) {
-    res.status(403).json({ error: 'forbidden' })
-    return
-  }
+  // Signed-in is enough — this feature is open to the whole team (20260810000000).
 
   const body = req.body as {
     action?: unknown

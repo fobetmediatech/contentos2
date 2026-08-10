@@ -87,12 +87,7 @@ export async function handleExtract(req: VercelRequest, res: VercelResponse): Pr
 
   const token = bearer(req)
 
-  // Admin gate BEFORE the model call — extraction costs money, so a non-admin must not spend it.
-  const adminCheck = await rest('rpc/is_admin', token, { method: 'POST', body: {} })
-  if (adminCheck.json !== true) {
-    res.status(403).json({ error: 'forbidden' })
-    return
-  }
+  // Signed-in is enough — this feature is open to the whole team (20260810000000).
 
   const body = req.body as { clientId?: unknown; documents?: unknown } | undefined
   const clientId = typeof body?.clientId === 'string' ? body.clientId.trim() : ''
