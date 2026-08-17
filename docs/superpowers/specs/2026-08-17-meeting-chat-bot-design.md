@@ -133,8 +133,10 @@ content — it simply lost the ranking race to other calls. The filter must be i
    `(vector, int, uuid, text, uuid)`. The existing statements name the old arg list; missing this
    leaves the function un-executable by `authenticated` and every semantic query fails.
 4. **Stays `SECURITY INVOKER`.** It must keep inheriting the RLS policies. Never make it definer.
-5. Adds `cb_transcripts.summary jsonb` and `cb_transcripts.summary_generated_at timestamptz`
-   for §6.
+**Split across two migrations during planning**, because the work ships as two independent PRs:
+`20260817000000_ask_transcript_scope.sql` carries steps 1–4 (chat), and
+`20260817000001_transcript_summary.sql` adds `cb_transcripts.summary jsonb` +
+`summary_generated_at timestamptz` for §6 (PDFs). Either can be applied first.
 
 **Deploy order: migration first, then the code.** The drop-and-recreate briefly leaves no function
 matching the old signature, so shipping code that passes the new arg before the migration lands
@@ -174,12 +176,16 @@ figure" rule, with a `responseSchema` fixing the stored shape:
 
 ```ts
 {
-  discussion:   Array<{ point: string; timestamp: string }>
-  decisions:    Array<{ decision: string; timestamp: string }>
-  action_items: Array<{ item: string; owner: string | null; timestamp: string }>
+  discussion:   Array<{ text: string; timestamp: string }>
+  decisions:    Array<{ text: string; timestamp: string }>
+  action_items: Array<{ text: string; owner: string | null; timestamp: string }>
   key_numbers:  Array<{ label: string; value: string; timestamp: string }>
 }
 ```
+
+`text` rather than `point`/`decision`/`item` so one normaliser handles three of the four sections.
+A missing timestamp becomes `''`, never a guess — a fabricated timestamp in printed minutes is
+worse than an absent one, because it looks verifiable.
 
 That exact object is what lands in `cb_transcripts.summary`. Timestamps are `m:ss`, matching
 `fmtTime` in `handlerAsk.ts`. Cached with a **Regenerate** button, because summaries are viewed
@@ -207,10 +213,10 @@ Both print via `window.print()` + `@media print`, matching `StrategyClientPage.t
 - `rewriteFollowup` — history windowing and the rewrite-or-not decision (pure parts).
 - Transcript-scope filter construction for the metadata path.
 - Summary response shape validation.
-- **One PostgREST column-list guard per `cb_` table.** Nothing currently verifies PostgREST column
-  names against the schema: the missing `cb_transcripts.title` column let typecheck, lint and 1064
-  tests all pass while three live queries were broken. This design adds two columns, so the guard
-  earns its place now.
+- **The PostgREST column guard already exists** — `api/_lib/cbColumnDrift.test.ts` parses the
+  migrations for the columns that exist and cross-checks every column the app references, so the two
+  columns added here are covered automatically. No new test needed; just keep it green. (Corrected
+  during planning: this section previously called for building it.)
 
 ## Prerequisite — verify before shipping
 
