@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { planQuery, parseDate, relevantChunks, MIN_SIMILARITY, metadataFilters, type RetrievedChunk, type AskScope } from './askQuery'
+import { planQuery, parseDate, relevantChunks, MIN_SIMILARITY, metadataFilters, type RetrievedChunk, type QueryPlan } from './askQuery'
 
 const NOW = new Date('2026-08-04T12:00:00Z')
 
