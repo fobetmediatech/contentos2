@@ -32,6 +32,7 @@ const StrategyMeetingsPage = lazy(() => import('./pages/StrategyMeetingsPage').t
 const StrategyMeetingPage = lazy(() => import('./pages/StrategyMeetingPage').then((m) => ({ default: m.StrategyMeetingPage })))
 const StrategyDeckPage = lazy(() => import('./pages/StrategyDeckPage').then((m) => ({ default: m.StrategyDeckPage })))
 const ScriptStudioPage = lazy(() => import('./pages/ScriptStudioPage').then((m) => ({ default: m.ScriptStudioPage })))
+const AskPage = lazy(() => import('./pages/AskPage'))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -112,6 +113,7 @@ export default function App() {
               {/* Chat route — noPadding for full-bleed h-[100dvh] layout */}
               <Route element={<AppLayout noPadding />}>
                 <Route index element={<ChatPage />} />
+                <Route path="ask" element={<AskPage />} />
               </Route>
 
               {/* All other routes — standard layout with padding. NOTE: competitor, discovery, and

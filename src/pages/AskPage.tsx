@@ -1,0 +1,258 @@
+/**
+ * /ask — chat over ingested call transcripts.
+ *
+ * SCOPE is one discriminated value, not three code paths: a meeting, a client, or everything. The
+ * server already treats a null clientId as "every client", so 'all' needs no special handling.
+ *
+ * `answer: null` is rendered as a normal assistant message, NOT an error toast. The server refuses
+ * to call the model when nothing clears the similarity threshold, and that refusal is the feature —
+ * these transcripts contain margins and ticket sizes, so a plausible invented figure is the worst
+ * possible outcome.
+ */
+import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { Send } from 'lucide-react'
+import { askTranscripts, type AskCitation, type Turn } from '../lib/askClient'
+import {
+  listIngestedTranscripts,
+  listClients,
+  type IngestedTranscript,
+  type ReviewClient,
+} from '../lib/reviewRepo'
+
+type Scope =
+  | { kind: 'meeting'; transcriptId: string }
+  | { kind: 'client'; clientId: string }
+  | { kind: 'all' }
+
+interface Msg {
+  role: 'user' | 'assistant'
+  content: string
+  citations?: AskCitation[]
+  interpretedAs?: string | null
+  /** true when the server found nothing relevant — styled as information, not failure. */
+  empty?: boolean
+}
+
+const fmtDate = (ms: number | null): string =>
+  ms === null
+    ? 'no date'
+    : new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+
+export default function AskPage() {
+  const [params, setParams] = useSearchParams()
+  const [transcripts, setTranscripts] = useState<IngestedTranscript[]>([])
+  const [clients, setClients] = useState<ReviewClient[]>([])
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  const [scope, setScope] = useState<Scope>(() => {
+    const t = params.get('transcript')
+    const c = params.get('client')
+    if (t) return { kind: 'meeting', transcriptId: t }
+    if (c) return { kind: 'client', clientId: c }
+    return { kind: 'all' }
+  })
+
+  const [messages, setMessages] = useState<Msg[]>([])
+  const [input, setInput] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    Promise.all([listIngestedTranscripts(), listClients()])
+      .then(([t, c]) => {
+        setTranscripts(t)
+        setClients(c)
+      })
+      .catch((e: unknown) => setLoadError(e instanceof Error ? e.message : 'Could not load meetings'))
+  }, [])
+
+  // Changing scope starts a new thread. Follow-ups resolve against earlier turns, so carrying
+  // history across a scope change would resolve a question against a meeting no longer selected.
+  const changeScope = (next: Scope) => {
+    setScope(next)
+    setMessages([])
+    setParams(
+      next.kind === 'meeting'
+        ? { transcript: next.transcriptId }
+        : next.kind === 'client'
+          ? { client: next.clientId }
+          : {},
+      { replace: true },
+    )
+  }
+
+  const scopeLabel = useMemo(() => {
+    if (scope.kind === 'meeting') {
+      const t = transcripts.find((x) => x.id === scope.transcriptId)
+      return t ? `${t.title ?? 'Untitled call'} — ${fmtDate(t.meetingDate)}` : 'this meeting'
+    }
+    if (scope.kind === 'client') {
+      return clients.find((c) => c.id === scope.clientId)?.displayName ?? 'this client'
+    }
+    return 'every ingested call'
+  }, [scope, transcripts, clients])
+
+  async function send() {
+    const question = input.trim()
+    if (!question || busy) return
+    setInput('')
+    const history: Turn[] = messages.map((m) => ({ role: m.role, content: m.content }))
+    setMessages((prev) => [...prev, { role: 'user', content: question }])
+    setBusy(true)
+    try {
+      const r = await askTranscripts(
+        question,
+        scope.kind === 'meeting'
+          ? { transcriptId: scope.transcriptId }
+          : scope.kind === 'client'
+            ? { clientId: scope.clientId }
+            : {},
+        history,
+      )
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: r.answer ?? r.message ?? 'Nothing in the ingested transcripts covers that.',
+          citations: r.citations,
+          interpretedAs: r.interpretedAs,
+          empty: r.answer === null,
+        },
+      ])
+    } catch (e: unknown) {
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: e instanceof Error ? e.message : 'The request failed.', empty: true },
+      ])
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col h-[100dvh]">
+      <header className="px-6 py-4 border-b border-[rgba(var(--border-rgb),0.12)]">
+        <h1 className="text-2xl" style={{ fontFamily: 'Instrument Serif, serif' }}>Ask</h1>
+        <p className="text-sm text-secondary mt-1">
+          Answers come only from ingested call transcripts, with citations.
+        </p>
+
+        <div className="flex flex-wrap items-center gap-2 mt-3">
+          {(['meeting', 'client', 'all'] as const).map((kind) => (
+            <button
+              key={kind}
+              onClick={() =>
+                changeScope(
+                  kind === 'meeting'
+                    ? { kind: 'meeting', transcriptId: transcripts[0]?.id ?? '' }
+                    : kind === 'client'
+                      ? { kind: 'client', clientId: clients[0]?.id ?? '' }
+                      : { kind: 'all' },
+                )
+              }
+              className={`text-sm rounded-md px-3 py-1.5 border ${
+                scope.kind === kind
+                  ? 'border-[var(--color-accent)] text-primary'
+                  : 'border-[rgba(var(--border-rgb),0.12)] text-secondary hover:text-primary'
+              }`}
+            >
+              {kind === 'meeting' ? 'One meeting' : kind === 'client' ? 'One client' : 'Everything'}
+            </button>
+          ))}
+
+          {scope.kind === 'meeting' && (
+            <select
+              aria-label="Meeting"
+              value={scope.transcriptId}
+              onChange={(e) => changeScope({ kind: 'meeting', transcriptId: e.target.value })}
+              className="text-sm rounded-md px-3 py-1.5 bg-transparent border border-[rgba(var(--border-rgb),0.12)]"
+            >
+              {transcripts.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.title ?? 'Untitled call'} — {fmtDate(t.meetingDate)}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {scope.kind === 'client' && (
+            <select
+              aria-label="Client"
+              value={scope.clientId}
+              onChange={(e) => changeScope({ kind: 'client', clientId: e.target.value })}
+              className="text-sm rounded-md px-3 py-1.5 bg-transparent border border-[rgba(var(--border-rgb),0.12)]"
+            >
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>{c.displayName}</option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        {loadError && <p className="text-sm text-secondary mt-2">Could not load meetings: {loadError}</p>}
+        {!loadError && transcripts.length === 0 && (
+          <p className="text-sm text-secondary mt-2">
+            No calls ingested yet. Ingest one from Strategy first — this list only shows calls the bot can read.
+          </p>
+        )}
+      </header>
+
+      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+        {messages.length === 0 && <p className="text-sm text-secondary">Ask anything about {scopeLabel}.</p>}
+        {messages.map((m, i) => (
+          <div key={i}>
+            {m.role === 'user' ? (
+              <p className="text-primary">{m.content}</p>
+            ) : (
+              <div
+                className="border-l-2 pl-4"
+                style={{ borderColor: m.empty ? 'rgba(var(--border-rgb),0.3)' : 'var(--color-ai-tint)' }}
+              >
+                {m.interpretedAs && <p className="text-xs text-secondary mb-1">Read as: {m.interpretedAs}</p>}
+                <p className="whitespace-pre-wrap text-primary">{m.content}</p>
+                {m.citations && m.citations.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {m.citations.map((c) => (
+                      <li key={c.chunkId} className="text-xs text-secondary">
+                        <span style={{ fontFamily: 'DM Mono, monospace' }}>{c.timestamp}</span>
+                        {' · '}
+                        {c.meeting ?? 'unknown call'}
+                        {c.speaker ? ` · ${c.speaker}` : ''}
+                        <span className="block opacity-80">“{c.quote}”</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+        {busy && <p className="text-sm text-secondary">Reading the transcripts…</p>}
+      </div>
+
+      <div className="px-6 py-4 border-t border-[rgba(var(--border-rgb),0.12)] flex gap-2">
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              void send()
+            }
+          }}
+          placeholder={`Ask about ${scopeLabel}`}
+          aria-label="Your question"
+          className="flex-1 bg-transparent border border-[rgba(var(--border-rgb),0.12)] rounded-md px-3 py-2 text-primary"
+        />
+        <button
+          onClick={() => void send()}
+          disabled={busy || !input.trim()}
+          className="rounded-md px-4 py-2 border border-[rgba(var(--border-rgb),0.12)] text-secondary hover:text-primary disabled:opacity-40"
+          aria-label="Send"
+        >
+          <Send size={16} />
+        </button>
+      </div>
+    </div>
+  )
+}
