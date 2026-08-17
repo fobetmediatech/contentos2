@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { planQuery, parseDate, relevantChunks, MIN_SIMILARITY, type RetrievedChunk } from './askQuery'
+import { planQuery, parseDate, relevantChunks, MIN_SIMILARITY, metadataFilters, type RetrievedChunk, type AskScope } from './askQuery'
 
 const NOW = new Date('2026-08-04T12:00:00Z')
 
@@ -86,5 +86,40 @@ describe('relevantChunks', () => {
 
   it('keeps a chunk exactly at the threshold', () => {
     expect(relevantChunks([chunk(MIN_SIMILARITY)])).toHaveLength(1)
+  })
+})
+
+describe('metadataFilters', () => {
+  const plan = (over: Partial<QueryPlan> = {}): QueryPlan => ({
+    mode: 'metadata', meetingType: null, dateFrom: null, dateTo: null, ...over,
+  })
+
+  it('returns an empty string when nothing is scoped', () => {
+    expect(metadataFilters(plan(), { clientId: null, transcriptId: null })).toBe('')
+  })
+
+  it('filters by client', () => {
+    expect(metadataFilters(plan(), { clientId: 'c1', transcriptId: null })).toBe('client_id=eq.c1')
+  })
+
+  it('combines client, type and date with &', () => {
+    const out = metadataFilters(
+      plan({ meetingType: 'onboarding', dateFrom: '2026-10-12T00:00:00.000Z', dateTo: '2026-10-13T00:00:00.000Z' }),
+      { clientId: 'c1', transcriptId: null },
+    )
+    expect(out).toBe(
+      'client_id=eq.c1&meeting_type=eq.onboarding' +
+      '&meeting_date=gte.2026-10-12T00:00:00.000Z&meeting_date=lt.2026-10-13T00:00:00.000Z',
+    )
+  })
+
+  // An explicit pick beats a regex guess. Otherwise asking "what happened on the 12th" while the
+  // 5th's transcript is selected filters itself down to nothing, with no visible reason.
+  it('an explicit transcript wins over date and type parsed from the question', () => {
+    const out = metadataFilters(
+      plan({ meetingType: 'sales', dateFrom: '2026-10-12T00:00:00.000Z', dateTo: '2026-10-13T00:00:00.000Z' }),
+      { clientId: 'c1', transcriptId: 't9' },
+    )
+    expect(out).toBe('id=eq.t9')
   })
 })
