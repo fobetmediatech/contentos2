@@ -10,7 +10,7 @@
  *
  * Rendered OUTSIDE AppLayout so no nav chrome appears on the page.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { meetingSummary, type MeetingSummaryView } from '../lib/meetingsClient'
 import { getTranscriptText } from '../lib/reviewRepo'
@@ -34,6 +34,15 @@ export default function MeetingPrintPage() {
   const [fullText, setFullText] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(true)
+
+  // regenerate() is async and this component stays MOUNTED across /print/meeting/:id changes
+  // (browser back/forward between two visited print URLs), so the id it started with can go stale.
+  // A ref is required: comparing against the closure's own `transcriptId` compares a value to
+  // itself and is always true.
+  const currentTranscriptId = useRef(transcriptId)
+  useEffect(() => {
+    currentTranscriptId.current = transcriptId
+  }, [transcriptId])
 
   useEffect(() => {
     let live = true
@@ -68,22 +77,19 @@ export default function MeetingPrintPage() {
   }, [transcriptId, view])
 
   const regenerate = async () => {
-    const capturedTranscriptId = transcriptId
+    const startedWith = transcriptId
     setBusy(true)
     setError(null)
     try {
-      const r = await meetingSummary(capturedTranscriptId, true)
-      if (capturedTranscriptId === transcriptId) {
-        setSummary(r.summary)
-      }
+      const r = await meetingSummary(startedWith, true)
+      if (startedWith === currentTranscriptId.current) setSummary(r.summary)
     } catch (e: unknown) {
-      if (capturedTranscriptId === transcriptId) {
+      if (startedWith === currentTranscriptId.current) {
         setError(e instanceof Error ? e.message : 'Could not regenerate.')
       }
     } finally {
-      if (capturedTranscriptId === transcriptId) {
-        setBusy(false)
-      }
+      // Unconditional: a busy flag that can be skipped leaves the page stuck on "Working…".
+      setBusy(false)
     }
   }
 
