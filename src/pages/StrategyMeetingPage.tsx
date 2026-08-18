@@ -129,12 +129,16 @@ export function StrategyMeetingPage() {
                     </button>
                     <a
                       href={`/print/meeting/${result.transcriptId}`}
+                      target="_blank"
+                      rel="noopener"
                       className="text-sm text-secondary hover:text-primary border border-[rgba(var(--border-rgb),0.12)] rounded-md px-3 py-1.5"
                     >
                       Summary PDF
                     </a>
                     <a
                       href={`/print/meeting/${result.transcriptId}?view=transcript`}
+                      target="_blank"
+                      rel="noopener"
                       className="text-sm text-secondary hover:text-primary border border-[rgba(var(--border-rgb),0.12)] rounded-md px-3 py-1.5"
                     >
                       Transcript PDF

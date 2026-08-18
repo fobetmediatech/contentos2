@@ -137,6 +137,9 @@ export async function handleSummary(req: VercelRequest, res: VercelResponse): Pr
       generatedAt,
     })
   } catch {
-    res.status(502).json({ error: 'summary_failed' })
+    res.status(502).json({
+      error: 'summary_failed',
+      detail: 'Could not generate the summary. The model call failed.',
+    })
   }
 }

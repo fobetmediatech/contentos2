@@ -65,4 +65,20 @@ describe('normaliseSummary', () => {
     })
     expect(out.keyNumbers).toEqual([{ label: 'Ticket size', value: '2.5L', timestamp: '3:00' }])
   })
+
+  // The normalised (camelCase) result is what gets cached in cb_transcripts.summary, so feeding it
+  // back in must be a no-op. When this was one-way, every cached summary lost its action items and
+  // key numbers on the second view.
+  it('is idempotent across a store-and-reload round trip', () => {
+    const fresh = normaliseSummary({
+      discussion: [{ text: 'Budget discussed', timestamp: '4:12' }],
+      decisions: [{ text: 'Go with plan B', timestamp: '18:00' }],
+      action_items: [{ text: 'Send the deck', owner: 'Aditya', timestamp: '55:30' }],
+      key_numbers: [{ label: 'Monthly retainer', value: '80,000', timestamp: '21:05' }],
+    })
+    const reloaded = normaliseSummary(JSON.parse(JSON.stringify(fresh)))
+    expect(reloaded).toEqual(fresh)
+    expect(reloaded.actionItems).toHaveLength(1)
+    expect(reloaded.keyNumbers).toHaveLength(1)
+  })
 })

@@ -31,6 +31,7 @@ export default function MeetingPrintPage() {
   const [title, setTitle] = useState<string | null>(null)
   const [dateLabel, setDateLabel] = useState('')
   const [summary, setSummary] = useState<MeetingSummaryView | null>(null)
+  const [generatedAt, setGeneratedAt] = useState<string | null>(null)
   const [fullText, setFullText] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(true)
@@ -67,6 +68,7 @@ export default function MeetingPrintPage() {
       setTitle(r.title)
       setDateLabel(fmtDate(r.meetingDate))
       setSummary(r.summary)
+      setGeneratedAt(r.generatedAt)
     }
 
     load()
@@ -82,7 +84,10 @@ export default function MeetingPrintPage() {
     setError(null)
     try {
       const r = await meetingSummary(startedWith, true)
-      if (startedWith === currentTranscriptId.current) setSummary(r.summary)
+      if (startedWith === currentTranscriptId.current) {
+        setSummary(r.summary)
+        setGeneratedAt(r.generatedAt)
+      }
     } catch (e: unknown) {
       if (startedWith === currentTranscriptId.current) {
         setError(e instanceof Error ? e.message : 'Could not regenerate.')
@@ -143,6 +148,9 @@ export default function MeetingPrintPage() {
         <p className="text-sm text-secondary mt-1">
           {view === 'transcript' ? 'Full transcript' : 'Meeting summary'}
         </p>
+        {view === 'summary' && generatedAt && (
+          <p className="text-sm text-secondary mt-1">Generated {fmtDate(generatedAt)}</p>
+        )}
 
         {view === 'transcript' ? (
           <pre className="mt-6 whitespace-pre-wrap text-sm" style={{ fontFamily: 'inherit' }}>

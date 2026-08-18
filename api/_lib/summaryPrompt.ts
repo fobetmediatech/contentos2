@@ -124,10 +124,15 @@ export function normaliseSummary(raw: unknown): MeetingSummary {
   return {
     discussion: items(r.discussion),
     decisions: items(r.decisions),
-    actionItems: arr(r.action_items)
+    // The model emits snake_case per SUMMARY_SCHEMA, but the normalised camelCase result returned
+    // here is what handlerSummary.ts caches into cb_transcripts.summary. A cached read runs that
+    // stored object back through this same function, so it must accept both spellings to be
+    // idempotent across a store-and-reload round trip — otherwise every cached row loses these two
+    // sections on the second view, since only snake_case was ever recognised.
+    actionItems: arr(r.action_items ?? r.actionItems)
       .map((x) => ({ text: str(x.text), owner: str(x.owner) || null, timestamp: str(x.timestamp) }))
       .filter((x) => x.text !== ''),
-    keyNumbers: arr(r.key_numbers)
+    keyNumbers: arr(r.key_numbers ?? r.keyNumbers)
       .map((x) => ({ label: str(x.label), value: str(x.value), timestamp: str(x.timestamp) }))
       // Both halves required: a label with no figure ("Monthly retainer: ") prints as an empty
       // promise on a document that gets sent to the client. Every other section likewise drops

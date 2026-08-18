@@ -11,8 +11,10 @@
  *   ask         -> QnA over the transcripts
  *   summary     -> plain printable minutes for one transcript (cached on cb_transcripts)
  *
- * Each handler keeps its own admin gate — the gate belongs with the thing it protects, so a future
- * action cannot be added without one by forgetting to check here.
+ * Each handler does its own auth check via requireClerkUser — auth belongs with the thing it
+ * protects, so a future action cannot skip it by forgetting to check here. That check confirms
+ * identity, not role: since migration 20260810000000, cb_transcripts and the tables built on it are
+ * readable by any signed-in member, not admin-only, with RLS as the real boundary.
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { handleExtract } from './_lib/handlerExtract.js'
