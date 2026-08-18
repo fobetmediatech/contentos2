@@ -68,15 +68,22 @@ export default function MeetingPrintPage() {
   }, [transcriptId, view])
 
   const regenerate = async () => {
+    const capturedTranscriptId = transcriptId
     setBusy(true)
     setError(null)
     try {
-      const r = await meetingSummary(transcriptId, true)
-      setSummary(r.summary)
+      const r = await meetingSummary(capturedTranscriptId, true)
+      if (capturedTranscriptId === transcriptId) {
+        setSummary(r.summary)
+      }
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Could not regenerate.')
+      if (capturedTranscriptId === transcriptId) {
+        setError(e instanceof Error ? e.message : 'Could not regenerate.')
+      }
     } finally {
-      setBusy(false)
+      if (capturedTranscriptId === transcriptId) {
+        setBusy(false)
+      }
     }
   }
 
@@ -116,8 +123,10 @@ export default function MeetingPrintPage() {
             Regenerate
           </button>
         )}
-        {busy && <span className="text-sm text-secondary">Working…</span>}
-        {error && <span className="text-sm text-secondary">{error}</span>}
+        <div aria-live="polite">
+          {busy && <span className="text-sm text-secondary">Working…</span>}
+          {error && <span className="text-sm text-secondary">{error}</span>}
+        </div>
       </div>
 
       <article className="report-printable max-w-3xl">
