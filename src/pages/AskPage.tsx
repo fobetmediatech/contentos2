@@ -30,8 +30,8 @@ interface Msg {
   content: string
   citations?: AskCitation[]
   interpretedAs?: string | null
-  /** true when the server found nothing relevant — styled as information, not failure. */
-  empty?: boolean
+  /** 'answer' = grounded reply · 'empty' = nothing relevant found · 'error' = the request failed */
+  tone: 'answer' | 'empty' | 'error'
 }
 
 const fmtDate = (ms: number | null): string =>
@@ -92,12 +92,16 @@ export default function AskPage() {
     return 'every ingested call'
   }, [scope, transcripts, clients])
 
+  const scopeReady =
+    scope.kind === 'all' ||
+    (scope.kind === 'meeting' ? scope.transcriptId !== '' : scope.clientId !== '')
+
   async function send() {
     const question = input.trim()
-    if (!question || busy) return
+    if (!question || busy || !scopeReady) return
     setInput('')
     const history: Turn[] = messages.map((m) => ({ role: m.role, content: m.content }))
-    setMessages((prev) => [...prev, { role: 'user', content: question }])
+    setMessages((prev) => [...prev, { role: 'user', content: question, tone: 'answer' }])
     setBusy(true)
     try {
       const r = await askTranscripts(
@@ -116,13 +120,13 @@ export default function AskPage() {
           content: r.answer ?? r.message ?? 'Nothing in the ingested transcripts covers that.',
           citations: r.citations,
           interpretedAs: r.interpretedAs,
-          empty: r.answer === null,
+          tone: r.answer === null ? 'empty' : 'answer',
         },
       ])
     } catch (e: unknown) {
       setMessages((prev) => [
         ...prev,
-        { role: 'assistant', content: e instanceof Error ? e.message : 'The request failed.', empty: true },
+        { role: 'assistant', content: e instanceof Error ? e.message : 'The request failed.', tone: 'error' },
       ])
     } finally {
       setBusy(false)
@@ -195,6 +199,13 @@ export default function AskPage() {
             No calls ingested yet. Ingest one from Strategy first — this list only shows calls the bot can read.
           </p>
         )}
+        {!scopeReady && (
+          <p className="text-sm text-secondary mt-2">
+            {scope.kind === 'meeting'
+              ? 'No meetings available to select.'
+              : 'No clients available to select.'}
+          </p>
+        )}
       </header>
 
       <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
@@ -206,8 +217,20 @@ export default function AskPage() {
             ) : (
               <div
                 className="border-l-2 pl-4"
-                style={{ borderColor: m.empty ? 'rgba(var(--border-rgb),0.3)' : 'var(--color-ai-tint)' }}
+                style={{
+                  borderColor:
+                    m.tone === 'error'
+                      ? 'var(--color-error)'
+                      : m.tone === 'empty'
+                        ? 'rgba(var(--border-rgb),0.3)'
+                        : 'var(--color-ai-tint)',
+                }}
               >
+                {m.tone === 'error' && (
+                  <p className="text-xs mb-1" style={{ color: 'var(--color-error)' }}>
+                    Request failed
+                  </p>
+                )}
                 {m.interpretedAs && <p className="text-xs text-secondary mb-1">Read as: {m.interpretedAs}</p>}
                 <p className="whitespace-pre-wrap text-primary">{m.content}</p>
                 {m.citations && m.citations.length > 0 && (
@@ -218,7 +241,7 @@ export default function AskPage() {
                         {' · '}
                         {c.meeting ?? 'unknown call'}
                         {c.speaker ? ` · ${c.speaker}` : ''}
-                        <span className="block opacity-80">“{c.quote}”</span>
+                        <span className="block opacity-80">"{c.quote}"</span>
                       </li>
                     ))}
                   </ul>
@@ -246,7 +269,7 @@ export default function AskPage() {
         />
         <button
           onClick={() => void send()}
-          disabled={busy || !input.trim()}
+          disabled={busy || !input.trim() || !scopeReady}
           className="rounded-md px-4 py-2 border border-[rgba(var(--border-rgb),0.12)] text-secondary hover:text-primary disabled:opacity-40"
           aria-label="Send"
         >
