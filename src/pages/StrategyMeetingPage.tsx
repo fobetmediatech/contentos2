@@ -17,7 +17,7 @@ import { listClients } from '../lib/reviewRepo'
 export function StrategyMeetingPage() {
   const { externalId = '' } = useParams()
   const navigate = useNavigate()
-  const [result, setResult] = useState<{ joinStatus: string; clientId: string | null; chunks: number } | null>(null)
+  const [result, setResult] = useState<{ transcriptId: string; joinStatus: string; clientId: string | null; chunks: number } | null>(null)
   const [files, setFiles] = useState<File[]>([])
   const [extract, setExtract] = useState<ExtractResult | null>(null)
   const [pickedClient, setPickedClient] = useState('')
@@ -29,7 +29,7 @@ export function StrategyMeetingPage() {
 
   const ingest = useMutation({
     mutationFn: () => ingestMeeting(externalId),
-    onSuccess: (r) => setResult({ joinStatus: r.joinStatus, clientId: r.clientId, chunks: r.chunks }),
+    onSuccess: (r) => setResult({ transcriptId: r.transcriptId, joinStatus: r.joinStatus, clientId: r.clientId, chunks: r.chunks }),
   })
 
   const clients = useQuery({ queryKey: ['cb-clients'], queryFn: listClients })
@@ -37,7 +37,7 @@ export function StrategyMeetingPage() {
   /** Re-ingest with an explicit clientId — the manual-assignment path the join already supports. */
   const assign = useMutation({
     mutationFn: async (clientId: string) => ingestMeeting(externalId, clientId),
-    onSuccess: (r) => setResult({ joinStatus: r.joinStatus, clientId: r.clientId, chunks: r.chunks }),
+    onSuccess: (r) => setResult({ transcriptId: r.transcriptId, joinStatus: r.joinStatus, clientId: r.clientId, chunks: r.chunks }),
   })
 
   const createAndAssign = useMutation({
@@ -46,7 +46,7 @@ export function StrategyMeetingPage() {
       return ingestMeeting(externalId, c.clientId)
     },
     onSuccess: (r) => {
-      setResult({ joinStatus: r.joinStatus, clientId: r.clientId, chunks: r.chunks })
+      setResult({ transcriptId: r.transcriptId, joinStatus: r.joinStatus, clientId: r.clientId, chunks: r.chunks })
       void clients.refetch()
     },
   })
@@ -109,14 +109,34 @@ export function StrategyMeetingPage() {
               <span className="text-primary">{result.chunks} chunks stored.</span>{' '}
               <span className="text-muted font-mono text-[11px] uppercase tracking-wider">{result.joinStatus}</span>
               {result.clientId ? (
-                <button
-                  onClick={() => navigate(`/strategy/review/${result.clientId}`)}
-                  className="block mt-2 text-[var(--color-accent)] hover:underline"
-                >
-                  Continue to the brief review →
-                </button>
+                <div className="flex flex-col gap-2 mt-2">
+                  <button
+                    onClick={() => navigate(`/strategy/review/${result.clientId}`)}
+                    className="text-[var(--color-accent)] hover:underline"
+                  >
+                    Continue to the brief review →
+                  </button>
+                  {result?.transcriptId && (
+                    <button
+                      onClick={() => navigate(`/ask?transcript=${result.transcriptId}`)}
+                      className="text-sm text-secondary hover:text-primary border border-[rgba(var(--border-rgb),0.12)] rounded-md px-3 py-1.5 w-fit"
+                    >
+                      Ask about this call
+                    </button>
+                  )}
+                </div>
               ) : (
-                <p className="text-secondary mt-1">Not matched to a client — assign one below.</p>
+                <div className="flex flex-col gap-2 mt-2">
+                  <p className="text-secondary">Not matched to a client — assign one below.</p>
+                  {result?.transcriptId && (
+                    <button
+                      onClick={() => navigate(`/ask?transcript=${result.transcriptId}`)}
+                      className="text-sm text-secondary hover:text-primary border border-[rgba(var(--border-rgb),0.12)] rounded-md px-3 py-1.5 w-fit"
+                    >
+                      Ask about this call
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           </div>
