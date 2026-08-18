@@ -18,7 +18,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { requireClerkUser } from './auth.js'
 import { embedTexts } from './embed.js'
 import { geminiGenerateJson, pickGeminiKey } from './geminiJson.js'
-import { planQuery, relevantChunks, MIN_SIMILARITY, type RetrievedChunk } from './askQuery.js'
+import { planQuery, relevantChunks, metadataFilters, MIN_SIMILARITY, type RetrievedChunk, type AskScope } from './askQuery.js'
+import { rewriteFollowup, type Turn } from './rewriteFollowup.js'
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL ?? process.env.SUPABASE_URL ?? ''
 const SUPABASE_ANON = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY ?? ''
@@ -85,15 +86,37 @@ export async function handleAsk(req: VercelRequest, res: VercelResponse): Promis
   const token = bearer(req)
   // Signed-in is enough — this feature is open to the whole team (20260810000000).
 
-  const body = req.body as { question?: unknown; clientId?: unknown } | undefined
+  const body = req.body as
+    | { question?: unknown; clientId?: unknown; transcriptId?: unknown; history?: unknown }
+    | undefined
   const question = typeof body?.question === 'string' ? body.question.trim() : ''
-  const clientId = typeof body?.clientId === 'string' && body.clientId.trim() ? body.clientId.trim() : null
+  const clientId =
+    typeof body?.clientId === 'string' && body.clientId.trim() ? body.clientId.trim() : null
+  const transcriptId =
+    typeof body?.transcriptId === 'string' && body.transcriptId.trim() ? body.transcriptId.trim() : null
+  // Only well-formed turns survive; a malformed history must not reach the prompt. Content is
+  // capped at 2000 chars per turn — recentTurns() bounds the turn COUNT but not their length.
+  const history: Turn[] = Array.isArray(body?.history)
+    ? (body.history as unknown[])
+        .filter(
+          (t): t is Turn =>
+            Boolean(t) &&
+            typeof t === 'object' &&
+            typeof (t as Turn).content === 'string' &&
+            ((t as Turn).role === 'user' || (t as Turn).role === 'assistant'),
+        )
+        .map((t) => ({ role: t.role, content: t.content.slice(0, 2000) }))
+    : []
   if (!question) {
     res.status(400).json({ error: 'question required' })
     return
   }
 
-  const plan = planQuery(question, new Date())
+  // Rewrite BEFORE planning: planQuery must see the resolved question, or a date established in an
+  // earlier turn is lost and a follow-up silently widens from one meeting to every call.
+  const standalone = await rewriteFollowup(question, history, pickGeminiKey())
+  const plan = planQuery(standalone, new Date())
+  const scope: AskScope = { clientId, transcriptId }
 
   try {
     let excerpts: RetrievedChunk[] = []
@@ -102,18 +125,20 @@ export async function handleAsk(req: VercelRequest, res: VercelResponse): Promis
     if (plan.mode === 'metadata') {
       // Whole transcripts by client + date + type. No embedding — a date question must not be
       // answered by whatever happens to sound similar.
-      const filters = [
-        clientId ? `client_id=eq.${clientId}` : '',
-        plan.meetingType ? `meeting_type=eq.${plan.meetingType}` : '',
-        plan.dateFrom ? `meeting_date=gte.${plan.dateFrom}` : '',
-        plan.dateTo ? `meeting_date=lt.${plan.dateTo}` : '',
-      ].filter(Boolean).join('&')
+      const filters = metadataFilters(plan, scope)
 
       const r = await rest(
         `cb_transcripts?select=id,title,meeting_date,client_id,full_text&${filters}&order=meeting_date.desc&limit=5`,
         token,
         { method: 'GET' },
       )
+      // A non-2xx here (RLS denial, malformed uuid, database down) must not be read as "zero
+      // matches" — that would fall through to the no-relevant-content guard and get reported to
+      // the user as a calm, grounded refusal instead of the failure it actually is.
+      if (!r.ok) {
+        res.status(502).json({ error: 'retrieval_failed', detail: 'Could not read the transcripts. This is a failure, not an empty result.' })
+        return
+      }
       const rows = Array.isArray(r.json)
         ? (r.json as Array<{ id: string; title: string | null; meeting_date: string | null; client_id: string | null; full_text: string | null }>)
         : []
@@ -129,16 +154,25 @@ export async function handleAsk(req: VercelRequest, res: VercelResponse): Promis
         client_id: t.client_id,
       })).filter((e) => e.chunk_text.trim().length > 0)
     } else {
-      const [queryVector] = await embedTexts([question], pickGeminiKey(), 'RETRIEVAL_QUERY')
+      const [queryVector] = await embedTexts([standalone], pickGeminiKey(), 'RETRIEVAL_QUERY')
       const r = await rest('rpc/cb_match_chunks', token, {
         method: 'POST',
         body: {
           query_embedding: `[${queryVector.join(',')}]`,
           match_count: 12,
           p_client_id: clientId,
-          p_meeting_type: plan.meetingType,
+          // An explicit meeting pick supersedes the type parsed from the question — a transcript has
+          // exactly one type, so sending both can only ever narrow to nothing.
+          p_meeting_type: transcriptId ? null : plan.meetingType,
+          p_transcript_id: transcriptId,
         },
       })
+      // Same failure-vs-empty distinction as the metadata path above — e.g. PostgREST 404 PGRST202
+      // when the live rpc/cb_match_chunks signature does not yet match the arguments sent here.
+      if (!r.ok) {
+        res.status(502).json({ error: 'retrieval_failed', detail: 'Could not read the transcripts. This is a failure, not an empty result.' })
+        return
+      }
       const rows = Array.isArray(r.json) ? (r.json as RetrievedChunk[]) : []
       excerpts = relevantChunks(rows)
       transcriptsRead = new Set(rows.map((c) => c.title)).size
@@ -155,6 +189,7 @@ export async function handleAsk(req: VercelRequest, res: VercelResponse): Promis
             : `Nothing in the ingested transcripts is relevant to that question (nothing scored above ${MIN_SIMILARITY}).`,
         mode: plan.mode,
         citations: [],
+        interpretedAs: standalone === question ? null : standalone,
       })
       return
     }
@@ -167,13 +202,22 @@ export async function handleAsk(req: VercelRequest, res: VercelResponse): Promis
       .join('\n\n')
 
     const parsed = (await geminiGenerateJson(
-      `${SYSTEM}\n\nQUESTION: ${question}\n\nEXCERPTS:\n\n${context}`,
+      `${SYSTEM}\n\nQUESTION: ${standalone}\n\nEXCERPTS:\n\n${context}`,
       ANSWER_SCHEMA,
       pickGeminiKey(),
     )) as { answer?: string | null; used_chunk_ids?: string[] }
 
     const answer = typeof parsed?.answer === 'string' && parsed.answer.trim() ? parsed.answer.trim() : null
     const used = new Set(Array.isArray(parsed?.used_chunk_ids) ? parsed.used_chunk_ids : [])
+
+    let citedExcerpts = excerpts.filter((c) => used.has(c.chunk_id))
+    // If the model returned a non-null answer but an empty/malformed/hallucinated used_chunk_ids
+    // left nothing matched, do NOT render a confident answer under zero citations — the header
+    // promises "with citations". The answer IS grounded (every excerpt sent already cleared the
+    // similarity/metadata bar), so citing all of them is more honest than citing none.
+    if (answer !== null && citedExcerpts.length === 0) {
+      citedExcerpts = excerpts
+    }
 
     res.status(200).json({
       answer,
@@ -182,8 +226,7 @@ export async function handleAsk(req: VercelRequest, res: VercelResponse): Promis
       reason: answer === null ? 'not_covered_by_transcripts' : null,
       mode: plan.mode,
       transcriptsRead,
-      citations: excerpts
-        .filter((c) => used.has(c.chunk_id))
+      citations: citedExcerpts
         .map((c) => ({
           chunkId: c.chunk_id,
           meeting: c.title,
@@ -193,6 +236,7 @@ export async function handleAsk(req: VercelRequest, res: VercelResponse): Promis
           quote: c.chunk_text.slice(0, 400),
           similarity: c.similarity,
         })),
+      interpretedAs: standalone === question ? null : standalone,
     })
   } catch {
     res.status(502).json({ error: 'ask_failed' })

@@ -1,9 +1,8 @@
 /**
- * Review data access — cb_clients + cb_extractions.
+ * Review data access — cb_clients + cb_extractions + cb_transcripts.
  *
- * RLS on these tables is admin-only, so a non-admin gets empty results rather than an error. The
- * page checks useIsAdmin() and says so explicitly, because "no data" and "not allowed" look
- * identical from here.
+ * RLS on these tables is open to any signed-in member (20260810000000), so an empty result means
+ * there is genuinely nothing there rather than a permission problem.
  */
 import { supabase } from './supabaseClient'
 import type { Citation, ExtractionRow, Provenance, ReviewStatus } from './reviewGate'
@@ -134,4 +133,35 @@ export async function createRow(
     { onConflict: 'client_id,field_name' },
   )
   if (error) throw error
+}
+
+export interface IngestedTranscript {
+  id: string
+  title: string | null
+  meetingDate: number | null
+  meetingType: string
+  clientId: string | null
+}
+
+/**
+ * Ingested calls, newest first — the source for the /ask meeting picker.
+ *
+ * Reads cb_transcripts, NOT the Fireflies API. Fireflies is rate-limited per day and /strategy
+ * already spends a request per visit with no caching; a picker that called it would multiply that
+ * by every question asked. Reading the table also makes this list an honest answer to "is this call
+ * in the bot yet?".
+ */
+export async function listIngestedTranscripts(): Promise<IngestedTranscript[]> {
+  const { data, error } = await supabase
+    .from('cb_transcripts')
+    .select('id,title,meeting_date,meeting_type,client_id')
+    .order('meeting_date', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map((r: Record<string, unknown>) => ({
+    id: r.id as string,
+    title: (r.title as string | null) ?? null,
+    meetingDate: r.meeting_date ? new Date(r.meeting_date as string).getTime() : null,
+    meetingType: (r.meeting_type as string) ?? 'sales',
+    clientId: (r.client_id as string | null) ?? null,
+  }))
 }

@@ -124,3 +124,31 @@ export interface RetrievedChunk {
 /** Keep only chunks clearing the bar. An empty result must stop the pipeline, not soften it. */
 export const relevantChunks = (chunks: RetrievedChunk[]): RetrievedChunk[] =>
   chunks.filter((c) => typeof c.similarity === 'number' && c.similarity >= MIN_SIMILARITY)
+
+/** What the USER selected, as opposed to what their question implies. */
+export interface AskScope {
+  clientId: string | null
+  transcriptId: string | null
+}
+
+/**
+ * Build the PostgREST filter fragment for the metadata path.
+ *
+ * An explicitly selected transcript WINS over the date and meeting type parsed out of the question
+ * text: the transcriptId came from the user picking a row, the date came from a regex guess on a
+ * sentence. Applying both lets "what happened on the 12th" filter itself to nothing while the user
+ * is looking at the 5th's transcript — an empty result with no visible cause.
+ */
+export function metadataFilters(plan: QueryPlan, scope: AskScope): string {
+  // Both ids come from the request body and, via the /ask?transcript= URL, from a user-editable
+  // location — encode them so a value containing `&` cannot inject extra PostgREST parameters.
+  if (scope.transcriptId) return `id=eq.${encodeURIComponent(scope.transcriptId)}`
+  return [
+    scope.clientId ? `client_id=eq.${encodeURIComponent(scope.clientId)}` : '',
+    plan.meetingType ? `meeting_type=eq.${plan.meetingType}` : '',
+    plan.dateFrom ? `meeting_date=gte.${plan.dateFrom}` : '',
+    plan.dateTo ? `meeting_date=lt.${plan.dateTo}` : '',
+  ]
+    .filter(Boolean)
+    .join('&')
+}
