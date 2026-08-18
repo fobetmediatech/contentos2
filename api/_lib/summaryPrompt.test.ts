@@ -52,4 +52,17 @@ describe('normaliseSummary', () => {
     const out = normaliseSummary({ decisions: [{ text: 'Agreed' }] })
     expect(out.decisions).toEqual([{ text: 'Agreed', timestamp: '' }])
   })
+
+  // A key number with no figure is not a key number — it would print as "Monthly retainer: " on a
+  // document that gets sent to a client.
+  it('drops a key number missing either half, keeps a complete one', () => {
+    const out = normaliseSummary({
+      key_numbers: [
+        { label: 'Monthly retainer', timestamp: '1:00' },
+        { value: '80,000', timestamp: '2:00' },
+        { label: 'Ticket size', value: '2.5L', timestamp: '3:00' },
+      ],
+    })
+    expect(out.keyNumbers).toEqual([{ label: 'Ticket size', value: '2.5L', timestamp: '3:00' }])
+  })
 })

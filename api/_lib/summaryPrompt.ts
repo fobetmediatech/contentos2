@@ -129,6 +129,9 @@ export function normaliseSummary(raw: unknown): MeetingSummary {
       .filter((x) => x.text !== ''),
     keyNumbers: arr(r.key_numbers)
       .map((x) => ({ label: str(x.label), value: str(x.value), timestamp: str(x.timestamp) }))
-      .filter((x) => x.label !== '' || x.value !== ''),
+      // Both halves required: a label with no figure ("Monthly retainer: ") prints as an empty
+      // promise on a document that gets sent to the client. Every other section likewise drops
+      // entries with no content.
+      .filter((x) => x.label !== '' && x.value !== ''),
   }
 }
