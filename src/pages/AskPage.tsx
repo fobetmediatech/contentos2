@@ -100,7 +100,11 @@ export default function AskPage() {
     const question = input.trim()
     if (!question || busy || !scopeReady) return
     setInput('')
-    const history: Turn[] = messages.map((m) => ({ role: m.role, content: m.content }))
+    // Error and refusal text must never feed back into the rewrite prompt as if it were a real
+    // answer — only grounded answers (and the user's own turns) belong in conversation history.
+    const history: Turn[] = messages
+      .filter((m) => m.role === 'user' || m.tone === 'answer')
+      .map((m) => ({ role: m.role, content: m.content }))
     setMessages((prev) => [...prev, { role: 'user', content: question, tone: 'answer' }])
     setBusy(true)
     try {
@@ -134,9 +138,9 @@ export default function AskPage() {
   }
 
   return (
-    <div className="flex flex-col h-[100dvh]">
+    <div className="flex flex-col h-full">
       <header className="px-6 py-4 border-b border-[rgba(var(--border-rgb),0.12)]">
-        <h1 className="text-2xl" style={{ fontFamily: 'Instrument Serif, serif' }}>Ask</h1>
+        <h1 className="text-2xl font-serif italic">Ask</h1>
         <p className="text-sm text-secondary mt-1">
           Answers come only from ingested call transcripts, with citations.
         </p>
@@ -145,7 +149,10 @@ export default function AskPage() {
           {(['meeting', 'client', 'all'] as const).map((kind) => (
             <button
               key={kind}
-              onClick={() =>
+              onClick={() => {
+                // A tap on the already-active chip is a no-op — otherwise it silently resets a
+                // deep-linked meeting/client selection to whatever is first in the list.
+                if (scope.kind === kind) return
                 changeScope(
                   kind === 'meeting'
                     ? { kind: 'meeting', transcriptId: transcripts[0]?.id ?? '' }
@@ -153,7 +160,7 @@ export default function AskPage() {
                       ? { kind: 'client', clientId: clients[0]?.id ?? '' }
                       : { kind: 'all' },
                 )
-              }
+              }}
               className={`text-sm rounded-md px-3 py-1.5 border ${
                 scope.kind === kind
                   ? 'border-[var(--color-accent)] text-primary'

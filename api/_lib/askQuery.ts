@@ -140,9 +140,11 @@ export interface AskScope {
  * is looking at the 5th's transcript — an empty result with no visible cause.
  */
 export function metadataFilters(plan: QueryPlan, scope: AskScope): string {
-  if (scope.transcriptId) return `id=eq.${scope.transcriptId}`
+  // Both ids come from the request body and, via the /ask?transcript= URL, from a user-editable
+  // location — encode them so a value containing `&` cannot inject extra PostgREST parameters.
+  if (scope.transcriptId) return `id=eq.${encodeURIComponent(scope.transcriptId)}`
   return [
-    scope.clientId ? `client_id=eq.${scope.clientId}` : '',
+    scope.clientId ? `client_id=eq.${encodeURIComponent(scope.clientId)}` : '',
     plan.meetingType ? `meeting_type=eq.${plan.meetingType}` : '',
     plan.dateFrom ? `meeting_date=gte.${plan.dateFrom}` : '',
     plan.dateTo ? `meeting_date=lt.${plan.dateTo}` : '',

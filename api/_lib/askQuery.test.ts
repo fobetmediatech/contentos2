@@ -122,4 +122,11 @@ describe('metadataFilters', () => {
     )
     expect(out).toBe('id=eq.t9')
   })
+
+  // clientId/transcriptId come from the request body and, via /ask?transcript=, from a
+  // user-editable URL — an unencoded `&` would inject extra PostgREST query parameters.
+  it('encodes ids containing PostgREST-significant characters instead of passing them through', () => {
+    const out = metadataFilters(plan(), { clientId: null, transcriptId: 't9&client_id=eq.other' })
+    expect(out).toBe('id=eq.t9%26client_id%3Deq.other')
+  })
 })

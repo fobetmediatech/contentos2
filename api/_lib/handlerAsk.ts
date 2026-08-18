@@ -94,15 +94,18 @@ export async function handleAsk(req: VercelRequest, res: VercelResponse): Promis
     typeof body?.clientId === 'string' && body.clientId.trim() ? body.clientId.trim() : null
   const transcriptId =
     typeof body?.transcriptId === 'string' && body.transcriptId.trim() ? body.transcriptId.trim() : null
-  // Only well-formed turns survive; a malformed history must not reach the prompt.
+  // Only well-formed turns survive; a malformed history must not reach the prompt. Content is
+  // capped at 2000 chars per turn — recentTurns() bounds the turn COUNT but not their length.
   const history: Turn[] = Array.isArray(body?.history)
-    ? (body.history as unknown[]).filter(
-        (t): t is Turn =>
-          Boolean(t) &&
-          typeof t === 'object' &&
-          typeof (t as Turn).content === 'string' &&
-          ((t as Turn).role === 'user' || (t as Turn).role === 'assistant'),
-      )
+    ? (body.history as unknown[])
+        .filter(
+          (t): t is Turn =>
+            Boolean(t) &&
+            typeof t === 'object' &&
+            typeof (t as Turn).content === 'string' &&
+            ((t as Turn).role === 'user' || (t as Turn).role === 'assistant'),
+        )
+        .map((t) => ({ role: t.role, content: t.content.slice(0, 2000) }))
     : []
   if (!question) {
     res.status(400).json({ error: 'question required' })
@@ -129,6 +132,13 @@ export async function handleAsk(req: VercelRequest, res: VercelResponse): Promis
         token,
         { method: 'GET' },
       )
+      // A non-2xx here (RLS denial, malformed uuid, database down) must not be read as "zero
+      // matches" — that would fall through to the no-relevant-content guard and get reported to
+      // the user as a calm, grounded refusal instead of the failure it actually is.
+      if (!r.ok) {
+        res.status(502).json({ error: 'retrieval_failed', detail: 'Could not read the transcripts. This is a failure, not an empty result.' })
+        return
+      }
       const rows = Array.isArray(r.json)
         ? (r.json as Array<{ id: string; title: string | null; meeting_date: string | null; client_id: string | null; full_text: string | null }>)
         : []
@@ -157,6 +167,12 @@ export async function handleAsk(req: VercelRequest, res: VercelResponse): Promis
           p_transcript_id: transcriptId,
         },
       })
+      // Same failure-vs-empty distinction as the metadata path above — e.g. PostgREST 404 PGRST202
+      // when the live rpc/cb_match_chunks signature does not yet match the arguments sent here.
+      if (!r.ok) {
+        res.status(502).json({ error: 'retrieval_failed', detail: 'Could not read the transcripts. This is a failure, not an empty result.' })
+        return
+      }
       const rows = Array.isArray(r.json) ? (r.json as RetrievedChunk[]) : []
       excerpts = relevantChunks(rows)
       transcriptsRead = new Set(rows.map((c) => c.title)).size
@@ -194,6 +210,15 @@ export async function handleAsk(req: VercelRequest, res: VercelResponse): Promis
     const answer = typeof parsed?.answer === 'string' && parsed.answer.trim() ? parsed.answer.trim() : null
     const used = new Set(Array.isArray(parsed?.used_chunk_ids) ? parsed.used_chunk_ids : [])
 
+    let citedExcerpts = excerpts.filter((c) => used.has(c.chunk_id))
+    // If the model returned a non-null answer but an empty/malformed/hallucinated used_chunk_ids
+    // left nothing matched, do NOT render a confident answer under zero citations — the header
+    // promises "with citations". The answer IS grounded (every excerpt sent already cleared the
+    // similarity/metadata bar), so citing all of them is more honest than citing none.
+    if (answer !== null && citedExcerpts.length === 0) {
+      citedExcerpts = excerpts
+    }
+
     res.status(200).json({
       answer,
       // Even with excerpts in hand the model may find they do not answer the question — that is a
@@ -201,8 +226,7 @@ export async function handleAsk(req: VercelRequest, res: VercelResponse): Promis
       reason: answer === null ? 'not_covered_by_transcripts' : null,
       mode: plan.mode,
       transcriptsRead,
-      citations: excerpts
-        .filter((c) => used.has(c.chunk_id))
+      citations: citedExcerpts
         .map((c) => ({
           chunkId: c.chunk_id,
           meeting: c.title,
