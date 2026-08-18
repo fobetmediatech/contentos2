@@ -198,6 +198,23 @@ export default function AskPage() {
               ))}
             </select>
           )}
+
+          {scope.kind === 'meeting' && scope.transcriptId && (
+            <>
+              <a
+                href={`/print/meeting/${scope.transcriptId}`}
+                className="text-sm text-secondary hover:text-primary border border-[rgba(var(--border-rgb),0.12)] rounded-md px-3 py-1.5"
+              >
+                Summary PDF
+              </a>
+              <a
+                href={`/print/meeting/${scope.transcriptId}?view=transcript`}
+                className="text-sm text-secondary hover:text-primary border border-[rgba(var(--border-rgb),0.12)] rounded-md px-3 py-1.5"
+              >
+                Transcript PDF
+              </a>
+            </>
+          )}
         </div>
 
         {loadError && <p className="text-sm text-secondary mt-2">Could not load meetings: {loadError}</p>}
