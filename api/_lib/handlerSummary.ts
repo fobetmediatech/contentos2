@@ -71,10 +71,20 @@ export async function handleSummary(req: VercelRequest, res: VercelResponse): Pr
 
   try {
     const r = await rest(
-      `cb_transcripts?select=id,title,meeting_date,full_text,summary,summary_generated_at&id=eq.${transcriptId}&limit=1`,
+      `cb_transcripts?select=id,title,meeting_date,full_text,summary,summary_generated_at&id=eq.${encodeURIComponent(transcriptId)}&limit=1`,
       token,
       { method: 'GET' },
     )
+    // A non-2xx here (malformed uuid, backend failure, database down) is NOT "no such transcript".
+    // Reporting it as one tells the caller a confident falsehood about their data — the same bug
+    // handlerAsk.ts guards against on its own reads.
+    if (!r.ok) {
+      res.status(502).json({
+        error: 'summary_retrieval_failed',
+        detail: 'Could not read the transcript. This is a failure, not a missing record.',
+      })
+      return
+    }
     const row = Array.isArray(r.json) ? (r.json as TranscriptRow[])[0] : undefined
     if (!row) {
       // Indistinguishable from "RLS hid it", which is why the message says both.
@@ -110,11 +120,14 @@ export async function handleSummary(req: VercelRequest, res: VercelResponse): Pr
     const generatedAt = new Date().toISOString()
 
     // A failed write is not fatal — the summary is still returned, just uncached. Losing the cache
-    // costs a repeat call; failing the request costs the user their document.
-    await rest(`cb_transcripts?id=eq.${transcriptId}`, token, {
+    // costs a repeat call; failing the request costs the user their document. Logged because a
+    // silently failing cache degrades into "regenerate on every view" with no signal at all.
+    // No transcript content in the log line.
+    const wrote = await rest(`cb_transcripts?id=eq.${encodeURIComponent(transcriptId)}`, token, {
       method: 'PATCH',
       body: { summary, summary_generated_at: generatedAt },
     })
+    if (!wrote.ok) console.error('[summary] cache write failed for transcript', transcriptId)
 
     res.status(200).json({
       summary,
