@@ -11,7 +11,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Send } from 'lucide-react'
+import { Bot, Send, User } from 'lucide-react'
 import { askTranscripts, type AskCitation, type Turn } from '../lib/askClient'
 import {
   listIngestedTranscripts,
@@ -220,39 +220,51 @@ export default function AskPage() {
         {messages.map((m, i) => (
           <div key={i}>
             {m.role === 'user' ? (
-              <p className="text-primary">{m.content}</p>
+              <div className="flex items-end justify-end gap-2">
+                <div className="max-w-[75%] px-4 py-2.5 rounded-2xl rounded-br-sm bg-[var(--color-accent)] text-white text-sm leading-relaxed">
+                  {m.content}
+                </div>
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-surface-raised flex items-center justify-center">
+                  <User size={14} className="text-secondary" />
+                </div>
+              </div>
             ) : (
-              <div
-                className="border-l-2 pl-4"
-                style={{
-                  borderColor:
-                    m.tone === 'error'
-                      ? 'var(--color-error)'
-                      : m.tone === 'empty'
-                        ? 'rgba(var(--border-rgb),0.3)'
-                        : 'var(--color-ai-tint)',
-                }}
-              >
-                {m.tone === 'error' && (
-                  <p className="text-xs mb-1" style={{ color: 'var(--color-error)' }}>
-                    Request failed
-                  </p>
-                )}
-                {m.interpretedAs && <p className="text-xs text-secondary mb-1">Read as: {m.interpretedAs}</p>}
-                <p className="whitespace-pre-wrap text-primary">{m.content}</p>
-                {m.citations && m.citations.length > 0 && (
-                  <ul className="mt-2 space-y-1">
-                    {m.citations.map((c) => (
-                      <li key={c.chunkId} className="text-xs text-secondary">
-                        <span style={{ fontFamily: 'DM Mono, monospace' }}>{c.timestamp}</span>
-                        {' · '}
-                        {c.meeting ?? 'unknown call'}
-                        {c.speaker ? ` · ${c.speaker}` : ''}
-                        <span className="block opacity-80">"{c.quote}"</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+              <div className="flex items-end gap-2">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[rgba(var(--accent-rgb),0.12)] flex items-center justify-center">
+                  <Bot size={14} className="text-[var(--color-accent)]" />
+                </div>
+                <div className="flex flex-col gap-2 max-w-[80%]">
+                  <div
+                    className={`px-4 py-2.5 rounded-2xl rounded-bl-sm text-sm leading-relaxed whitespace-pre-wrap ${
+                      m.tone === 'error'
+                        ? 'bg-[rgba(224,92,92,0.1)] border border-[rgba(224,92,92,0.2)] text-danger'
+                        : m.tone === 'answer'
+                          ? 'bg-surface border border-[rgba(var(--border-rgb),0.08)] border-l-2 border-l-[var(--color-ai-tint)] text-primary'
+                          : 'bg-surface border border-[rgba(var(--border-rgb),0.08)] text-primary'
+                    }`}
+                  >
+                    {m.tone === 'error' && (
+                      <p className="text-xs mb-1" style={{ color: 'var(--color-error)' }}>
+                        Request failed
+                      </p>
+                    )}
+                    {m.interpretedAs && <p className="text-xs text-secondary mb-1">Read as: {m.interpretedAs}</p>}
+                    {m.content}
+                    {m.citations && m.citations.length > 0 && (
+                      <ul className="mt-2 space-y-1">
+                        {m.citations.map((c) => (
+                          <li key={c.chunkId} className="text-xs text-secondary">
+                            <span style={{ fontFamily: 'DM Mono, monospace' }}>{c.timestamp}</span>
+                            {' · '}
+                            {c.meeting ?? 'unknown call'}
+                            {c.speaker ? ` · ${c.speaker}` : ''}
+                            <span className="block opacity-80">"{c.quote}"</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
           </div>
