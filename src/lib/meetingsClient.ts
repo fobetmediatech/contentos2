@@ -124,3 +124,39 @@ export const createClient = (displayName: string, email?: string) =>
     displayName,
     ...(email ? { sheet: { emails: [email] } } : {}),
   })
+
+// ---------------------------------------------------------------------------------------------
+// Meeting summary (printable minutes)
+// ---------------------------------------------------------------------------------------------
+
+export interface MeetingSummaryView {
+  discussion: Array<{ text: string; timestamp: string }>
+  decisions: Array<{ text: string; timestamp: string }>
+  actionItems: Array<{ text: string; owner: string | null; timestamp: string }>
+  keyNumbers: Array<{ label: string; value: string; timestamp: string }>
+}
+
+export interface SummaryResponse {
+  summary: MeetingSummaryView
+  cached: boolean
+  title: string | null
+  meetingDate: string | null
+  generatedAt: string | null
+}
+
+/** Plain printable minutes. Cached server-side; `force` regenerates. */
+export async function meetingSummary(transcriptId: string, force = false): Promise<SummaryResponse> {
+  const token = await getClerkSessionToken()
+  const res = await fetch('/api/strategy-ai', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ action: 'summary', transcriptId, force }),
+  })
+  const json = (await res.json().catch(() => null)) as (SummaryResponse & { error?: string; detail?: string }) | null
+  if (!res.ok) throw new Error(json?.detail ?? json?.error ?? `summary ${res.status}`)
+  if (!json) throw new Error('summary returned no body')
+  return json
+}
