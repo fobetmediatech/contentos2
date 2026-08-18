@@ -491,8 +491,8 @@ Also add one line to the file's header comment beside the other actions:
 
 - [ ] **Step 3: Confirm the function count is still legal**
 
-Run: `ls api/*.ts | wc -l`
-Expected: `11`. This task added a file to `api/_lib/`, not to `api/`. If this prints 12 or more, a file was created in the wrong directory — move it to `_lib/` before going further.
+Run: `ls api/*.ts | grep -v '\.test\.ts$' | wc -l`
+Expected: `11`. Note the `grep -v` — `api/` also contains `*.test.ts` files, which are NOT deployed as functions, so a bare `ls api/*.ts | wc -l` prints 17 and means nothing. This task added a file to `api/_lib/`, not to `api/`. If this prints 12 or more, a file was created in the wrong directory — move it to `_lib/` before going further.
 
 - [ ] **Step 4: Typecheck and run the full suite**
 
