@@ -108,36 +108,26 @@ export function StrategyMeetingPage() {
             <div>
               <span className="text-primary">{result.chunks} chunks stored.</span>{' '}
               <span className="text-muted font-mono text-[11px] uppercase tracking-wider">{result.joinStatus}</span>
-              {result.clientId ? (
-                <div className="flex flex-col gap-2 mt-2">
+              <div className="flex flex-col gap-2 mt-2">
+                {result.clientId ? (
                   <button
                     onClick={() => navigate(`/strategy/review/${result.clientId}`)}
                     className="text-[var(--color-accent)] hover:underline"
                   >
                     Continue to the brief review →
                   </button>
-                  {result?.transcriptId && (
-                    <button
-                      onClick={() => navigate(`/ask?transcript=${result.transcriptId}`)}
-                      className="text-sm text-secondary hover:text-primary border border-[rgba(var(--border-rgb),0.12)] rounded-md px-3 py-1.5 w-fit"
-                    >
-                      Ask about this call
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <div className="flex flex-col gap-2 mt-2">
+                ) : (
                   <p className="text-secondary">Not matched to a client — assign one below.</p>
-                  {result?.transcriptId && (
-                    <button
-                      onClick={() => navigate(`/ask?transcript=${result.transcriptId}`)}
-                      className="text-sm text-secondary hover:text-primary border border-[rgba(var(--border-rgb),0.12)] rounded-md px-3 py-1.5 w-fit"
-                    >
-                      Ask about this call
-                    </button>
-                  )}
-                </div>
-              )}
+                )}
+                {result.transcriptId && (
+                  <button
+                    onClick={() => navigate(`/ask?transcript=${result.transcriptId}`)}
+                    className="text-sm text-secondary hover:text-primary border border-[rgba(var(--border-rgb),0.12)] rounded-md px-3 py-1.5 w-fit"
+                  >
+                    Ask about this call
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
