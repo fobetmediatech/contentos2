@@ -10,6 +10,7 @@
  *   deck-slots  -> write the deck's 10 AI slots (returns them; stores nothing)
  *   ask         -> QnA over the transcripts
  *   summary     -> plain printable minutes for one transcript (cached on cb_transcripts)
+ *   brief       -> one-page discovery-call brief for one transcript (uncached)
  *
  * Each handler does its own auth check via requireClerkUser — auth belongs with the thing it
  * protects, so a future action cannot skip it by forgetting to check here. That check confirms
@@ -21,6 +22,7 @@ import { handleExtract } from './_lib/handlerExtract.js'
 import { handleDeckSlots } from './_lib/handlerDeckSlots.js'
 import { handleAsk } from './_lib/handlerAsk.js'
 import { handleSummary } from './_lib/handlerSummary.js'
+import { handleBrief } from './_lib/handlerBrief.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== 'POST') {
@@ -37,7 +39,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     case 'deck-slots': return handleDeckSlots(req, res)
     case 'ask': return handleAsk(req, res)
     case 'summary': return handleSummary(req, res)
+    case 'brief': return handleBrief(req, res)
     default:
-      res.status(400).json({ error: 'unknown action', allowed: ['extract', 'deck-slots', 'ask', 'summary'] })
+      res.status(400).json({ error: 'unknown action', allowed: ['extract', 'deck-slots', 'ask', 'summary', 'brief'] })
   }
 }

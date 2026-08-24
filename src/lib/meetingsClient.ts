@@ -160,3 +160,48 @@ export async function meetingSummary(transcriptId: string, force = false): Promi
   if (!json) throw new Error('summary returned no body')
   return json
 }
+
+// ---------------------------------------------------------------------------------------------
+// Discovery-call brief (printable one-pager)
+// ---------------------------------------------------------------------------------------------
+
+export interface BriefItem {
+  text: string
+  assumed: boolean
+}
+
+export interface DiscoveryBriefView {
+  clientName: string
+  clientNiche: string
+  goals: BriefItem[]
+  contentDirection: BriefItem[]
+  audienceGeography: string
+  audienceProfile: string
+  creatorsAdmired: BriefItem[]
+  otherNotes: BriefItem[]
+}
+
+export interface BriefResponse {
+  brief: DiscoveryBriefView
+  cached: boolean
+  title: string | null
+  meetingDate: string | null
+  generatedAt: string | null
+}
+
+/** One-page discovery-call brief. Cached server-side; `force` regenerates. */
+export async function meetingBrief(transcriptId: string, force = false): Promise<BriefResponse> {
+  const token = await getClerkSessionToken()
+  const res = await fetch('/api/strategy-ai', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ action: 'brief', transcriptId, force }),
+  })
+  const json = (await res.json().catch(() => null)) as (BriefResponse & { error?: string; detail?: string }) | null
+  if (!res.ok) throw new Error(json?.detail ?? json?.error ?? `brief ${res.status}`)
+  if (!json) throw new Error('brief returned no body')
+  return json
+}
