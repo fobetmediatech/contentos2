@@ -165,3 +165,30 @@ export async function listIngestedTranscripts(): Promise<IngestedTranscript[]> {
     clientId: (r.client_id as string | null) ?? null,
   }))
 }
+
+/**
+ * The raw transcript text for the printable view. Throws on read failure; returns null when no such row.
+ *
+ * full_text, NOT the chunks: chunks overlap on purpose for retrieval quality, so concatenating them
+ * duplicates text at every boundary.
+ */
+export async function getTranscriptText(
+  id: string,
+): Promise<{ title: string | null; meetingDate: number | null; fullText: string | null } | null> {
+  const { data, error } = await supabase
+    .from('cb_transcripts')
+    .select('title,meeting_date,full_text')
+    .eq('id', id)
+    .maybeSingle()
+  // A query error is NOT "no such transcript" — reporting it as one tells the user a confident
+  // falsehood about their data. Throw so the caller can say the read failed; reserve null for a
+  // row that genuinely is not there (or is not readable, which .maybeSingle() also returns as no row).
+  if (error) throw error
+  if (!data) return null
+  const r = data as Record<string, unknown>
+  return {
+    title: (r.title as string | null) ?? null,
+    meetingDate: r.meeting_date ? new Date(r.meeting_date as string).getTime() : null,
+    fullText: (r.full_text as string | null) ?? null,
+  }
+}

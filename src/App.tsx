@@ -10,6 +10,7 @@ import { useCorpusStore } from './store/corpusStore'
 import { AppLayout } from './components/AppLayout'
 import { ChatPage } from './pages/ChatPage' // eager: primary landing route (index)
 import { SignInPage } from './pages/SignInPage' // eager: public entry — no flash for signed-out visitors
+import MeetingPrintPage from './pages/MeetingPrintPage' // eager: no AppLayout Suspense boundary wraps this route
 import { BreakGlassListener } from './components/BreakGlassListener'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ChaiToaster } from './components/ChaiToaster'
@@ -156,6 +157,10 @@ export default function App() {
                     keys are env-only now, configured via .env / Vercel env, no in-app entry) */}
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
+
+              {/* Printable meeting minutes / transcript — rendered outside AppLayout so no nav
+                  chrome appears on the page; the browser's print-to-PDF is the export. */}
+              <Route path="print/meeting/:transcriptId" element={<MeetingPrintPage />} />
             </Route>
           </Routes>
         </BrowserRouter>

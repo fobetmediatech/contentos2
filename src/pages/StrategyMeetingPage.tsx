@@ -120,12 +120,30 @@ export function StrategyMeetingPage() {
                   <p className="text-secondary">Not matched to a client — assign one below.</p>
                 )}
                 {result.transcriptId && (
-                  <button
-                    onClick={() => navigate(`/ask?transcript=${result.transcriptId}`)}
-                    className="text-sm text-secondary hover:text-primary border border-[rgba(var(--border-rgb),0.12)] rounded-md px-3 py-1.5 w-fit"
-                  >
-                    Ask about this call
-                  </button>
+                  <>
+                    <button
+                      onClick={() => navigate(`/ask?transcript=${result.transcriptId}`)}
+                      className="text-sm text-secondary hover:text-primary border border-[rgba(var(--border-rgb),0.12)] rounded-md px-3 py-1.5 w-fit"
+                    >
+                      Ask about this call
+                    </button>
+                    <a
+                      href={`/print/meeting/${result.transcriptId}`}
+                      target="_blank"
+                      rel="noopener"
+                      className="text-sm text-secondary hover:text-primary border border-[rgba(var(--border-rgb),0.12)] rounded-md px-3 py-1.5"
+                    >
+                      Summary PDF
+                    </a>
+                    <a
+                      href={`/print/meeting/${result.transcriptId}?view=transcript`}
+                      target="_blank"
+                      rel="noopener"
+                      className="text-sm text-secondary hover:text-primary border border-[rgba(var(--border-rgb),0.12)] rounded-md px-3 py-1.5"
+                    >
+                      Transcript PDF
+                    </a>
+                  </>
                 )}
               </div>
             </div>
