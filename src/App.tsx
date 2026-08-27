@@ -34,6 +34,12 @@ const StrategyMeetingPage = lazy(() => import('./pages/StrategyMeetingPage').the
 const StrategyDeckPage = lazy(() => import('./pages/StrategyDeckPage').then((m) => ({ default: m.StrategyDeckPage })))
 const ScriptStudioPage = lazy(() => import('./pages/ScriptStudioPage').then((m) => ({ default: m.ScriptStudioPage })))
 const AskPage = lazy(() => import('./pages/AskPage'))
+const PerformanceManagementPage = lazy(() => import('./pages/performance/PerformanceManagementPage'))
+const TaskRecordsSection = lazy(() => import('./pages/performance/TaskRecordsSection').then((m) => ({ default: m.TaskRecordsSection })))
+const TaskAssignSection = lazy(() => import('./pages/performance/TaskAssignSection').then((m) => ({ default: m.TaskAssignSection })))
+const EmployeePerformanceSection = lazy(() => import('./pages/performance/EmployeePerformanceSection').then((m) => ({ default: m.EmployeePerformanceSection })))
+const InboxSection = lazy(() => import('./pages/performance/InboxSection').then((m) => ({ default: m.InboxSection })))
+const TeamsSection = lazy(() => import('./pages/performance/TeamsSection').then((m) => ({ default: m.TeamsSection })))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -148,6 +154,19 @@ export default function App() {
 
                 {/* Script Studio — reference reel/Short → new-topic script remix */}
                 <Route path="script-studio" element={<ScriptStudioPage />} />
+
+                {/* Performance Management — task assignment + completion timing. Nested sections
+                    are deep-linkable; an unknown child recovers to the module's default section
+                    rather than falling through to the global wildcard (which would land on Chat). */}
+                <Route path="performance" element={<PerformanceManagementPage />}>
+                  <Route index element={<Navigate to="inbox" replace />} />
+                  <Route path="inbox" element={<InboxSection />} />
+                  <Route path="tasks/records" element={<TaskRecordsSection />} />
+                  <Route path="tasks/assign" element={<TaskAssignSection />} />
+                  <Route path="teams" element={<TeamsSection />} />
+                  <Route path="results/employees" element={<EmployeePerformanceSection />} />
+                  <Route path="*" element={<Navigate to="/performance/inbox" replace />} />
+                </Route>
 
                 {/* Instagram account tracking — list + per-account detail */}
                 <Route path="tracking" element={<TrackingListPage />} />
