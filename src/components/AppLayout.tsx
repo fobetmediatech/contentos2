@@ -1,10 +1,11 @@
 import { Suspense, useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Brain, MessageSquare, CalendarDays, Wallet, BarChart2, Clapperboard, ShieldCheck, Target, Menu, X, Sun, Moon, Wand2, HelpCircle } from 'lucide-react'
+import { Brain, MessageSquare, CalendarDays, Wallet, BarChart2, Clapperboard, ShieldCheck, Target, Menu, X, Sun, Moon, Wand2, HelpCircle, ClipboardCheck } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { UserButton } from '@clerk/react'
 import { useCorpusStore } from '../store/corpusStore'
 import { useIsFinance } from '../hooks/useIsFinance'
+import { useUnreadNotifications } from '../hooks/useUnreadNotifications'
 import { useIsAdmin } from '../hooks/useIsAdmin'
 import { useColorScheme } from '../hooks/useColorScheme'
 import { useThemeStore } from '../store/themeStore'
@@ -33,6 +34,7 @@ const NAV_SECTIONS: NavSection[] = [
   { path: '/script-studio', label: 'Script Studio', icon: Wand2 },
   { path: '/calendar', label: 'Calendar', icon: CalendarDays },
   { path: '/payments', label: 'Payments', icon: Wallet, financeOnly: true },
+  { path: '/performance', label: 'Performance', icon: ClipboardCheck },
   { path: '/memory', label: 'Memory', icon: Brain },
   { path: '/gallery', label: 'Gallery', icon: Clapperboard },
   { path: '/tracking', label: 'Dashboard', icon: BarChart2 },
@@ -56,6 +58,7 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
   const location = useLocation()
   const navigate = useNavigate()
   const corpusCount = useCorpusStore((s) => s.count)
+  const unreadCount = useUnreadNotifications()
   const { isFinance } = useIsFinance()
   const { isAdmin } = useIsAdmin()
   const scheme = useColorScheme()
@@ -81,7 +84,11 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
       <Link
         key={s.path}
         to={s.path}
-        title={s.path === '/memory' && corpusCount > 0 ? `${s.label} · ${corpusCount} remembered` : s.label}
+        title={
+          s.path === '/memory' && corpusCount > 0 ? `${s.label} · ${corpusCount} remembered`
+          : s.path === '/performance' && unreadCount > 0 ? `${s.label} · ${unreadCount} unread`
+          : s.label
+        }
         className="group/chip flex items-center h-9 px-2.5 rounded-full text-secondary hover:text-primary hover:bg-surface-raised hover:-translate-y-0.5 transition-[color,background-color,transform] duration-150"
       >
         <Icon size={15} className={s.path === '/memory' ? 'text-[var(--color-accent)]' : undefined} />
@@ -159,6 +166,12 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
                 {activeSection.path === '/memory' && corpusCount > 0 && (
                   <span className="text-[11px] font-medium tabular-nums px-1.5 py-0.5 rounded-full bg-[rgba(var(--accent-rgb),0.24)] text-[var(--color-accent-light)]">
                     {corpusCount}
+                  </span>
+                )}
+                {activeSection.path === '/performance' && unreadCount > 0 && (
+                  <span className="text-[11px] font-medium tabular-nums px-1.5 py-0.5 rounded-full bg-[rgba(var(--accent-rgb),0.24)] text-[var(--color-accent-light)]">
+                    {unreadCount}
+                    <span className="sr-only"> unread notifications</span>
                   </span>
                 )}
               </Link>
@@ -298,6 +311,12 @@ export function AppLayout({ noPadding = false }: AppLayoutProps) {
                   >
                     <Icon size={18} className={s.path === '/memory' ? 'text-[var(--color-accent)]' : undefined} />
                     {s.label}
+                    {s.path === '/performance' && unreadCount > 0 && (
+                      <span className="ml-auto text-[11px] font-medium tabular-nums px-1.5 py-0.5 rounded-full bg-[rgba(var(--accent-rgb),0.15)] text-[var(--color-accent-light)]">
+                        {unreadCount}
+                        <span className="sr-only"> unread notifications</span>
+                      </span>
+                    )}
                     {s.path === '/memory' && corpusCount > 0 && (
                       <span className="ml-auto text-[11px] font-medium tabular-nums px-1.5 py-0.5 rounded-full bg-[rgba(var(--accent-rgb),0.15)] text-[var(--color-accent-light)]">
                         {corpusCount}

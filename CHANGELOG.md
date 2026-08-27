@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [3.8.0.0] — 2026-08-26
+
+**Performance Management.** A new module for assigning work and seeing how it landed. HR creates teams, staffs them from people who have signed in, and assigns tasks with deadlines. The assignee marks their own work done and the record shows exactly how it went — completed at, early by, delayed by. An in-app inbox notifies people the moment work reaches them. Deliberately excludes marks and scoring: the formula is an open product decision, and the raw timing facts are preserved so any future formula can be applied to history without rewriting it.
+
+### Added
+- **Performance module** at `/performance` — five deep-linkable sections (Inbox, All task records, Task assignment, Teams, Employee performance) behind the standard `ProtectedRoute`, lazy-loaded so none of it enters the initial Chat bundle.
+- **`hr` role** — a separate grant from `admin` and `finance`; holding one never implies another. `is_hr()`, `admin_grant_hr()`, `admin_revoke_hr()` mirror the existing finance helpers, with the role name hardcoded in each RPC so no admin can mint an arbitrary role.
+- **HR access panel** on Team Access — admins grant/revoke HR by email, resolved to a Clerk id server-side.
+- **Teams** — `performance_teams` + `performance_team_members`. Members are picked from the Clerk user list, never typed, so every membership row carries a real user id.
+- **Task assignment with deadlines** — pick a team, then a person from its roster. A team is optional; a genuine one-off task does not have to invent one.
+- **Completion timing** — `taskTiming()` derives "Early by 3h" / "Delayed by 2d 4h" / "On time" at read time from `due_at` and `completed_at` alone. Nothing derived is ever stored, so a future change to how lateness is defined re-derives old records correctly instead of corrupting them.
+- **In-app inbox** — `performance_notifications`, written exclusively by database triggers on task assignment, task reopening, and team membership. No INSERT policy exists on the table, so a client cannot fabricate a notification for someone else. Unread counts badge the Performance nav on desktop and mobile.
+- **`useNow`** hook — a clock held in state and advanced only from an interval, so overdue readings are pure during render.
+
+### Changed
+- **`/api/team-access`** gains two actions behind its existing admin gate: `list-users` (also open to HR, who need it to staff teams) and `grant-hr`. Added as actions rather than new files — Vercel's Hobby plan caps a deployment at 12 Serverless Functions and this repo sits at 11. The existing `{ email }` grant path is unchanged.
+
+### Security
+- **Completion timestamps cannot be forged.** Assignees have no UPDATE policy on `performance_tasks`; `complete_task()` is SECURITY DEFINER, stamps `now()` server-side, and self-checks that the caller owns the task. A member cannot backdate a completion or move their own deadline.
+- **Least privilege for ordinary members.** Migration `20260826000002` restricts `performance_teams` and `performance_team_members` reads to HR/admin, correcting an earlier policy that let any signed-in user read every team and roster. A member now sees only tasks assigned to them, their own totals, and their own notifications.
+
 ## [3.7.0.0] — 2026-06-25
 
 **Repurpose Reel pipeline.** A 4th conversational pipeline: give a viral reel URL + a client (an @handle or pasted scripts) and get the reel rewritten in that client's voice — a full shoot-ready package (spoken hook, beat-by-beat script, caption, CTA, on-screen text) plus 3 hook variants. Client voice profiles are saved to the shared team corpus and editable on a new Memory "Voices" tab.

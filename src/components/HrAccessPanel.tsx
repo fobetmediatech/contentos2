@@ -1,15 +1,18 @@
 /**
- * TeamAccessPage — admin-only. Grant/revoke who can see the Payments section (finance role),
- * entirely from the app: add a person by email, remove a member. Surfaced from the account
- * dropdown. Server-side RLS + SECURITY DEFINER functions are the real enforcement.
+ * HrAccessPanel — grant/revoke the HR role, rendered under the finance panel on Team Access.
+ *
+ * A separate component rather than a generalization of the finance panel: the two grants have
+ * different consequences (finance sees money, HR assigns work and staffs teams), and keeping the
+ * working finance flow untouched was worth more than removing the duplication.
+ *
+ * HR is its own grant — it confers no finance access and no admin rights, and admins do not get
+ * it implicitly. Server-side, admin_grant_hr/admin_revoke_hr re-check is_admin().
  */
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Lock, UserPlus, Trash2, ShieldCheck } from 'lucide-react'
-import { useIsAdmin } from '../hooks/useIsAdmin'
-import { listFinanceMembers, grantFinanceByEmail, revokeFinance, type GrantReason } from '../lib/teamAccess'
-import { ConfirmDialog } from '../components/ConfirmDialog'
-import { HrAccessPanel } from '../components/HrAccessPanel'
+import { ClipboardCheck, UserPlus, Trash2 } from 'lucide-react'
+import { listHrMembers, grantHrByEmail, revokeHr, type GrantReason } from '../lib/teamAccess'
+import { ConfirmDialog } from './ConfirmDialog'
 
 const GRANT_ERROR: Record<GrantReason, string> = {
   not_found: 'No account found for that email — ask them to sign in once, then try again.',
@@ -21,26 +24,21 @@ const GRANT_ERROR: Record<GrantReason, string> = {
 const inputCls =
   'bg-[var(--color-surface-raised)] border border-[rgba(var(--border-rgb),0.08)] rounded-md px-3 py-2 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-[var(--color-accent)]'
 
-export function TeamAccessPage() {
-  const { isAdmin, isLoading } = useIsAdmin()
+export function HrAccessPanel() {
   const qc = useQueryClient()
   const [email, setEmail] = useState('')
   const [notice, setNotice] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
   const [confirmTarget, setConfirmTarget] = useState<{ userId: string; name: string } | null>(null)
 
-  const { data: members = [] } = useQuery({
-    queryKey: ['finance-members'],
-    queryFn: listFinanceMembers,
-    enabled: isAdmin,
-  })
-  const invalidate = () => void qc.invalidateQueries({ queryKey: ['finance-members'] })
+  const { data: members = [] } = useQuery({ queryKey: ['hr-members'], queryFn: listHrMembers })
+  const invalidate = () => void qc.invalidateQueries({ queryKey: ['hr-members'] })
 
   const grant = useMutation({
-    mutationFn: () => grantFinanceByEmail(email),
+    mutationFn: () => grantHrByEmail(email),
     onSuccess: (r) => {
       if (r.ok) {
         setEmail('')
-        setNotice({ kind: 'ok', text: `Granted finance access to ${r.email}.` })
+        setNotice({ kind: 'ok', text: `Granted HR access to ${r.email}.` })
         invalidate()
       } else {
         setNotice({ kind: 'err', text: GRANT_ERROR[r.reason] })
@@ -49,91 +47,59 @@ export function TeamAccessPage() {
     onError: () => setNotice({ kind: 'err', text: GRANT_ERROR.error }),
   })
 
-  const revoke = useMutation({
-    mutationFn: (userId: string) => revokeFinance(userId),
-    onSuccess: invalidate,
-  })
+  const revoke = useMutation({ mutationFn: revokeHr, onSuccess: invalidate })
 
-  const addMember = () => {
+  const add = () => {
     if (!email.trim() || grant.isPending) return
     setNotice(null)
     grant.mutate()
   }
 
-  if (isLoading) {
-    return (
-      <div className="max-w-3xl mx-auto">
-        <p className="text-muted text-sm">Checking access…</p>
-      </div>
-    )
-  }
-
-  if (!isAdmin) {
-    return (
-      <div className="max-w-3xl mx-auto">
-        <div className="bg-surface border border-[rgba(var(--border-rgb),0.08)] rounded-lg p-12 text-center">
-          <Lock size={28} className="mx-auto text-muted mb-3" />
-          <h1 className="text-primary text-lg font-medium mb-1">Team Access is restricted</h1>
-          <p className="text-secondary text-sm">Only admins can manage finance and HR access.</p>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className="max-w-3xl mx-auto">
-      <header className="mb-5">
-        <h1 className="font-serif italic text-3xl text-primary flex items-center gap-2">
-          <ShieldCheck size={24} className="text-[var(--color-accent)]" /> Team Access
-        </h1>
-        <p className="text-secondary text-sm mt-1">
-          Grant or revoke the finance role (Payments) and the HR role (Performance). Admin only.
-        </p>
-      </header>
+    <section className="mt-10">
+      <h2 className="font-serif italic text-2xl text-primary flex items-center gap-2 mb-1">
+        <ClipboardCheck size={20} className="text-[var(--color-accent)]" aria-hidden="true" /> HR access
+      </h2>
+      <p className="text-secondary text-sm mb-4">
+        HR can create teams, add members, and assign tasks in the Performance section. Separate from finance and admin.
+      </p>
 
-      {/* Add by email */}
       <div className="bg-surface border border-[rgba(var(--border-rgb),0.08)] rounded-lg p-4 mb-3">
         <div className="flex flex-wrap items-center gap-2">
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') addMember()
-            }}
+            onKeyDown={(e) => { if (e.key === 'Enter') add() }}
             placeholder="person@company.com"
-            aria-label="Email address to grant finance access"
+            aria-label="Email address to grant HR access"
             className={`${inputCls} flex-1 min-w-[14rem]`}
           />
           <button
-            onClick={addMember}
+            onClick={add}
             disabled={!email.trim() || grant.isPending}
             className="flex items-center gap-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] disabled:opacity-50 text-white text-sm font-medium rounded-md px-4 py-2 transition-colors"
           >
-            <UserPlus size={15} /> {grant.isPending ? 'Granting…' : 'Grant finance'}
+            <UserPlus size={15} aria-hidden="true" /> {grant.isPending ? 'Granting…' : 'Grant HR'}
           </button>
         </div>
-        <p className="text-muted text-xs mt-2">
-          The person must sign in to the app once before they can be added.
-        </p>
+        <p className="text-muted text-xs mt-2">The person must sign in to the app once before they can be added.</p>
         {notice && (
-          <p className={`text-xs mt-2 ${notice.kind === 'ok' ? 'text-success' : 'text-danger'}`}>{notice.text}</p>
+          <p role="status" className={`text-xs mt-2 ${notice.kind === 'ok' ? 'text-success' : 'text-danger'}`}>
+            {notice.text}
+          </p>
         )}
       </div>
 
-      {/* Current members */}
       <div className="text-[11px] font-mono uppercase tracking-wide text-muted mb-2">
-        Finance members ({members.length})
+        HR members ({members.length})
       </div>
       {members.length === 0 ? (
-        <p className="text-muted text-sm">No one has finance access yet.</p>
+        <p className="text-muted text-sm">No one has HR access yet.</p>
       ) : (
         <ul className="space-y-2">
           {members.map((m) => (
-            <li
-              key={m.userId}
-              className="flex items-center gap-3 bg-surface border border-[rgba(var(--border-rgb),0.08)] rounded-lg px-4 py-3"
-            >
+            <li key={m.userId} className="flex items-center gap-3 bg-surface border border-[rgba(var(--border-rgb),0.08)] rounded-lg px-4 py-3">
               <div className="min-w-0 flex-1">
                 <div className="text-primary text-sm font-medium truncate">{m.label || m.userId}</div>
                 <div className="text-muted text-xs truncate font-mono">
@@ -144,10 +110,10 @@ export function TeamAccessPage() {
               <button
                 onClick={() => setConfirmTarget({ userId: m.userId, name: m.label || m.userId })}
                 disabled={revoke.isPending}
-                aria-label="Remove finance access"
+                aria-label="Remove HR access"
                 className="flex-shrink-0 flex items-center justify-center w-9 h-9 -my-1 text-muted hover:text-danger disabled:opacity-50 transition-colors"
               >
-                <Trash2 size={15} />
+                <Trash2 size={15} aria-hidden="true" />
               </button>
             </li>
           ))}
@@ -156,8 +122,10 @@ export function TeamAccessPage() {
 
       <ConfirmDialog
         open={!!confirmTarget}
-        title="Remove finance access?"
-        description={confirmTarget ? `${confirmTarget.name} will lose access to the Payments section.` : ''}
+        title="Remove HR access?"
+        description={confirmTarget
+          ? `${confirmTarget.name} will no longer be able to create teams or assign tasks. Tasks they already assigned are kept.`
+          : ''}
         confirmLabel="Remove"
         destructive
         busy={revoke.isPending}
@@ -167,8 +135,6 @@ export function TeamAccessPage() {
         }}
         onCancel={() => setConfirmTarget(null)}
       />
-
-      <HrAccessPanel />
-    </div>
+    </section>
   )
 }
