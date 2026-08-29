@@ -90,8 +90,12 @@ export async function reopenTask(taskId: string): Promise<void> {
 }
 
 /**
- * Cancel rather than delete. A cancelled task keeps its history and is excluded from anyone's
- * counts; deleting would erase the fact that the work was ever assigned.
+ * Cancel — the work was called off. The row survives with cancelled_at set, drops out of every
+ * count, and reads as "Cancelled". This is the everyday removal: HR or admin, and reversible in
+ * the sense that the record of the assignment is never lost.
+ *
+ * For permanently erasing a junk row, see deleteTask below. The two are deliberately different
+ * actions with different permissions.
  */
 export async function cancelTask(taskId: string): Promise<void> {
   const { error } = await supabase
@@ -218,5 +222,19 @@ export async function listNotifications(): Promise<PerformanceNotification[]> {
 /** Mark specific notifications read, or the whole inbox when ids is omitted. Stamped server-side. */
 export async function markNotificationsRead(ids?: string[]): Promise<void> {
   const { error } = await supabase.rpc('mark_notifications_read', { p_ids: ids ?? null })
+  if (error) throw error
+}
+
+/**
+ * Permanently delete a task row. HR or admin, per the delete policy in
+ * 20260826000001 (`using (is_admin() or is_hr())`).
+ *
+ * This erases the row outright: no cancelled_at, no trace the task was ever assigned, and the
+ * assignee's totals change accordingly. Prefer cancelTask for work that was called off — that
+ * keeps the record and simply stops it counting. Reserve this for genuine junk: a test row, a
+ * duplicate, a typo.
+ */
+export async function deleteTask(taskId: string): Promise<void> {
+  const { error } = await supabase.from('performance_tasks').delete().eq('id', taskId)
   if (error) throw error
 }
