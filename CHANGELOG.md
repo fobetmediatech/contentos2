@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [3.8.1.0] — 2026-08-27
+
+**Removing task records.** Two separate actions, because "delete" was hiding two different intentions.
+
+### Added
+- **Cancel a task** (HR or admin) — work that was called off. The row survives with `cancelled_at` set, drops out of every total, and renders struck-through as "Cancelled". The record that the work was assigned is kept. Wires up `cancelTask()`, which existed in the repo layer but was never reachable from the UI.
+- **Delete a task record** (HR or admin) — erases the row permanently, for genuine junk: a test row, a duplicate, a typo. Confirmation names the task, states it cannot be undone, and points at cancel as the alternative that preserves history. Available at any status, since junk rows can be completed or cancelled too.
+
+Both actions match the `update` and `delete` policies already on `performance_tasks` (`is_admin() or is_hr()`), so the UI and the database agree — no button hidden from someone the API would still accept. No migration required.
+
+### Fixed
+- The cancel confirmation had "Cancel task" and "Cancel" as its two buttons, where neither read as the way out. The dismiss button now reads "Keep task".
+
 ## [3.8.0.0] — 2026-08-26
 
 **Performance Management.** A new module for assigning work and seeing how it landed. HR creates teams, staffs them from people who have signed in, and assigns tasks with deadlines. The assignee marks their own work done and the record shows exactly how it went — completed at, early by, delayed by. An in-app inbox notifies people the moment work reaches them. Deliberately excludes marks and scoring: the formula is an open product decision, and the raw timing facts are preserved so any future formula can be applied to history without rewriting it.
